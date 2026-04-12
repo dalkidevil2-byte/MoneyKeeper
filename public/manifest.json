@@ -1,0 +1,18 @@
+{
+  "name": "우리집 가계부",
+  "short_name": "가계부",
+  "description": "가족이 함께 쓰는 AI 가계부",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
