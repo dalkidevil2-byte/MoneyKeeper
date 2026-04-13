@@ -448,7 +448,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const fileInputs = (
     <>
       <input id="ocr-camera-input" type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
-      <input ref={galleryInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" onChange={handleOcrFile} className="hidden" />
+      <input ref={galleryInputRef} type="file" accept="*/*" onChange={handleOcrFile} className="hidden" />
     </>
   );
 
@@ -605,10 +605,10 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                       <button
                         type="button"
                         onClick={handleGalleryOpen}
-                        className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer w-full"
+                        className="border-2 border-dashed border-emerald-300 rounded-2xl py-8 flex flex-col items-center gap-2 text-emerald-500 active:bg-emerald-50 cursor-pointer w-full"
                       >
                         <FileText size={28} />
-                        <p className="text-sm font-medium text-center">사진첩 / 파일</p>
+                        <p className="text-sm font-medium text-center">갤러리 선택</p>
                       </button>
                     </div>
                   )}
