@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { X, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { X, Trash2, CheckCircle, AlertCircle, ChevronDown, Package } from 'lucide-react';
 import type { Transaction } from '@/types';
 import {
   TRANSACTION_TYPE_LABELS,
@@ -44,6 +44,13 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 세부 품목
+  interface ItemRow { id: string; name: string; price: number; quantity: number; unit: string; category_main: string; category_sub: string; }
+  const [items, setItems] = useState<ItemRow[]>([]);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [itemsSaving, setItemsSaving] = useState(false);
 
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
@@ -120,6 +127,24 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
     } finally {
       setSaving(false);
     }
+  };
+
+  useEffect(() => {
+    fetch(`/api/transactions/${tx.id}/items`)
+      .then((r) => r.json())
+      .then((d) => { setItems(d.items ?? []); setItemsLoaded(true); });
+  }, [tx.id]);
+
+  const updateItemCategory = async (item: ItemRow, main: string, sub: string) => {
+    setItemsSaving(true);
+    const updated = items.map((i) => i.id === item.id ? { ...i, category_main: main, category_sub: sub } : i);
+    setItems(updated);
+    await fetch(`/api/transactions/${tx.id}/items?item_id=${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_main: main, category_sub: sub }),
+    });
+    setItemsSaving(false);
   };
 
   const handleDelete = async () => {
@@ -345,6 +370,68 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 세부 품목 */}
+          {itemsLoaded && items.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Package size={14} className="text-indigo-400" />
+                <p className="text-xs font-medium text-gray-500">품목별 분류 {itemsSaving && <span className="text-indigo-400">저장 중...</span>}</p>
+              </div>
+              <div className="space-y-2">
+                {items.map((item) => (
+                  <div key={item.id} className="bg-gray-50 rounded-2xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
+                      className="w-full flex items-center justify-between px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-gray-800 truncate">{item.name}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{item.price.toLocaleString('ko-KR')}원</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {item.category_main && (
+                          <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">{item.category_main}</span>
+                        )}
+                        {item.category_sub && (
+                          <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{item.category_sub}</span>
+                        )}
+                        <ChevronDown size={14} className={`text-gray-400 transition-transform ${expandedItemId === item.id ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+                    {expandedItemId === item.id && (
+                      <div className="px-3 pb-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-2">
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">대분류</label>
+                          <select
+                            value={item.category_main}
+                            onChange={(e) => updateItemCategory(item, e.target.value, '')}
+                            className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                          >
+                            <option value="">선택</option>
+                            {allMainCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">소분류</label>
+                          <select
+                            value={item.category_sub}
+                            onChange={(e) => updateItemCategory(item, item.category_main, e.target.value)}
+                            disabled={!item.category_main}
+                            className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none disabled:opacity-40"
+                          >
+                            <option value="">선택</option>
+                            {getSubOptions(item.category_main).map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

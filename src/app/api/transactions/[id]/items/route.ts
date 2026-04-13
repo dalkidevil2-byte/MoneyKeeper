@@ -53,3 +53,27 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
   return NextResponse.json({ success: true });
 }
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = createServerSupabaseClient();
+  const { searchParams } = new URL(req.url);
+  const itemId = searchParams.get('item_id');
+  const body = await req.json();
+
+  if (!itemId) return NextResponse.json({ error: 'item_id required' }, { status: 400 });
+
+  const { data, error } = await supabase
+    .from('items')
+    .update({
+      category_main: body.category_main,
+      category_sub: body.category_sub,
+    })
+    .eq('id', itemId)
+    .eq('transaction_id', id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ item: data });
+}

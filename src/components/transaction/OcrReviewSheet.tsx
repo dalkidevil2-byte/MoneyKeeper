@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { X, Check, Trash2, Store, ChevronDown } from 'lucide-react';
 import { formatAmount } from '@/lib/parser';
-import { CATEGORY_MAIN_OPTIONS } from '@/types';
+import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 import dayjs from 'dayjs';
 
 const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
@@ -15,6 +15,7 @@ interface OcrItem {
   quantity: number;
   unit: string;
   category_main: string;
+  category_sub: string;
   selected: boolean;
 }
 
@@ -22,7 +23,7 @@ interface Props {
   result: {
     store_name: string;
     date: string;
-    items: { name: string; amount: number; quantity: number; unit?: string; category_main: string }[];
+    items: { name: string; amount: number; quantity: number; unit?: string; category_main: string; category_sub?: string }[];
     total: number;
     payment_hint: string;
   };
@@ -38,6 +39,7 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
       ...item,
       id: String(i),
       unit: item.unit || '개',
+      category_sub: item.category_sub || '',
       selected: item.amount > 0,
     }))
   );
@@ -219,7 +221,7 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">수량</label>
                         <input
@@ -242,15 +244,31 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                           ))}
                         </select>
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs text-gray-400 mb-1 block">카테고리</label>
+                        <label className="text-xs text-gray-400 mb-1 block">대분류</label>
                         <select
                           value={item.category_main}
-                          onChange={(e) => updateItem(item.id, { category_main: e.target.value })}
+                          onChange={(e) => updateItem(item.id, { category_main: e.target.value, category_sub: '' })}
                           className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
                         >
                           {CATEGORY_MAIN_OPTIONS.map((c) => (
                             <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">소분류</label>
+                        <select
+                          value={item.category_sub}
+                          onChange={(e) => updateItem(item.id, { category_sub: e.target.value })}
+                          disabled={!item.category_main}
+                          className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none disabled:opacity-40"
+                        >
+                          <option value="">선택</option>
+                          {(CATEGORY_SUB_MAP[item.category_main] ?? []).map((s: string) => (
+                            <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
                       </div>
