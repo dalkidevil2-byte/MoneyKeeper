@@ -559,20 +559,13 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                       <p className="text-xs text-indigo-400">GPT-4o가 품목을 추출하고 있어요</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* 카메라 - label로 직접 연결 */}
-                      <label className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer active:bg-indigo-50">
-                        <Camera size={28} />
-                        <p className="text-sm font-medium">카메라 촬영</p>
-                        <input type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
-                      </label>
-                      {/* 사진첩 - label로 직접 연결 */}
-                      <label className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer active:bg-indigo-50">
-                        <FileText size={28} />
-                        <p className="text-sm font-medium">사진첩 선택</p>
-                        <input type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
-                      </label>
-                    </div>
+                    /* capture 없이 → 안드로이드/iOS 모두 카메라+갤러리 선택창 표시 */
+                    <label className="w-full border-2 border-dashed border-indigo-200 rounded-2xl py-10 flex flex-col items-center gap-3 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer active:bg-indigo-50">
+                      <Camera size={32} />
+                      <p className="text-sm font-medium">영수증 촬영 / 사진첩 선택</p>
+                      <p className="text-xs text-gray-400">탭하면 카메라 또는 갤러리 선택</p>
+                      <input ref={ocrFileRef} type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
+                    </label>
                   )}
                 </div>
               )}
