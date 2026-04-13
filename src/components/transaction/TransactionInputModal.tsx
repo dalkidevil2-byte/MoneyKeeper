@@ -564,7 +564,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                       <Camera size={32} />
                       <p className="text-sm font-medium">영수증 촬영 / 사진첩 선택</p>
                       <p className="text-xs text-gray-400">탭하면 카메라 또는 갤러리 선택</p>
-                      <input ref={ocrFileRef} type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
+                      <input ref={ocrFileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif" onChange={handleOcrFile} className="hidden" />
                     </label>
                   )}
                 </div>
