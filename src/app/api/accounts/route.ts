@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       type: body.type ?? 'bank',
       balance: body.balance ?? 0,
       is_budget_account: body.is_budget_account ?? false,
+      is_active: true,
     })
     .select()
     .single();

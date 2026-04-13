@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
       billing_account_id: body.billing_account_id ?? null,
       billing_day: body.billing_day ?? null,
       is_budget_card: body.is_budget_card ?? false,
+      is_active: true,
     })
     .select()
     .single();
