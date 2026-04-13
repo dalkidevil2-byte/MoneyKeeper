@@ -416,6 +416,14 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
 
   if (!open) return null;
 
+  // 모달 밖에 배치 - 안드로이드 input 트리거 문제 방지
+  const fileInputs = (
+    <>
+      <input id="ocr-camera-input" type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
+      <input id="ocr-gallery-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" onChange={handleOcrFile} className="hidden" />
+    </>
+  );
+
   // OCR 결과 확인 시트
   if (ocrResult) {
     return (
@@ -430,6 +438,8 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   }
 
   return (
+    <>
+    {fileInputs}
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh]">
         {/* 핸들 */}
@@ -560,15 +570,13 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-3">
-                      <label className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer">
+                      <label htmlFor="ocr-camera-input" className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer">
                         <Camera size={28} />
                         <p className="text-sm font-medium text-center">카메라 촬영</p>
-                        <input type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
                       </label>
-                      <label className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer">
+                      <label htmlFor="ocr-gallery-input" className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer">
                         <FileText size={28} />
                         <p className="text-sm font-medium text-center">사진첩 / 파일</p>
-                        <input type="file" onChange={handleOcrFile} className="hidden" />
                       </label>
                     </div>
                   )}
@@ -1004,5 +1012,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
         </div>
       </div>
     </div>
+    </>
   );
 }
