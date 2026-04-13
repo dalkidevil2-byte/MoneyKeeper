@@ -63,6 +63,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
+  const ocrGalleryRef = useRef<HTMLInputElement>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { parsed, parsing, parseText, clearParsed } = useParseText();
@@ -353,6 +354,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     } finally {
       setOcrLoading(false);
       if (ocrFileRef.current) ocrFileRef.current.value = '';
+      if (ocrGalleryRef.current) ocrGalleryRef.current.value = '';
     }
   };
 
@@ -550,33 +552,36 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
               ) : (
                 /* OCR 모드 */
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-500">마트/식당 영수증을 촬영하거나 업로드하면 품목을 자동으로 추출해요.</p>
-                  <input
-                    ref={ocrFileRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleOcrFile}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => ocrFileRef.current?.click()}
-                    disabled={ocrLoading}
-                    className="w-full border-2 border-dashed border-indigo-200 rounded-2xl py-10 flex flex-col items-center gap-3 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors disabled:opacity-50"
-                  >
-                    {ocrLoading ? (
-                      <>
-                        <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                        <p className="text-sm font-medium text-indigo-600">영수증 분석 중...</p>
-                        <p className="text-xs text-indigo-400">GPT-4o가 품목을 추출하고 있어요</p>
-                      </>
-                    ) : (
-                      <>
-                        <Camera size={32} />
-                        <p className="text-sm font-medium">영수증 촬영 / 사진첩에서 선택</p>
-                        <p className="text-xs text-gray-400">JPG, PNG 지원 · 여러 품목 한 번에 등록</p>
-                      </>
-                    )}
-                  </button>
+                  <p className="text-sm text-gray-500">마트/식당 영수증을 촬영하거나 사진첩에서 가져오면 품목을 자동으로 추출해요.</p>
+                  {/* 카메라 전용 */}
+                  <input ref={ocrFileRef} type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
+                  {/* 사진첩 전용 */}
+                  <input ref={ocrGalleryRef} type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
+
+                  {ocrLoading ? (
+                    <div className="w-full border-2 border-dashed border-indigo-200 rounded-2xl py-10 flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                      <p className="text-sm font-medium text-indigo-600">영수증 분석 중...</p>
+                      <p className="text-xs text-indigo-400">GPT-4o가 품목을 추출하고 있어요</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => ocrFileRef.current?.click()}
+                        className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                      >
+                        <Camera size={28} />
+                        <p className="text-sm font-medium">카메라 촬영</p>
+                      </button>
+                      <button
+                        onClick={() => ocrGalleryRef.current?.click()}
+                        className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                      >
+                        <FileText size={28} />
+                        <p className="text-sm font-medium">사진첩 선택</p>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
