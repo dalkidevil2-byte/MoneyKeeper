@@ -225,10 +225,14 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">수량</label>
                         <input
-                          type="number"
-                          min={1}
+                          type="text"
+                          inputMode="numeric"
                           value={item.quantity}
-                          onChange={(e) => updateItem(item.id, { quantity: parseInt(e.target.value) || 1 })}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                            updateItem(item.id, { quantity: raw === '' ? 1 : parseInt(raw) });
+                          }}
+                          onFocus={(e) => e.target.select()}
                           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                         />
                       </div>
