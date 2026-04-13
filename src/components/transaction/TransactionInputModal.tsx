@@ -40,7 +40,8 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const [form, setForm] = useState<Partial<CreateTransactionInput>>({});
 
   // 세부 품목
-  const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', 'g', 'kg', 'ml', 'L', '구', '인분'];
+  // 구매단위만 (용량/규격은 품목명에 포함: 예 "맥주 500ml")
+  const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
   interface LineItem { id: string; name: string; quantity: number; price: number; unit: string }
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [showLineItems, setShowLineItems] = useState(false);
@@ -309,14 +310,40 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     setListening(true);
   }, [listening]);
 
+  // 이미지 압축 (최대 1200px, 품질 80%)
+  const compressImage = (file: File): Promise<{ base64: string; mimeType: string }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1200;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        resolve({ base64, mimeType: 'image/jpeg' });
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  };
+
   // OCR 이미지 처리
   const handleOcrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setOcrLoading(true);
     try {
+      const { base64, mimeType } = await compressImage(file);
       const fd = new FormData();
-      fd.append('file', file);
+      fd.append('base64', base64);
+      fd.append('mimeType', mimeType);
       const res = await fetch('/api/transactions/ocr', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.result) setOcrResult(data.result);
@@ -332,7 +359,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   // OCR 확인 후 등록: 거래 1건 + items 테이블
   const handleOcrConfirm = async (
     items: any[],
-    meta: { date: string; payment_method_id: string; member_id: string }
+    meta: { date: string; payment_method_id: string; member_id: string; saveImage: boolean }
   ) => {
     const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
     const storeName = ocrResult?.store_name || '마트';
@@ -360,6 +387,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
         member_id: meta.member_id || null,
         memo: `OCR 등록 (${items.length}개 품목)`,
         input_type: 'receipt',
+        receipt_url: meta.saveImage ? (ocrResult?.receipt_url ?? '') : '',
       }),
     });
 
@@ -527,7 +555,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     ref={ocrFileRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     onChange={handleOcrFile}
                     className="hidden"
                   />
@@ -545,7 +572,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     ) : (
                       <>
                         <Camera size={32} />
-                        <p className="text-sm font-medium">영수증 촬영 / 업로드</p>
+                        <p className="text-sm font-medium">영수증 촬영 / 사진첩에서 선택</p>
                         <p className="text-xs text-gray-400">JPG, PNG 지원 · 여러 품목 한 번에 등록</p>
                       </>
                     )}
@@ -675,29 +702,28 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                   >
                     <option value="">선택 안함</option>
-                    {form.member_id
-                      ? (() => {
-                          const mine = paymentMethods.filter((pm) => pm.member_id === form.member_id);
-                          const shared = paymentMethods.filter((pm) => !pm.member_id);
-                          return (
-                            <>
-                              {mine.length > 0 && (
-                                <optgroup label={members.find((m) => m.id === form.member_id)?.name ?? ''}>
-                                  {mine.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-                                </optgroup>
-                              )}
-                              {shared.length > 0 && (
-                                <optgroup label="공용">
-                                  {shared.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-                                </optgroup>
-                              )}
-                            </>
-                          );
-                        })()
-                      : paymentMethods.map((pm) => (
-                          <option key={pm.id} value={pm.id}>{pm.name}</option>
-                        ))
-                    }
+                    {(() => {
+                      const memberId = form.member_id;
+                      const mine = memberId ? paymentMethods.filter((pm) => pm.member_id === memberId) : [];
+                      const shared = paymentMethods.filter((pm) => !pm.member_id);
+                      const others = memberId ? paymentMethods.filter((pm) => pm.member_id && pm.member_id !== memberId) : [];
+                      if (!memberId) return paymentMethods.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>);
+                      return (
+                        <>
+                          {mine.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                          {shared.length > 0 && (
+                            <optgroup label="공용">
+                              {shared.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                            </optgroup>
+                          )}
+                          {others.length > 0 && (
+                            <optgroup label="다른 구성원">
+                              {others.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                            </optgroup>
+                          )}
+                        </>
+                      );
+                    })()}
                   </select>
                 </div>
 
@@ -846,73 +872,57 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
 
                     {showLineItems && (
                       <div className="mt-2 bg-gray-50 rounded-xl p-3 space-y-2">
-                        <p className="text-xs text-gray-400 mb-1">단가를 기록하면 나중에 어디서 더 싸게 살 수 있는지 분석해드려요</p>
+                        <p className="text-xs text-gray-400 mb-1">품목명에 용량 포함 (예: 맥주 500ml) · 단위는 구매단위 (캔/개 등)</p>
                         {lineItems.map((item) => {
                           const unitPrice = item.quantity > 0 && item.price > 0
                             ? Math.round(item.price / item.quantity)
                             : null;
+                          const isExpanded = item.quantity > 1 || item.unit !== '개';
                           return (
-                            <div key={item.id} className="bg-white rounded-xl p-3 space-y-2 border border-gray-100">
-                              <div className="flex items-center gap-2">
+                            <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                              {/* 기본 행: 품목명 + 금액 */}
+                              <div className="flex items-center gap-2 px-3 py-2">
                                 <input
                                   type="text"
                                   value={item.name}
                                   onChange={(e) => updateLineItem(item.id, 'name', e.target.value)}
                                   placeholder="품목명 (예: 맥주 500ml)"
-                                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                  className="flex-1 text-sm border-0 outline-none bg-transparent placeholder-gray-300"
                                 />
-                                <button
-                                  onClick={() => removeLineItem(item.id)}
-                                  className="p-1 text-gray-300 hover:text-rose-400"
-                                >
-                                  <X size={14} />
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={item.price || ''}
+                                  onChange={(e) => updateLineItem(item.id, 'price', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+                                  placeholder="금액"
+                                  className="w-20 text-right text-sm border-0 outline-none bg-transparent placeholder-gray-300"
+                                />
+                                <span className="text-xs text-gray-400 flex-shrink-0">원</span>
+                                <button onClick={() => removeLineItem(item.id)} className="p-1 text-gray-300 hover:text-rose-400 flex-shrink-0">
+                                  <X size={13} />
                                 </button>
                               </div>
-                              <div className="flex items-center gap-2">
-                                {/* 수량 */}
-                                <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
-                                  <button
-                                    onClick={() => updateLineItem(item.id, 'quantity', Math.max(1, item.quantity - 1))}
-                                    className="px-2 py-1.5 text-gray-500 hover:bg-gray-100"
-                                  >
-                                    <Minus size={12} />
-                                  </button>
-                                  <input
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => updateLineItem(item.id, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="w-10 text-center text-sm py-1.5 focus:outline-none"
-                                    min={1}
-                                  />
-                                  <button
-                                    onClick={() => updateLineItem(item.id, 'quantity', item.quantity + 1)}
-                                    className="px-2 py-1.5 text-gray-500 hover:bg-gray-100"
-                                  >
-                                    <Plus size={12} />
-                                  </button>
+                              {/* 수량/단위 행 (수량>1 이거나 단위≠개면 항상 표시, 아니면 버튼으로 펼치기) */}
+                              {isExpanded ? (
+                                <div className="flex items-center gap-2 px-3 pb-2 border-t border-gray-50 pt-1.5">
+                                  <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
+                                    <button onClick={() => updateLineItem(item.id, 'quantity', Math.max(1, item.quantity - 1))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Minus size={11} /></button>
+                                    <input type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, 'quantity', Math.max(1, parseInt(e.target.value) || 1))} className="w-8 text-center text-xs py-1 focus:outline-none" min={1} />
+                                    <button onClick={() => updateLineItem(item.id, 'quantity', item.quantity + 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Plus size={11} /></button>
+                                  </div>
+                                  <select value={item.unit} onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)} className="border border-gray-200 rounded-lg px-1.5 py-1 text-xs bg-white focus:outline-none w-14">
+                                    {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+                                  </select>
+                                  {unitPrice && <p className="text-xs text-indigo-500 font-medium ml-auto">{unitPrice.toLocaleString()}원/{item.unit}</p>}
                                 </div>
-                                {/* 단위 */}
-                                <select
-                                  value={item.unit}
-                                  onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                  className="border border-gray-200 rounded-lg px-1.5 py-1.5 text-xs bg-white focus:outline-none w-14"
+                              ) : (
+                                <button
+                                  onClick={() => updateLineItem(item.id, 'quantity', 1)}
+                                  className="w-full text-left px-3 pb-1.5 text-xs text-gray-300 hover:text-indigo-400"
+                                  onFocus={(e) => e.preventDefault()}
                                 >
-                                  {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                                </select>
-                                {/* 금액 */}
-                                <input
-                                  type="number"
-                                  value={item.price || ''}
-                                  onChange={(e) => updateLineItem(item.id, 'price', parseInt(e.target.value) || 0)}
-                                  placeholder="금액"
-                                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-                                />
-                                <span className="text-xs text-gray-400">원</span>
-                              </div>
-                              {unitPrice && (
-                                <p className="text-xs text-indigo-500 font-medium">
-                                  단가 {unitPrice.toLocaleString()}원/{item.unit}
-                                </p>
+                                  + 수량/단위 설정
+                                </button>
                               )}
                             </div>
                           );

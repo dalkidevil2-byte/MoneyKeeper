@@ -6,7 +6,7 @@ import { formatAmount } from '@/lib/parser';
 import { CATEGORY_MAIN_OPTIONS } from '@/types';
 import dayjs from 'dayjs';
 
-const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', 'g', 'kg', 'ml', 'L', '구', '인분'];
+const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
 
 interface OcrItem {
   id: string;
@@ -28,7 +28,7 @@ interface Props {
   };
   paymentMethods: { id: string; name: string }[];
   members: { id: string; name: string; color: string }[];
-  onConfirm: (items: OcrItem[], meta: { date: string; payment_method_id: string; member_id: string }) => void;
+  onConfirm: (items: OcrItem[], meta: { date: string; payment_method_id: string; member_id: string; saveImage: boolean }) => void;
   onClose: () => void;
 }
 
@@ -45,6 +45,7 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [memberId, setMemberId] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [saveImage, setSaveImage] = useState(false);
 
   const selectedItems = items.filter((i) => i.selected && i.amount > 0);
   const total = selectedItems.reduce((s, i) => s + Math.abs(i.amount), 0);
@@ -274,16 +275,26 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
 
         {/* 하단 버튼 */}
         <div className="px-5 pb-6 pt-3 flex-shrink-0 border-t border-gray-100">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-gray-500">{selectedItems.length}개 품목 · 거래 1건</p>
             <p className="text-base font-bold text-gray-900">{formatAmount(total)}</p>
           </div>
+          {/* 이미지 저장 여부 */}
+          <label className="flex items-center gap-2 mb-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={saveImage}
+              onChange={(e) => setSaveImage(e.target.checked)}
+              className="w-4 h-4 rounded accent-indigo-600"
+            />
+            <span className="text-xs text-gray-500">영수증 이미지 저장 (기본: OCR만 분석)</span>
+          </label>
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 py-3 border border-gray-200 text-gray-600 rounded-2xl text-sm font-medium">
               취소
             </button>
             <button
-              onClick={() => onConfirm(selectedItems, { date, payment_method_id: paymentMethodId, member_id: memberId })}
+              onClick={() => onConfirm(selectedItems, { date, payment_method_id: paymentMethodId, member_id: memberId, saveImage })}
               disabled={selectedItems.length === 0}
               className="flex-[2] py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
             >
