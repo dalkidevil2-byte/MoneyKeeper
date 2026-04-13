@@ -960,33 +960,39 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                                 </button>
                               </div>
                               {/* 수량 / 단위 (항상 표시) */}
-                              <div className="flex items-center gap-2 px-3 pb-2 border-t border-gray-50 pt-1.5">
-                                <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
-                                  <button onClick={() => updateLineItem(item.id, 'quantity', Math.max(1, item.quantity - 1))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Minus size={11} /></button>
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={item.quantity}
-                                    onChange={(e) => {
-                                      const raw = e.target.value.replace(/[^0-9]/g, '');
-                                      updateLineItem(item.id, 'quantity', raw === '' ? 1 : parseInt(raw));
-                                    }}
-                                    onFocus={(e) => e.target.select()}
-                                    className="w-8 text-center text-xs py-1 focus:outline-none"
-                                  />
-                                  <button onClick={() => updateLineItem(item.id, 'quantity', item.quantity + 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Plus size={11} /></button>
+                              <div className="px-3 pb-2 border-t border-gray-50 pt-2 space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-400 w-8 flex-shrink-0">수량</span>
+                                  <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
+                                    <button onClick={() => updateLineItem(item.id, 'quantity', Math.max(1, item.quantity - 1))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Minus size={11} /></button>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={item.quantity}
+                                      onChange={(e) => {
+                                        const raw = e.target.value.replace(/[^0-9]/g, '');
+                                        updateLineItem(item.id, 'quantity', raw === '' ? 1 : parseInt(raw));
+                                      }}
+                                      onFocus={(e) => e.target.select()}
+                                      className="w-10 text-center text-sm py-1 focus:outline-none"
+                                    />
+                                    <button onClick={() => updateLineItem(item.id, 'quantity', item.quantity + 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Plus size={11} /></button>
+                                  </div>
+                                  {unitPrice && <p className="text-xs text-indigo-500 font-medium ml-auto">{unitPrice.toLocaleString()}원/{item.unit}</p>}
                                 </div>
-                                <input
-                                  list={`line-unit-${item.id}`}
-                                  value={item.unit}
-                                  onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                  placeholder="단위"
-                                  className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none w-20"
-                                />
-                                <datalist id={`line-unit-${item.id}`}>
-                                  {UNIT_OPTIONS.map((u) => <option key={u} value={u} />)}
-                                </datalist>
-                                {unitPrice && <p className="text-xs text-indigo-500 font-medium ml-auto">{unitPrice.toLocaleString()}원/{item.unit}</p>}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-400 w-8 flex-shrink-0">단위</span>
+                                  <input
+                                    list={`line-unit-${item.id}`}
+                                    value={item.unit}
+                                    onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                                    placeholder="개 / 300g/개 / 캔 ..."
+                                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                  />
+                                  <datalist id={`line-unit-${item.id}`}>
+                                    {UNIT_OPTIONS.map((u) => <option key={u} value={u} />)}
+                                  </datalist>
+                                </div>
                               </div>
                             </div>
                           );
