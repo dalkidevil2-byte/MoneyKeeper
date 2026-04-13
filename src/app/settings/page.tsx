@@ -140,6 +140,8 @@ export default function SettingsPage() {
 
   const [addingAccount, setAddingAccount] = useState(false);
   const [addingPM, setAddingPM] = useState(false);
+  const [editingPMId, setEditingPMId] = useState<string | null>(null);
+  const [editPMForm, setEditPMForm] = useState({ name: '', type: 'debit_card', linked_account_id: '', is_budget_card: false, member_id: '' });
   const [addingBudget, setAddingBudget] = useState(false);
 
   const [accountForm, setAccountForm] = useState({ name: '', type: 'bank', balance: '', member_id: '' });
@@ -188,6 +190,34 @@ export default function SettingsPage() {
     });
     setPMForm({ name: '', type: 'debit_card', linked_account_id: '', is_budget_card: false, member_id: '' });
     setAddingPM(false);
+    window.location.reload();
+  };
+
+  const startEditPM = (pm: any) => {
+    setEditingPMId(pm.id);
+    setEditPMForm({
+      name: pm.name,
+      type: pm.type,
+      linked_account_id: pm.linked_account_id ?? '',
+      is_budget_card: pm.is_budget_card ?? false,
+      member_id: pm.member_id ?? '',
+    });
+  };
+
+  const handleSavePM = async () => {
+    if (!editingPMId) return;
+    await fetch(`/api/payment-methods?id=${editingPMId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...editPMForm, member_id: editPMForm.member_id || null, linked_account_id: editPMForm.linked_account_id || null }),
+    });
+    setEditingPMId(null);
+    window.location.reload();
+  };
+
+  const handleDeletePM = async (id: string) => {
+    if (!confirm('결제수단을 삭제할까요?')) return;
+    await fetch(`/api/payment-methods?id=${id}`, { method: 'DELETE' });
     window.location.reload();
   };
 
@@ -535,20 +565,69 @@ export default function SettingsPage() {
                     </div>
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                       {group.map((pm, idx) => (
-                        <div key={pm.id} className={`flex items-center justify-between px-4 py-3.5 ${idx < group.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center">
-                              <CreditCard size={15} className="text-purple-600" />
+                        <div key={pm.id} className={`${idx < group.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                          {editingPMId === pm.id ? (
+                            /* 인라인 편집 폼 */
+                            <div className="px-4 py-3 space-y-2">
+                              <input
+                                type="text"
+                                value={editPMForm.name}
+                                onChange={(e) => setEditPMForm((f) => ({ ...f, name: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                placeholder="카드명"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <select value={editPMForm.type} onChange={(e) => setEditPMForm((f) => ({ ...f, type: e.target.value }))} className="border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none">
+                                  <option value="debit_card">체크카드</option>
+                                  <option value="credit_card">신용카드</option>
+                                  <option value="cash">현금</option>
+                                  <option value="easy_pay">간편결제</option>
+                                  <option value="bank_transfer">계좌이체</option>
+                                </select>
+                                <select value={editPMForm.linked_account_id} onChange={(e) => setEditPMForm((f) => ({ ...f, linked_account_id: e.target.value }))} className="border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none">
+                                  <option value="">연결 계좌 없음</option>
+                                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              </div>
+                              <select value={editPMForm.member_id} onChange={(e) => setEditPMForm((f) => ({ ...f, member_id: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none">
+                                <option value="">공용</option>
+                                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                              </select>
+                              <label className="flex items-center gap-2 text-sm text-gray-600">
+                                <input type="checkbox" checked={editPMForm.is_budget_card} onChange={(e) => setEditPMForm((f) => ({ ...f, is_budget_card: e.target.checked }))} className="w-4 h-4 accent-indigo-600" />
+                                생활비 전용 카드
+                              </label>
+                              <div className="flex gap-2">
+                                <button onClick={() => setEditingPMId(null)} className="flex-1 py-2 border border-gray-200 text-gray-600 rounded-xl text-sm">취소</button>
+                                <button onClick={handleSavePM} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium">저장</button>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-800">{pm.name}</p>
-                              <p className="text-xs text-gray-400">
-                                {pm.type === 'debit_card' ? '체크카드' : pm.type === 'credit_card' ? '신용카드' : pm.type === 'easy_pay' ? '간편결제' : pm.type}
-                                {(pm as any).linked_account?.name && ` → ${(pm as any).linked_account.name}`}
-                              </p>
+                          ) : (
+                            /* 일반 표시 */
+                            <div className="flex items-center justify-between px-4 py-3.5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center">
+                                  <CreditCard size={15} className="text-purple-600" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">{pm.name}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {pm.type === 'debit_card' ? '체크카드' : pm.type === 'credit_card' ? '신용카드' : pm.type === 'easy_pay' ? '간편결제' : pm.type === 'cash' ? '현금' : pm.type}
+                                    {(pm as any).linked_account?.name && ` → ${(pm as any).linked_account.name}`}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {pm.is_budget_card && <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-medium">생활비</span>}
+                                <button onClick={() => startEditPM(pm)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                                  <Pencil size={13} />
+                                </button>
+                                <button onClick={() => handleDeletePM(pm.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          {pm.is_budget_card && <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-medium">생활비</span>}
+                          )}
                         </div>
                       ))}
                     </div>

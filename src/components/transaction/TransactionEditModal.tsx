@@ -135,14 +135,23 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
       .then((d) => { setItems(d.items ?? []); setItemsLoaded(true); });
   }, [tx.id]);
 
-  const updateItemCategory = async (item: ItemRow, main: string, sub: string) => {
+  const updateItem = (id: string, fields: Partial<ItemRow>) => {
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, ...fields } : i));
+  };
+
+  const saveItem = async (item: ItemRow) => {
     setItemsSaving(true);
-    const updated = items.map((i) => i.id === item.id ? { ...i, category_main: main, category_sub: sub } : i);
-    setItems(updated);
     await fetch(`/api/transactions/${tx.id}/items?item_id=${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: main, category_sub: sub }),
+      body: JSON.stringify({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        price: item.price,
+        category_main: item.category_main,
+        category_sub: item.category_sub,
+      }),
     });
     setItemsSaving(false);
   };
@@ -379,11 +388,12 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Package size={14} className="text-indigo-400" />
-                <p className="text-xs font-medium text-gray-500">품목별 분류 {itemsSaving && <span className="text-indigo-400">저장 중...</span>}</p>
+                <p className="text-xs font-medium text-gray-500">세부 품목 수정 {itemsSaving && <span className="text-indigo-400">저장 중...</span>}</p>
               </div>
               <div className="space-y-2">
                 {items.map((item) => (
                   <div key={item.id} className="bg-gray-50 rounded-2xl overflow-hidden">
+                    {/* 헤더 (탭하면 확장) */}
                     <button
                       type="button"
                       onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
@@ -391,43 +401,103 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-sm font-medium text-gray-800 truncate">{item.name}</span>
-                        <span className="text-xs text-gray-400 flex-shrink-0">{item.price.toLocaleString('ko-KR')}원</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">
+                          {item.quantity}{item.unit} · {item.price.toLocaleString('ko-KR')}원
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {item.category_main && (
                           <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">{item.category_main}</span>
                         )}
-                        {item.category_sub && (
-                          <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{item.category_sub}</span>
-                        )}
                         <ChevronDown size={14} className={`text-gray-400 transition-transform ${expandedItemId === item.id ? 'rotate-180' : ''}`} />
                       </div>
                     </button>
+
+                    {/* 확장 편집 폼 */}
                     {expandedItemId === item.id && (
-                      <div className="px-3 pb-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-2">
+                      <div className="px-3 pb-3 space-y-2 border-t border-gray-100 pt-3">
+                        {/* 품목명 */}
                         <div>
-                          <label className="text-xs text-gray-400 mb-1 block">대분류</label>
-                          <select
-                            value={item.category_main}
-                            onChange={(e) => updateItemCategory(item, e.target.value, '')}
-                            className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
-                          >
-                            <option value="">선택</option>
-                            {allMainCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          <label className="text-xs text-gray-400 mb-1 block">품목명</label>
+                          <input
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => updateItem(item.id, { name: e.target.value })}
+                            className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                          />
                         </div>
-                        <div>
-                          <label className="text-xs text-gray-400 mb-1 block">소분류</label>
-                          <select
-                            value={item.category_sub}
-                            onChange={(e) => updateItemCategory(item, item.category_main, e.target.value)}
-                            disabled={!item.category_main}
-                            className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none disabled:opacity-40"
-                          >
-                            <option value="">선택</option>
-                            {getSubOptions(item.category_main).map((s) => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                        {/* 수량 / 단위 / 가격 */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">수량</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(item.id, { quantity: Number(e.target.value) || 1 })}
+                              className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">단위</label>
+                            <select
+                              value={item.unit}
+                              onChange={(e) => updateItem(item.id, { unit: e.target.value })}
+                              className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                            >
+                              {['개','캔','병','봉','팩','박스','장','구','인분','묶음','롤','포','g','kg','ml','L'].map((u) => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">가격(원)</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={item.price ? item.price.toLocaleString('ko-KR') : ''}
+                              onChange={(e) => {
+                                const n = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                                updateItem(item.id, { price: n });
+                              }}
+                              className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                            />
+                          </div>
                         </div>
+                        {/* 대분류 / 소분류 */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">대분류</label>
+                            <select
+                              value={item.category_main}
+                              onChange={(e) => updateItem(item.id, { category_main: e.target.value, category_sub: '' })}
+                              className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                            >
+                              <option value="">선택</option>
+                              {allMainCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">소분류</label>
+                            <select
+                              value={item.category_sub}
+                              onChange={(e) => updateItem(item.id, { category_sub: e.target.value })}
+                              disabled={!item.category_main}
+                              className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none disabled:opacity-40"
+                            >
+                              <option value="">선택</option>
+                              {getSubOptions(item.category_main).map((s) => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        {/* 저장 버튼 */}
+                        <button
+                          type="button"
+                          onClick={() => saveItem(item)}
+                          className="w-full py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl"
+                        >
+                          이 품목 저장
+                        </button>
                       </div>
                     )}
                   </div>

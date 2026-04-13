@@ -63,12 +63,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (!itemId) return NextResponse.json({ error: 'item_id required' }, { status: 400 });
 
+  const updateFields: Record<string, any> = {
+    category_main: body.category_main,
+    category_sub: body.category_sub,
+  };
+  if (body.name !== undefined) updateFields.name = body.name;
+  if (body.quantity !== undefined) updateFields.quantity = body.quantity;
+  if (body.unit !== undefined) updateFields.unit = body.unit;
+  if (body.price !== undefined) updateFields.price = body.price;
+
   const { data, error } = await supabase
     .from('items')
-    .update({
-      category_main: body.category_main,
-      category_sub: body.category_sub,
-    })
+    .update(updateFields)
     .eq('id', itemId)
     .eq('transaction_id', id)
     .select()

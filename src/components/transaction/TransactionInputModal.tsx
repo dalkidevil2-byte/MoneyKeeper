@@ -13,7 +13,7 @@ import { useAccounts, usePaymentMethods, useMembers, useBudgets, useCustomCatego
 import CategoryCombobox from '@/components/CategoryCombobox';
 import ReceiptAttachment from '@/components/ReceiptAttachment';
 import OcrReviewSheet from '@/components/transaction/OcrReviewSheet';
-import TransactionConfirmSheet from '@/components/transaction/TransactionConfirmSheet';
+// TransactionConfirmSheet는 Inbox 방식으로 대체됨
 import { useTransactions } from '@/hooks/useTransactions';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
@@ -60,8 +60,8 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
-  // 저장 후 확인 시트
-  const [savedTransaction, setSavedTransaction] = useState<any>(null);
+  // 저장 완료 토스트
+  const [savedToast, setSavedToast] = useState(false);
 
   // OCR
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -267,7 +267,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
         });
       }
       onSaved();
-      setSavedTransaction(tx);
+      handleClose();
     }
   };
 
@@ -443,23 +443,10 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
 
     setOcrResult(null);
     onSaved();
-    setSavedTransaction(transaction);
+    handleClose();
   };
 
   if (!open) return null;
-
-  // 저장 완료 확인 시트
-  if (savedTransaction) {
-    return (
-      <TransactionConfirmSheet
-        transaction={savedTransaction}
-        onClose={() => {
-          setSavedTransaction(null);
-          handleClose();
-        }}
-      />
-    );
-  }
 
   // 모달 밖에 배치 - 안드로이드 input 트리거 문제 방지
   const fileInputs = (

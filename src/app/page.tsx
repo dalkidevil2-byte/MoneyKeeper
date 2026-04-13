@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, ChevronRight, Settings, Eye, EyeOff, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, ChevronRight, Settings, Eye, EyeOff, TrendingUp, TrendingDown, Minus, Inbox } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import Link from 'next/link';
 
 import TransactionInputModal from '@/components/transaction/TransactionInputModal';
 import TransactionEditModal from '@/components/transaction/TransactionEditModal';
+import TransactionInboxSheet from '@/components/transaction/TransactionInboxSheet';
 import TransactionCard from '@/components/transaction/TransactionCard';
 import BudgetAlertBanner from '@/components/BudgetAlertBanner';
 import BudgetDetailSheet from '@/components/BudgetDetailSheet';
@@ -25,6 +26,15 @@ export default function HomePage() {
   const [prefilledFT, setPrefilledFT] = useState<any>(null);
   const [budgetDetail, setBudgetDetail] = useState<{ category: string; budget: number } | null>(null);
   const [bulkRegistering, setBulkRegistering] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxCount, setInboxCount] = useState(0);
+
+  // Inbox 미확인 건수 조회
+  useEffect(() => {
+    fetch('/api/transactions/inbox')
+      .then((r) => r.json())
+      .then((d) => setInboxCount((d.transactions ?? []).length));
+  }, []);
 
   const today = dayjs();
   const startOfMonth = today.startOf('month').format('YYYY-MM-DD');
@@ -150,9 +160,19 @@ export default function HomePage() {
             <p className="text-indigo-200 text-sm">{today.format('YYYY년 M월')}</p>
             <h1 className="text-2xl font-bold mt-0.5">우리집 가계부 💰</h1>
           </div>
-          <Link href="/settings" className="p-2 bg-white/15 rounded-xl">
-            <Settings size={18} className="text-white" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setInboxOpen(true)} className="relative p-2 bg-white/15 rounded-xl">
+              <Inbox size={18} className="text-white" />
+              {inboxCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {inboxCount > 9 ? '9+' : inboxCount}
+                </span>
+              )}
+            </button>
+            <Link href="/settings" className="p-2 bg-white/15 rounded-xl">
+              <Settings size={18} className="text-white" />
+            </Link>
+          </div>
         </div>
 
         {/* 이번 달 지출 요약 */}
@@ -431,6 +451,13 @@ export default function HomePage() {
           onClose={() => setEditTx(null)}
           onSaved={() => { setEditTx(null); refetch(); }}
           onDeleted={() => { setEditTx(null); refetch(); }}
+        />
+      )}
+
+      {inboxOpen && (
+        <TransactionInboxSheet
+          onClose={() => setInboxOpen(false)}
+          onUpdated={() => setInboxCount((c) => Math.max(0, c - 1))}
         />
       )}
 

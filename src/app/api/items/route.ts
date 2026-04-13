@@ -22,6 +22,7 @@ export async function GET() {
     .from('transactions')
     .select('id, date, merchant_name, name, amount, category_main, type')
     .eq('household_id', DEFAULT_HOUSEHOLD_ID)
+    .neq('status', 'cancelled')
     .gte('date', ONE_YEAR_AGO)
     .order('date', { ascending: true });
 
