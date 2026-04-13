@@ -63,7 +63,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
-  const ocrGalleryRef = useRef<HTMLInputElement>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { parsed, parsing, parseText, clearParsed } = useParseText();
@@ -354,7 +353,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     } finally {
       setOcrLoading(false);
       if (ocrFileRef.current) ocrFileRef.current.value = '';
-      if (ocrGalleryRef.current) ocrGalleryRef.current.value = '';
     }
   };
 
@@ -553,10 +551,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                 /* OCR 모드 */
                 <div className="space-y-3">
                   <p className="text-sm text-gray-500">마트/식당 영수증을 촬영하거나 사진첩에서 가져오면 품목을 자동으로 추출해요.</p>
-                  {/* 카메라 전용 */}
-                  <input ref={ocrFileRef} type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
-                  {/* 사진첩 전용 */}
-                  <input ref={ocrGalleryRef} type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
 
                   {ocrLoading ? (
                     <div className="w-full border-2 border-dashed border-indigo-200 rounded-2xl py-10 flex flex-col items-center gap-3">
@@ -566,20 +560,18 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => ocrFileRef.current?.click()}
-                        className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
-                      >
+                      {/* 카메라 - label로 직접 연결 */}
+                      <label className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer active:bg-indigo-50">
                         <Camera size={28} />
                         <p className="text-sm font-medium">카메라 촬영</p>
-                      </button>
-                      <button
-                        onClick={() => ocrGalleryRef.current?.click()}
-                        className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
-                      >
+                        <input type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
+                      </label>
+                      {/* 사진첩 - label로 직접 연결 */}
+                      <label className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer active:bg-indigo-50">
                         <FileText size={28} />
                         <p className="text-sm font-medium">사진첩 선택</p>
-                      </button>
+                        <input type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
+                      </label>
                     </div>
                   )}
                 </div>
