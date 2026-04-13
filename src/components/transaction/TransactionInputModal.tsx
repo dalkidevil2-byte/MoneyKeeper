@@ -63,6 +63,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { parsed, parsing, parseText, clearParsed } = useParseText();
@@ -334,10 +335,8 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     });
   };
 
-  // OCR 이미지 처리
-  const handleOcrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // OCR 이미지 처리 (File 객체 직접)
+  const handleOcrFileRaw = async (file: File) => {
     setOcrLoading(true);
     try {
       const { base64, mimeType } = await compressImage(file);
@@ -353,6 +352,35 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     } finally {
       setOcrLoading(false);
       if (ocrFileRef.current) ocrFileRef.current.value = '';
+    }
+  };
+
+  // OCR input onChange 핸들러
+  const handleOcrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await handleOcrFileRaw(file);
+  };
+
+  // 갤러리에서 열기 (showOpenFilePicker → 파일 선택창 강제)
+  const handleGalleryOpen = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'showOpenFilePicker' in window) {
+        const [fileHandle] = await (window as any).showOpenFilePicker({
+          types: [{ description: '이미지', accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'] } }],
+          multiple: false,
+        });
+        const file = await fileHandle.getFile();
+        await handleOcrFileRaw(file);
+      } else {
+        // 폴백: 일반 파일 input 클릭
+        galleryInputRef.current?.click();
+      }
+    } catch (err: any) {
+      // 사용자가 취소한 경우 무시
+      if (err?.name !== 'AbortError') {
+        galleryInputRef.current?.click();
+      }
     }
   };
 
@@ -420,7 +448,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   const fileInputs = (
     <>
       <input id="ocr-camera-input" type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
-      <input id="ocr-gallery-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" onChange={handleOcrFile} className="hidden" />
+      <input ref={galleryInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic" onChange={handleOcrFile} className="hidden" />
     </>
   );
 
@@ -574,10 +602,14 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                         <Camera size={28} />
                         <p className="text-sm font-medium text-center">카메라 촬영</p>
                       </label>
-                      <label htmlFor="ocr-gallery-input" className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={handleGalleryOpen}
+                        className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer w-full"
+                      >
                         <FileText size={28} />
                         <p className="text-sm font-medium text-center">사진첩 / 파일</p>
-                      </label>
+                      </button>
                     </div>
                   )}
                 </div>
