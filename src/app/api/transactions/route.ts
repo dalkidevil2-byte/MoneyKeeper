@@ -120,8 +120,8 @@ export async function POST(req: NextRequest) {
     // 계좌 잔액 업데이트
     await updateAccountBalances(supabase, data);
 
-    // Notion 동기화 (비동기, 실패해도 거래는 저장됨)
-    syncToNotion(supabase, data);
+    // Notion 동기화는 사용자 확인 후 수동으로 실행 (TransactionConfirmSheet)
+    // syncToNotion(supabase, data);
 
     return NextResponse.json({ transaction: data }, { status: 201 });
   } catch (error) {

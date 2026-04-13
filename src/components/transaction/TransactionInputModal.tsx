@@ -13,6 +13,7 @@ import { useAccounts, usePaymentMethods, useMembers, useBudgets, useCustomCatego
 import CategoryCombobox from '@/components/CategoryCombobox';
 import ReceiptAttachment from '@/components/ReceiptAttachment';
 import OcrReviewSheet from '@/components/transaction/OcrReviewSheet';
+import TransactionConfirmSheet from '@/components/transaction/TransactionConfirmSheet';
 import { useTransactions } from '@/hooks/useTransactions';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
@@ -58,6 +59,9 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   // 음성 인식
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+
+  // 저장 후 확인 시트
+  const [savedTransaction, setSavedTransaction] = useState<any>(null);
 
   // OCR
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -262,8 +266,8 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
           body: JSON.stringify({ items: validItems.map(({ id, ...rest }) => rest) }),
         });
       }
-      handleClose();
       onSaved();
+      setSavedTransaction(tx);
     }
   };
 
@@ -438,11 +442,24 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     });
 
     setOcrResult(null);
-    handleClose();
     onSaved();
+    setSavedTransaction(transaction);
   };
 
   if (!open) return null;
+
+  // 저장 완료 확인 시트
+  if (savedTransaction) {
+    return (
+      <TransactionConfirmSheet
+        transaction={savedTransaction}
+        onClose={() => {
+          setSavedTransaction(null);
+          handleClose();
+        }}
+      />
+    );
+  }
 
   // 모달 밖에 배치 - 안드로이드 input 트리거 문제 방지
   const fileInputs = (
@@ -732,8 +749,16 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">결제수단</label>
                   <select
-                    value={form.payment_method_id ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, payment_method_id: e.target.value || undefined }))}
+                    value={form.payment_method_id ?? (form.account_from_id ? `account:${form.account_from_id}` : '')}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val.startsWith('account:')) {
+                        const accountId = val.replace('account:', '');
+                        setForm((f) => ({ ...f, payment_method_id: undefined, account_from_id: accountId }));
+                      } else {
+                        setForm((f) => ({ ...f, payment_method_id: val || undefined, account_from_id: undefined }));
+                      }
+                    }}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                   >
                     <option value="">선택 안함</option>
@@ -742,18 +767,29 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                       const mine = memberId ? paymentMethods.filter((pm) => pm.member_id === memberId) : [];
                       const shared = paymentMethods.filter((pm) => !pm.member_id);
                       const others = memberId ? paymentMethods.filter((pm) => pm.member_id && pm.member_id !== memberId) : [];
-                      if (!memberId) return paymentMethods.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>);
-                      return (
+                      const pmList = !memberId ? paymentMethods.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>) : (
                         <>
                           {mine.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
                           {shared.length > 0 && (
-                            <optgroup label="공용">
+                            <optgroup label="공용 카드/현금">
                               {shared.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
                             </optgroup>
                           )}
                           {others.length > 0 && (
                             <optgroup label="다른 구성원">
                               {others.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                            </optgroup>
+                          )}
+                        </>
+                      );
+                      return (
+                        <>
+                          {pmList}
+                          {accounts.length > 0 && (
+                            <optgroup label="🏦 계좌 (직접출금)">
+                              {accounts.map((acc: any) => (
+                                <option key={acc.id} value={`account:${acc.id}`}>{acc.name}</option>
+                              ))}
                             </optgroup>
                           )}
                         </>

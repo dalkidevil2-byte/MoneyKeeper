@@ -929,11 +929,28 @@ export default function SettingsPage() {
 
         {/* Notion 연동 안내 */}
         <section>
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <h2 className="font-semibold text-gray-800 mb-1">🔗 Notion 연동</h2>
-            <p className="text-xs text-gray-500 leading-5">
-              거래 저장 시 자동으로 Notion 데이터베이스에 동기화됩니다.
-            </p>
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide px-1 mb-3">Notion 연동</h2>
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">📋</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">거래 → Notion 자동 기록</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  거래 등록 후 확인 시트에서 "Notion에 동기화" 버튼을 누르면 Notion 데이터베이스에 자동으로 기록돼요.
+                </p>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 space-y-2 text-xs text-gray-600">
+              <p className="font-semibold text-gray-700">⚙️ 설정 방법</p>
+              <p>1. Notion에서 새 데이터베이스 생성 (Name, 날짜, 금액, 유형, 카테고리, 가맹점, 메모, 내부ID 컬럼)</p>
+              <p>2. <span className="font-mono bg-white px-1 rounded">notion.so/my-integrations</span> 에서 통합 토큰 발급</p>
+              <p>3. Vercel 대시보드 → 프로젝트 → Settings → Environment Variables에 추가:</p>
+              <div className="bg-white rounded-lg p-2 space-y-1 font-mono text-[11px] text-indigo-600 border border-gray-100">
+                <p>NOTION_TOKEN = secret_xxx...</p>
+                <p>NOTION_DATABASE_ID = 데이터베이스 ID</p>
+              </div>
+              <p>4. Vercel에서 Redeploy 후 사용 가능</p>
+            </div>
           </div>
         </section>
       </div>
