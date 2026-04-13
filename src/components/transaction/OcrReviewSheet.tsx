@@ -233,18 +233,24 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400 mb-1 block">단위</label>
-                        <select
+                        <label className="text-xs text-gray-400 mb-1 block">단위 (직접입력 가능)</label>
+                        <input
+                          list={`ocr-unit-list-${item.id}`}
                           value={item.unit}
                           onChange={(e) => updateItem(item.id, { unit: e.target.value })}
-                          className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
-                        >
-                          {UNIT_OPTIONS.map((u) => (
-                            <option key={u} value={u}>{u}</option>
-                          ))}
-                        </select>
+                          placeholder="예: 300g/개"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        />
+                        <datalist id={`ocr-unit-list-${item.id}`}>
+                          {UNIT_OPTIONS.map((u) => <option key={u} value={u} />)}
+                        </datalist>
                       </div>
                     </div>
+                    {item.quantity > 1 && Math.abs(item.amount) > 0 && (
+                      <p className="text-xs text-indigo-500 px-1">
+                        단가: {Math.round(Math.abs(item.amount) / item.quantity).toLocaleString('ko-KR')}원/{item.unit || '개'}
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">대분류</label>

@@ -426,8 +426,8 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                             className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
                           />
                         </div>
-                        {/* 수량 / 단위 / 가격 */}
-                        <div className="grid grid-cols-3 gap-2">
+                        {/* 수량 / 단위 */}
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="text-xs text-gray-400 mb-1 block">수량</label>
                             <input
@@ -439,30 +439,39 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                             />
                           </div>
                           <div>
-                            <label className="text-xs text-gray-400 mb-1 block">단위</label>
-                            <select
+                            <label className="text-xs text-gray-400 mb-1 block">단위 (직접입력 가능)</label>
+                            <input
+                              list={`unit-list-${item.id}`}
                               value={item.unit}
                               onChange={(e) => updateItem(item.id, { unit: e.target.value })}
-                              className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
-                            >
-                              {['개','캔','병','봉','팩','박스','장','구','인분','묶음','롤','포','g','kg','ml','L'].map((u) => (
-                                <option key={u} value={u}>{u}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-400 mb-1 block">가격(원)</label>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={item.price ? item.price.toLocaleString('ko-KR') : ''}
-                              onChange={(e) => {
-                                const n = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
-                                updateItem(item.id, { price: n });
-                              }}
+                              placeholder="예: 300g/개"
                               className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
                             />
+                            <datalist id={`unit-list-${item.id}`}>
+                              {['개','캔','병','봉','팩','박스','장','구','묶음','롤','포','g','kg','ml','L'].map((u) => (
+                                <option key={u} value={u} />
+                              ))}
+                            </datalist>
                           </div>
+                        </div>
+                        {/* 총 가격 / 단가 표시 */}
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">총 가격 (원)</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.price ? item.price.toLocaleString('ko-KR') : ''}
+                            onChange={(e) => {
+                              const n = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                              updateItem(item.id, { price: n });
+                            }}
+                            className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                          />
+                          {item.quantity > 1 && item.price > 0 && (
+                            <p className="text-xs text-indigo-500 mt-1 px-1">
+                              = {Math.round(item.price / item.quantity).toLocaleString('ko-KR')}원/{item.unit || '개'}
+                            </p>
+                          )}
                         </div>
                         {/* 대분류 / 소분류 */}
                         <div className="grid grid-cols-2 gap-2">
