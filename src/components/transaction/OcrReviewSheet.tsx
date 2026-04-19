@@ -226,11 +226,14 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                         <label className="text-xs text-gray-400 mb-1 block">수량</label>
                         <input
                           type="text"
-                          inputMode="numeric"
+                          inputMode="decimal"
                           value={item.quantity}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                            updateItem(item.id, { quantity: raw === '' ? 1 : parseInt(raw) });
+                            // 숫자 + 소수점 1개만 허용
+                            const raw = e.target.value
+                              .replace(/[^0-9.]/g, '')
+                              .replace(/(\..*)\./g, '$1');
+                            updateItem(item.id, { quantity: raw === '' || raw === '.' ? 1 : parseFloat(raw) });
                           }}
                           onFocus={(e) => e.target.select()}
                           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
@@ -239,15 +242,12 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">단위 (직접입력 가능)</label>
                         <input
-                          list={`ocr-unit-list-${item.id}`}
+                          type="text"
                           value={item.unit}
                           onChange={(e) => updateItem(item.id, { unit: e.target.value })}
-                          placeholder="예: 300g/개"
+                          placeholder="개, 300g, 500ml, 캔 ..."
                           className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                         />
-                        <datalist id={`ocr-unit-list-${item.id}`}>
-                          {UNIT_OPTIONS.map((u) => <option key={u} value={u} />)}
-                        </datalist>
                       </div>
                     </div>
                     {item.quantity > 1 && Math.abs(item.amount) > 0 && (

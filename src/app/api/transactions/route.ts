@@ -78,10 +78,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // target_member_ids 우선, 없으면 단일 target_member_id를 배열화
+    const targetIds: string[] = Array.isArray(body.target_member_ids)
+      ? body.target_member_ids.filter(Boolean)
+      : body.target_member_id
+        ? [body.target_member_id]
+        : [];
+
     const insertData = {
       household_id: body.household_id ?? DEFAULT_HOUSEHOLD_ID,
       member_id: body.member_id ?? null,
-      target_member_id: body.target_member_id ?? null,
+      target_member_id: targetIds[0] ?? null,            // 호환용 단일 값 (첫 번째)
+      target_member_ids: targetIds,                       // 새 다중 값
       receipt_url: body.receipt_url ?? '',
       date: body.date,
       type: body.type ?? 'variable_expense',

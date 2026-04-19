@@ -15,8 +15,8 @@ export async function GET() {
       payment_method:payment_methods(id, name, type)
     `)
     .eq('household_id', DEFAULT_HOUSEHOLD_ID)
-    .eq('sync_status', 'pending')
-    .neq('status', 'cancelled')
+    .in('status', ['reviewed', 'confirmed'])
+    .in('sync_status', ['pending', 'failed'])
     .order('created_at', { ascending: false })
     .limit(50);
 

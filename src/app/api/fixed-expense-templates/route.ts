@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       payment_method_id: body.payment_method_id ?? null,
       account_from_id: body.account_from_id ?? null,
       account_to_id: body.account_to_id ?? null,
+      is_variable: body.is_variable ?? false,
     })
     .select(`
       *,

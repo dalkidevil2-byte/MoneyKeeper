@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -70,6 +70,41 @@ export default function StatsPage() {
   const { budgets } = useBudgets();
   const { members } = useMembers();
 
+  // 거래 묶음의 세부 품목 일괄 조회
+  type ItemAgg = {
+    transaction_id: string;
+    price: number;
+    category_main: string;
+    category_sub: string;
+  };
+  const [items, setItems] = useState<ItemAgg[]>([]);
+  useEffect(() => {
+    const ids = transactions.map((t) => t.id);
+    if (ids.length === 0) {
+      setItems([]);
+      return;
+    }
+    fetch('/api/items/by-transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transaction_ids: ids }),
+    })
+      .then((r) => r.json())
+      .then((d) => setItems(d.items ?? []))
+      .catch(() => setItems([]));
+  }, [transactions]);
+
+  // transaction_id → items 그룹
+  const itemsByTx = useMemo(() => {
+    const map = new Map<string, ItemAgg[]>();
+    for (const it of items) {
+      const arr = map.get(it.transaction_id) ?? [];
+      arr.push(it);
+      map.set(it.transaction_id, arr);
+    }
+    return map;
+  }, [items]);
+
   // ── 필터 적용 ──
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -80,13 +115,22 @@ export default function StatsPage() {
 
       // 구성원 필터
       if (memberFilter !== 'all') {
-        const field = memberFilterMode === 'payer' ? (t as any).member_id : (t as any).target_member_id;
-        if (field !== memberFilter) return false;
+        if (memberFilterMode === 'payer') {
+          if (t.member_id !== memberFilter) return false;
+        } else {
+          const ids =
+            t.target_member_ids && t.target_member_ids.length > 0
+              ? t.target_member_ids
+              : t.target_member_id
+                ? [t.target_member_id]
+                : [];
+          if (!ids.includes(memberFilter)) return false;
+        }
       }
 
       return true;
     });
-  }, [transactions, typeFilter, memberFilter]);
+  }, [transactions, typeFilter, memberFilter, memberFilterMode]);
 
   const totalExpense = filtered.reduce((s, t) => s + t.amount, 0);
   const totalIncome  = transactions
@@ -94,31 +138,70 @@ export default function StatsPage() {
     .reduce((s, t) => s + t.amount, 0);
 
   // ── 카테고리별 ──
+  // 카테고리 집계
+  // - 세부 품목이 있으면 품목 기준으로 분배 (items.price 합산, 거래 amount는 items 합과 다를 수 있음 → 비율로 재정규화하여 거래 총액 보존)
+  // - 세부 품목이 없으면 거래의 category_main으로 그대로 합산
   const categoryData = useMemo(() => {
     const map: Record<string, number> = {};
+    const add = (cat: string, amt: number) => {
+      const k = cat || '기타';
+      map[k] = (map[k] || 0) + amt;
+    };
+
     filtered.forEach((t) => {
-      const cat = t.category_main || '기타';
-      map[cat] = (map[cat] || 0) + t.amount;
+      const its = itemsByTx.get(t.id);
+      if (its && its.length > 0) {
+        const sumItems = its.reduce((s, i) => s + (i.price || 0), 0);
+        if (sumItems > 0) {
+          // 거래 총액(t.amount)을 items 비율로 분배 (items.price 합 ≠ amount일 수도 있어 안전)
+          for (const it of its) {
+            const share = (t.amount * (it.price || 0)) / sumItems;
+            add(it.category_main || t.category_main, share);
+          }
+          return;
+        }
+      }
+      add(t.category_main, t.amount);
     });
+
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [filtered]);
+  }, [filtered, itemsByTx]);
 
   // ── 드릴다운: 선택된 카테고리의 소분류 ──
   const drilldownData = useMemo(() => {
     if (!selectedCategory) return [];
     const map: Record<string, number> = {};
-    filtered
-      .filter((t) => (t.category_main || '기타') === selectedCategory)
-      .forEach((t) => {
-        const sub = t.category_sub || '기타';
-        map[sub] = (map[sub] || 0) + t.amount;
-      });
+    const add = (sub: string, amt: number) => {
+      const k = sub || '기타';
+      map[k] = (map[k] || 0) + amt;
+    };
+
+    filtered.forEach((t) => {
+      const its = itemsByTx.get(t.id);
+      if (its && its.length > 0) {
+        const sumItems = its.reduce((s, i) => s + (i.price || 0), 0);
+        if (sumItems > 0) {
+          for (const it of its) {
+            const main = it.category_main || t.category_main;
+            if (main !== selectedCategory) continue;
+            const share = (t.amount * (it.price || 0)) / sumItems;
+            add(it.category_sub || t.category_sub, share);
+          }
+          return;
+        }
+      }
+      // items 없는 거래
+      if ((t.category_main || '기타') === selectedCategory) {
+        add(t.category_sub, t.amount);
+      }
+    });
+
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [filtered, selectedCategory]);
+  }, [filtered, itemsByTx, selectedCategory]);
 
   const drilldownTxs = useMemo(() => {
     if (!selectedCategory) return [];
@@ -140,8 +223,17 @@ export default function StatsPage() {
         if (typeFilter === 'variable_expense' && t.type !== 'variable_expense') return false;
         if (typeFilter === 'fixed_expense'    && t.type !== 'fixed_expense')    return false;
         if (memberFilter !== 'all') {
-          const field = memberFilterMode === 'payer' ? (t as any).member_id : (t as any).target_member_id;
-          if (field !== memberFilter) return false;
+          if (memberFilterMode === 'payer') {
+            if (t.member_id !== memberFilter) return false;
+          } else {
+            const ids =
+              t.target_member_ids && t.target_member_ids.length > 0
+                ? t.target_member_ids
+                : t.target_member_id
+                  ? [t.target_member_id]
+                  : [];
+            if (!ids.includes(memberFilter)) return false;
+          }
         }
         return true;
       }).reduce((s, t) => s + t.amount, 0);
@@ -170,16 +262,63 @@ export default function StatsPage() {
   }, [budgets, filtered]);
 
   // ── 구성원별 ──
+  // payer: member_id 단일
+  // target: target_member_ids 우선, 없으면 target_member_id.
+  //   - 비어있음 → '공용' 슬라이스로 별도 집계
+  //   - 여러 명이면 N등분
   const memberData = useMemo(() => {
     if (members.length < 2) return [];
-    const base = transactions.filter((t) => ['variable_expense', 'fixed_expense'].includes(t.type));
-    const field = memberFilterMode === 'payer' ? 'member_id' : 'target_member_id';
-    return members.map((m) => ({
-      name:   m.name,
-      color:  m.color,
-      id:     m.id,
-      amount: base.filter((t) => (t as any)[field] === m.id).reduce((s, t) => s + t.amount, 0),
-    })).filter((d) => d.amount > 0).sort((a, b) => b.amount - a.amount);
+    const base = transactions.filter((t) =>
+      ['variable_expense', 'fixed_expense'].includes(t.type)
+    );
+
+    const rows = members.map((m) => {
+      let amount = 0;
+      if (memberFilterMode === 'payer') {
+        amount = base
+          .filter((t) => t.member_id === m.id)
+          .reduce((s, t) => s + t.amount, 0);
+      } else {
+        for (const t of base) {
+          const ids =
+            t.target_member_ids && t.target_member_ids.length > 0
+              ? t.target_member_ids
+              : t.target_member_id
+                ? [t.target_member_id]
+                : [];
+          if (ids.length === 0) continue; // 공용은 별도 집계
+          if (ids.includes(m.id)) {
+            amount += t.amount / ids.length;
+          }
+        }
+      }
+      return { name: m.name, color: m.color, id: m.id, amount };
+    });
+
+    // 지출 대상 모드일 때만 '공용' 슬라이스 추가
+    if (memberFilterMode === 'target') {
+      const sharedAmount = base
+        .filter((t) => {
+          const ids =
+            t.target_member_ids && t.target_member_ids.length > 0
+              ? t.target_member_ids
+              : t.target_member_id
+                ? [t.target_member_id]
+                : [];
+          return ids.length === 0;
+        })
+        .reduce((s, t) => s + t.amount, 0);
+      if (sharedAmount > 0) {
+        rows.push({
+          id: '__shared__',
+          name: '공용',
+          color: '#64748b', // slate-500
+          amount: sharedAmount,
+        });
+      }
+    }
+
+    return rows.filter((d) => d.amount > 0).sort((a, b) => b.amount - a.amount);
   }, [members, transactions, memberFilterMode]);
 
   const totalMemberExpense = memberData.reduce((s, m) => s + m.amount, 0);
@@ -471,6 +610,59 @@ export default function StatsPage() {
                 ) : (
                   <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">
                     해당 조건의 지출 내역이 없어요
+                  </div>
+                )}
+
+                {/* 구성원별 지출 도넛 */}
+                {memberData.length > 0 && (
+                  <div className="bg-white rounded-2xl p-4 border border-gray-100">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <h2 className="font-semibold text-gray-800">구성원별 지출</h2>
+                      <span className="text-[11px] text-gray-400">
+                        {memberFilterMode === 'payer' ? '결제자 기준' : '지출 대상 기준'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-3">상단 필터에서 결제자/지출 대상 전환 가능</p>
+                    <div className="flex items-center gap-2">
+                      <PieChart width={150} height={150}>
+                        <Pie
+                          data={memberData}
+                          cx={70}
+                          cy={70}
+                          innerRadius={42}
+                          outerRadius={68}
+                          dataKey="amount"
+                          paddingAngle={2}
+                        >
+                          {memberData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color ?? '#94a3b8'} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                      </PieChart>
+                      <div className="flex-1 space-y-1.5 min-w-0">
+                        {memberData.map((m) => {
+                          const pct =
+                            totalMemberExpense > 0
+                              ? Math.round((m.amount / totalMemberExpense) * 100)
+                              : 0;
+                          return (
+                            <div key={m.id} className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: m.color ?? '#94a3b8' }}
+                                />
+                                <span className="text-xs text-gray-600 truncate">{m.name}</span>
+                              </div>
+                              <span className="text-xs font-semibold text-gray-800 flex-shrink-0">
+                                {toMan(m.amount)} · {pct}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
 

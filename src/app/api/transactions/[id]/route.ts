@@ -11,6 +11,12 @@ export async function PATCH(
   const body = await req.json();
   const { id } = await params;
 
+  const targetIds: string[] = Array.isArray(body.target_member_ids)
+    ? body.target_member_ids.filter(Boolean)
+    : body.target_member_id
+      ? [body.target_member_id]
+      : [];
+
   const { data, error } = await supabase
     .from('transactions')
     .update({
@@ -25,7 +31,8 @@ export async function PATCH(
       account_from_id: body.account_from_id ?? null,
       account_to_id: body.account_to_id ?? null,
       member_id: body.member_id ?? null,
-      target_member_id: body.target_member_id ?? null,
+      target_member_id: targetIds[0] ?? null,
+      target_member_ids: targetIds,
       receipt_url: body.receipt_url ?? '',
       memo: body.memo ?? '',
     })

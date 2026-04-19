@@ -110,6 +110,7 @@ export interface Transaction {
   created_at: string;
   updated_at: string;
   target_member_id: string | null;
+  target_member_ids: string[] | null;
   receipt_url: string;
   // 조인 데이터
   member?: Member;
@@ -180,6 +181,7 @@ export interface CreateTransactionInput {
   household_id: string;
   member_id?: string;
   target_member_id?: string;
+  target_member_ids?: string[];
   receipt_url?: string;
   date: string;
   type: TransactionType;

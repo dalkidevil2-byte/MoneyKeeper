@@ -67,7 +67,9 @@ CREATE TABLE payment_methods (
 CREATE TABLE transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
-  member_id UUID REFERENCES members(id) ON DELETE SET NULL,
+  member_id UUID REFERENCES members(id) ON DELETE SET NULL,            -- 결제자
+  target_member_id UUID REFERENCES members(id) ON DELETE SET NULL,     -- 지출 대상 (단일, 호환용)
+  target_member_ids UUID[] DEFAULT '{}',                                -- 지출 대상 (다수)
 
   -- 날짜
   date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -169,7 +171,8 @@ CREATE TABLE items (
   normalized_name TEXT DEFAULT '',
   representative_name TEXT DEFAULT '',
   price BIGINT NOT NULL DEFAULT 0,
-  quantity INTEGER NOT NULL DEFAULT 1,
+  quantity NUMERIC(10, 2) NOT NULL DEFAULT 1,
+  unit TEXT DEFAULT '개',
   unit_price BIGINT GENERATED ALWAYS AS (price / GREATEST(quantity, 1)) STORED,
   category_main TEXT DEFAULT '',
   category_sub TEXT DEFAULT '',
@@ -177,6 +180,39 @@ CREATE TABLE items (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- ─────────────────────────────────────────
+-- 9. custom_categories (사용자 정의 카테고리)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  category_main TEXT NOT NULL,
+  category_sub TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_custom_categories_household ON custom_categories(household_id);
+
+-- ─────────────────────────────────────────
+-- 10. fixed_expense_templates (고정지출 템플릿)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS fixed_expense_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  amount BIGINT NOT NULL,
+  due_day SMALLINT NOT NULL CHECK (due_day BETWEEN 1 AND 31),
+  type TEXT DEFAULT 'fixed_expense',
+  category_main TEXT DEFAULT '',
+  category_sub TEXT DEFAULT '',
+  payment_method_id UUID REFERENCES payment_methods(id) ON DELETE SET NULL,
+  account_from_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  account_to_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  is_variable BOOLEAN DEFAULT false,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fixed_expense_templates_household ON fixed_expense_templates(household_id);
 
 -- ─────────────────────────────────────────
 -- 인덱스

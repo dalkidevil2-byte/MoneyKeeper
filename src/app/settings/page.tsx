@@ -109,6 +109,7 @@ export default function SettingsPage() {
     category_main: '', category_sub: '',
     payment_method_id: '',
     account_from_id: '', account_to_id: '',
+    is_variable: false,
   });
 
   const handleAddFT = async () => {
@@ -126,9 +127,10 @@ export default function SettingsPage() {
         payment_method_id: ftForm.payment_method_id || null,
         account_from_id: ftForm.account_from_id || null,
         account_to_id: ftForm.account_to_id || null,
+        is_variable: ftForm.is_variable,
       }),
     });
-    setFTForm({ name: '', amount: '', due_day: '1', type: 'fixed_expense', category_main: '', category_sub: '', payment_method_id: '', account_from_id: '', account_to_id: '' });
+    setFTForm({ name: '', amount: '', due_day: '1', type: 'fixed_expense', category_main: '', category_sub: '', payment_method_id: '', account_from_id: '', account_to_id: '', is_variable: false });
     setAddingFT(false);
     refetchFT();
   };
@@ -250,7 +252,7 @@ export default function SettingsPage() {
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-100 px-4 pt-5 pb-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Link href="/" className="p-2 rounded-xl hover:bg-gray-100">
+          <Link href="/budget" className="p-2 rounded-xl hover:bg-gray-100">
             <ArrowLeft size={20} className="text-gray-600" />
           </Link>
           <h1 className="text-lg font-bold text-gray-900">설정</h1>
@@ -798,17 +800,70 @@ export default function SettingsPage() {
               </div>
               {ftForm.amount && <p className="text-xs text-indigo-600 px-1">= {withComma(ftForm.amount)}원</p>}
 
-              {/* 고정지출 전용: 카테고리 + 결제수단 */}
+              {/* 고정지출 전용: 카테고리(대/소) + 결제수단 + 변동 금액 */}
               {ftForm.type === 'fixed_expense' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <select value={ftForm.category_main} onChange={(e) => setFTForm((f) => ({ ...f, category_main: e.target.value }))} className="border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none">
-                    <option value="">카테고리</option>
-                    {allCategoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <select value={ftForm.payment_method_id} onChange={(e) => setFTForm((f) => ({ ...f, payment_method_id: e.target.value }))} className="border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none">
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={ftForm.category_main}
+                      onChange={(e) =>
+                        setFTForm((f) => ({ ...f, category_main: e.target.value, category_sub: '' }))
+                      }
+                      className="border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none"
+                    >
+                      <option value="">대분류</option>
+                      {allCategoryOptions.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={ftForm.category_sub}
+                      onChange={(e) => setFTForm((f) => ({ ...f, category_sub: e.target.value }))}
+                      disabled={!ftForm.category_main}
+                      className="border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none disabled:opacity-50"
+                    >
+                      <option value="">소분류 (선택)</option>
+                      {(() => {
+                        const main = ftForm.category_main;
+                        if (!main) return null;
+                        const defaults = (CATEGORY_SUB_MAP as Record<string, readonly string[]>)[main] ?? [];
+                        const customs = customCategories
+                          .filter((c) => c.category_main === main && c.category_sub)
+                          .map((c) => c.category_sub)
+                          .filter((s, i, arr) => arr.indexOf(s) === i && !defaults.includes(s));
+                        return [...defaults, ...customs].map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ));
+                      })()}
+                    </select>
+                  </div>
+                  <select
+                    value={ftForm.payment_method_id}
+                    onChange={(e) => setFTForm((f) => ({ ...f, payment_method_id: e.target.value }))}
+                    className="w-full border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none"
+                  >
                     <option value="">결제수단</option>
-                    {paymentMethods.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                    {paymentMethods.map((pm) => (
+                      <option key={pm.id} value={pm.id}>
+                        {pm.name}
+                      </option>
+                    ))}
                   </select>
+                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={ftForm.is_variable}
+                      onChange={(e) => setFTForm((f) => ({ ...f, is_variable: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span>
+                      매월 금액이 다름 <span className="text-gray-400">(관리비·통신비 등)</span>
+                    </span>
+                  </label>
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sparkles, ChevronDown, ChevronUp, TrendingUp, RotateCcw, ShoppingCart } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronUp, TrendingUp, RotateCcw, ShoppingCart, X } from 'lucide-react';
 import { formatAmount } from '@/lib/parser';
 
 interface Insight {
@@ -36,7 +36,13 @@ const CATEGORY_EMOJI: Record<string, string> = {
   주거: '🏠', '저축/투자': '📈', 육아: '👶', 기타: '📝',
 };
 
-function InsightItem({ insight }: { insight: Insight }) {
+function InsightItem({ insight, onDismiss }: { insight: Insight; onDismiss: () => void }) {
+  const dismissBtn = (
+    <button onClick={onDismiss} className="p-1 text-gray-300 hover:text-gray-500 flex-shrink-0 mt-0.5">
+      <X size={14} />
+    </button>
+  );
+
   if (insight.type === 'overdue_merchant') {
     return (
       <div className="flex items-start gap-3 py-3">
@@ -51,6 +57,7 @@ function InsightItem({ insight }: { insight: Insight }) {
             보통 {FREQ_LABEL[insight.frequency!]} 방문 · 평균 {formatAmount(insight.avgAmount!)}
           </p>
         </div>
+        {dismissBtn}
       </div>
     );
   }
@@ -72,6 +79,7 @@ function InsightItem({ insight }: { insight: Insight }) {
             3개월간 {insight.visitCount}회 방문 · 평균 {formatAmount(insight.avgAmount!)}
           </p>
         </div>
+        {dismissBtn}
       </div>
     );
   }
@@ -91,6 +99,7 @@ function InsightItem({ insight }: { insight: Insight }) {
             <span className="text-rose-400 font-medium ml-1">(+{insight.pct}%)</span>
           </p>
         </div>
+        {dismissBtn}
       </div>
     );
   }
@@ -114,6 +123,7 @@ function InsightItem({ insight }: { insight: Insight }) {
             ))}
           </div>
         </div>
+        {dismissBtn}
       </div>
     );
   }
@@ -155,6 +165,10 @@ export default function InsightCard() {
   const visible = expanded ? insights : insights.slice(0, PREVIEW);
   const hasMore = insights.length > PREVIEW;
 
+  const dismiss = (ins: Insight) => {
+    setInsights((prev) => prev.filter((x) => x !== ins));
+  };
+
   return (
     <section>
       <div className="flex items-center gap-2 mb-2 px-1">
@@ -164,7 +178,7 @@ export default function InsightCard() {
 
       <div className="bg-white rounded-2xl border border-gray-100 px-4 divide-y divide-gray-50">
         {visible.map((ins, i) => (
-          <InsightItem key={i} insight={ins} />
+          <InsightItem key={i} insight={ins} onDismiss={() => dismiss(ins)} />
         ))}
 
         {hasMore && (

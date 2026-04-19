@@ -31,7 +31,8 @@ export async function GET() {
   const txMap = new Map(txs.map((t) => [t.id, t]));
   const txIds = [...txMap.keys()];
 
-  const itemMap = new Map<string, { category: string; records: ItemRecord[] }>();
+  // key: "품목명__단위" 로 묶어 단위별 단가 비교를 정확하게
+  const itemMap = new Map<string, { name: string; unit: string; category: string; records: ItemRecord[] }>();
 
   // ── Source 1: items 테이블 (명시적 품목 입력) ──
   const { data: itemRows } = await supabase
@@ -44,16 +45,18 @@ export async function GET() {
     if (!tx) continue;
     const name = row.name?.trim();
     if (!name || name.length < 2) continue;
+    const unit = row.unit?.trim() || '개';
+    const key = `${name}__${unit}`;
 
-    if (!itemMap.has(name)) {
-      itemMap.set(name, { category: row.category_main || '기타', records: [] });
+    if (!itemMap.has(key)) {
+      itemMap.set(key, { name, unit, category: row.category_main || '기타', records: [] });
     }
-    itemMap.get(name)!.records.push({
+    itemMap.get(key)!.records.push({
       date: tx.date,
       price: row.price,
       unit_price: row.unit_price ?? row.price,
       quantity: row.quantity ?? 1,
-      unit: row.unit || '개',
+      unit,
       store: tx.merchant_name || '알 수 없음',
     });
   }
@@ -64,27 +67,28 @@ export async function GET() {
   // ── Source 2: OCR 방식 거래 (name ≠ merchant_name) 레거시 fallback ──
   for (const tx of txs) {
     if (tx.type !== 'variable_expense') continue;
-    // items 테이블에 이미 품목이 있는 거래는 skip
     if (txIdsWithItems.has(tx.id)) continue;
     const name = tx.name?.trim();
     if (!name || name.length < 2) continue;
     if (!tx.merchant_name || tx.merchant_name === tx.name) continue;
+    const unit = '개';
+    const key = `${name}__${unit}`;
 
-    if (!itemMap.has(name)) {
-      itemMap.set(name, { category: tx.category_main || '기타', records: [] });
+    if (!itemMap.has(key)) {
+      itemMap.set(key, { name, unit, category: tx.category_main || '기타', records: [] });
     }
-    itemMap.get(name)!.records.push({
+    itemMap.get(key)!.records.push({
       date: tx.date,
       price: tx.amount,
       unit_price: tx.amount,
       quantity: 1,
-      unit: '개',
+      unit,
       store: tx.merchant_name,
     });
   }
 
-  const items = [...itemMap.entries()]
-    .map(([name, { category, records }]) => {
+  const items = [...itemMap.values()]
+    .map(({ name, unit, category, records }) => {
       // 날짜순 정렬
       records.sort((a, b) => a.date.localeCompare(b.date));
       if (records.length < 2) return null;
@@ -94,11 +98,6 @@ export async function GET() {
       const minUnitPrice = Math.min(...unitPrices);
       const maxUnitPrice = Math.max(...unitPrices);
       const cheapest = records.reduce((m, r) => (r.unit_price < m.unit_price ? r : m), records[0]);
-
-      // 가장 많이 쓰인 단위
-      const unitCount: Record<string, number> = {};
-      records.forEach((r) => { unitCount[r.unit] = (unitCount[r.unit] ?? 0) + 1; });
-      const primaryUnit = Object.entries(unitCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '개';
 
       // 매장별 단가 평균
       const storeMap: Record<string, number[]> = {};
@@ -127,7 +126,7 @@ export async function GET() {
       return {
         name,
         category,
-        unit: primaryUnit,
+        unit,
         count: records.length,
         avgUnitPrice,
         minUnitPrice,

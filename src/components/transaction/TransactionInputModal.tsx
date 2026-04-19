@@ -239,6 +239,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
       household_id: process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!,
       member_id: form.member_id,
       target_member_id: form.target_member_id,
+      target_member_ids: form.target_member_ids,
       date: form.date!,
       type: form.type ?? 'variable_expense',
       amount: form.amount!,
@@ -411,7 +412,12 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
         date: meta.date,
         type: 'variable_expense',
         amount: total,
-        name: storeName,
+        name:
+          items.length === 1
+            ? items[0].name
+            : items.length > 1
+              ? `${items[0].name} 외 ${items.length - 1}건`
+              : storeName,
         merchant_name: storeName,
         category_main: topCat,
         category_sub: '',
@@ -693,11 +699,32 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     <input
                       type="text"
                       value={form.merchant_name ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, merchant_name: e.target.value, name: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          merchant_name: e.target.value,
+                          // name이 비어있거나 기존 가맹점값과 같았다면 같이 갱신
+                          name: !f.name || f.name === f.merchant_name ? e.target.value : f.name,
+                        }))
+                      }
                       placeholder="어디서?"
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                     />
                   </div>
+                </div>
+
+                {/* 구매항목 (가맹점과 별도) */}
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">
+                    구매항목 <span className="text-gray-300">(가맹점과 별도)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.name ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="무엇을?"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
                 </div>
 
                 {/* 카테고리 */}
@@ -783,6 +810,33 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                       );
                     })()}
                   </select>
+
+                  {/* 계좌이체 결제수단 선택 시: 출금 계좌 select */}
+                  {(() => {
+                    const selectedPM = paymentMethods.find((pm) => pm.id === form.payment_method_id);
+                    if (selectedPM?.type !== 'bank_transfer') return null;
+                    return (
+                      <div className="mt-2 bg-emerald-50 rounded-xl p-2.5">
+                        <label className="text-xs text-emerald-700 font-medium mb-1 block">
+                          🏦 출금 계좌
+                        </label>
+                        <select
+                          value={form.account_from_id ?? ''}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, account_from_id: e.target.value || undefined }))
+                          }
+                          className="w-full border border-emerald-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                          <option value="">선택</option>
+                          {accounts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 자금이동 전용: 계좌 선택 */}
@@ -842,31 +896,69 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                         ))}
                       </div>
                     </div>
-                    {/* 지출 대상 */}
+                    {/* 지출 대상 (다중 선택) */}
                     <div>
-                      <label className="text-xs font-medium mb-2 block text-gray-500">🎯 지출 대상</label>
+                      <label className="text-xs font-medium mb-2 block text-gray-500">
+                        🎯 지출 대상 <span className="text-gray-300">(공용 또는 특정 인원)</span>
+                      </label>
                       <div className="flex gap-2 flex-wrap">
                         <button
-                          onClick={() => setForm((f) => ({ ...f, target_member_id: undefined }))}
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              target_member_id: undefined,
+                              target_member_ids: [],
+                            }))
+                          }
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                            !form.target_member_id ? 'bg-violet-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-500'
+                            !form.target_member_ids?.length
+                              ? 'bg-slate-600 text-white border-transparent'
+                              : 'bg-white border-gray-200 text-gray-500'
                           }`}
+                          title="가족 모두를 위한 지출 (식자재, 관리비 등)"
                         >
-                          🫂 함께
+                          🏠 공용
                         </button>
-                        {members.map((m) => (
-                          <button
-                            key={m.id}
-                            onClick={() => setForm((f) => ({ ...f, target_member_id: f.target_member_id === m.id ? undefined : m.id }))}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                              form.target_member_id === m.id ? 'text-white border-transparent' : 'bg-white border-gray-200 text-gray-500'
-                            }`}
-                            style={form.target_member_id === m.id ? { backgroundColor: m.color, borderColor: m.color } : {}}
-                          >
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: form.target_member_id === m.id ? 'rgba(255,255,255,0.7)' : m.color }} />
-                            {m.name}
-                          </button>
-                        ))}
+                        {members.map((m) => {
+                          const selected = (form.target_member_ids ?? []).includes(m.id);
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() =>
+                                setForm((f) => {
+                                  const cur = f.target_member_ids ?? [];
+                                  const next = selected
+                                    ? cur.filter((id) => id !== m.id)
+                                    : [...cur, m.id];
+                                  return {
+                                    ...f,
+                                    target_member_ids: next,
+                                    target_member_id: next[0],
+                                  };
+                                })
+                              }
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                                selected
+                                  ? 'text-white border-transparent'
+                                  : 'bg-white border-gray-200 text-gray-500'
+                              }`}
+                              style={
+                                selected ? { backgroundColor: m.color, borderColor: m.color } : {}
+                              }
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{
+                                  backgroundColor: selected
+                                    ? 'rgba(255,255,255,0.8)'
+                                    : m.color,
+                                }}
+                              />
+                              {m.name}
+                              {selected && <span className="text-[11px] ml-0.5">✓</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -983,15 +1075,12 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-gray-400 w-8 flex-shrink-0">단위</span>
                                   <input
-                                    list={`line-unit-${item.id}`}
+                                    type="text"
                                     value={item.unit}
                                     onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                    placeholder="개 / 300g/개 / 캔 ..."
+                                    placeholder="개, 300g, 500ml, 캔 ..."
                                     className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
                                   />
-                                  <datalist id={`line-unit-${item.id}`}>
-                                    {UNIT_OPTIONS.map((u) => <option key={u} value={u} />)}
-                                  </datalist>
                                 </div>
                               </div>
                             </div>

@@ -15,6 +15,7 @@ export async function GET() {
     .select('id, date, amount, name, merchant_name, category_main, type')
     .eq('household_id', DEFAULT_HOUSEHOLD_ID)
     .in('type', ['variable_expense', 'fixed_expense'])
+    .neq('status', 'cancelled')
     .gte('date', threeMonthsAgo)
     .order('date', { ascending: true });
 

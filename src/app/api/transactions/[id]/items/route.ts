@@ -21,17 +21,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { items } = await req.json();
   if (!items?.length) return NextResponse.json({ items: [] });
 
-  const rows = items.map((item: any) => ({
-    transaction_id: id,
-    name: String(item.name ?? '').trim(),
-    quantity: Math.max(1, parseInt(item.quantity) || 1),
-    price: parseInt(item.price) || 0,
-    unit: item.unit || '개',
-    category_main: item.category_main || '',
-    category_sub: item.category_sub || '',
-  })).filter((r: any) => r.name.length >= 1 && r.price > 0);
+  const rows = items.map((item: any) => {
+    const qty = parseFloat(item.quantity);
+    return {
+      transaction_id: id,
+      name: String(item.name ?? '').trim(),
+      quantity: isFinite(qty) && qty > 0 ? qty : 1,
+      price: parseInt(item.price) || 0,
+      unit: item.unit || '개',
+      category_main: item.category_main || '',
+      category_sub: item.category_sub || '',
+    };
+  }).filter((r: any) => r.name.length >= 1 && r.price > 0);
 
-  if (!rows.length) return NextResponse.json({ items: [] });
+  if (!rows.length) {
+    return NextResponse.json(
+      { error: '품목명과 0원 초과 금액이 필요합니다.', items: [] },
+      { status: 400 }
+    );
+  }
 
   const { data, error } = await supabase.from('items').insert(rows).select();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
