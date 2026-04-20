@@ -10,13 +10,13 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "우리집 가계부",
-  description: "가족이 함께 쓰는 AI 가계부",
+  title: "My Assistant",
+  description: "가계부 · 주식 · 일정을 한 곳에서",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "우리집 가계부",
+    title: "My Assistant",
   },
   formatDetection: { telephone: false },
 };

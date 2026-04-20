@@ -1,7 +1,7 @@
 {
-  "name": "우리집 가계부",
-  "short_name": "가계부",
-  "description": "가족이 함께 쓰는 AI 가계부",
+  "name": "My Assistant",
+  "short_name": "Assistant",
+  "description": "가계부 · 주식 · 일정을 한 곳에서",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",
