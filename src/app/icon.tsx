@@ -19,7 +19,7 @@ export default function Icon() {
           gap: 8,
         }}
       >
-        <div style={{ fontSize: 240, lineHeight: 1 }}>💰</div>
+        <div style={{ fontSize: 280, lineHeight: 1 }}>🧑‍💼</div>
       </div>
     ),
     { width: 512, height: 512 }
