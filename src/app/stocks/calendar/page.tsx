@@ -15,30 +15,37 @@ type TxWithAccount = StockTx & {
   account?: { id: string; owner_id: string; broker_name: string };
 };
 
+type OwnerItem = { id: string; name: string };
+type Account = { id: string; owner_id: string; broker_name: string };
+
 export default function PLCalendarPage() {
   const [txs, setTxs] = useState<TxWithAccount[]>([]);
-  const [owners, setOwners] = useState<OwnerMap>({});
+  const [ownersList, setOwnersList] = useState<OwnerItem[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [cursor, setCursor] = useState(dayjs().startOf('month'));
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [txRes, ownerRes] = await Promise.all([
+      const [txRes, ownerRes, accRes] = await Promise.all([
         fetch('/api/stocks/transactions?limit=2000'),
         fetch('/api/stocks/owners'),
+        fetch('/api/stocks/accounts'),
       ]);
       if (!txRes.ok) throw new Error(`HTTP ${txRes.status}`);
       const txJson = await txRes.json();
       setTxs(txJson.transactions ?? []);
 
       const ownerJson = await ownerRes.json();
-      const map: OwnerMap = {};
-      for (const o of ownerJson.owners ?? []) map[o.id] = o.name;
-      setOwners(map);
+      setOwnersList(ownerJson.owners ?? []);
+
+      const accJson = await accRes.json();
+      setAccounts(accJson.accounts ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -50,7 +57,23 @@ export default function PLCalendarPage() {
     load();
   }, [load]);
 
-  const trades = useMemo(() => computeRealizedTrades(txs), [txs]);
+  // 편의: owner_id → name map
+  const owners: OwnerMap = useMemo(
+    () => Object.fromEntries(ownersList.map((o) => [o.id, o.name])),
+    [ownersList]
+  );
+
+  // 필터된 거래 (owner 기준)
+  const filteredTxs = useMemo(() => {
+    if (!ownerFilter) return txs;
+    const accById = Object.fromEntries(accounts.map((a) => [a.id, a]));
+    return txs.filter((t) => {
+      const acc = accById[t.account_id] ?? t.account;
+      return acc?.owner_id === ownerFilter;
+    });
+  }, [txs, ownerFilter, accounts]);
+
+  const trades = useMemo(() => computeRealizedTrades(filteredTxs), [filteredTxs]);
   const byDate = useMemo(() => aggregateRealizedByDate(trades), [trades]);
 
   // 캘린더 셀: 월의 1일이 속한 주의 일요일부터 시작 → 6주 (42칸)
@@ -80,14 +103,14 @@ export default function PLCalendarPage() {
     return trades.filter((t) => t.date === selectedDate);
   }, [selectedDate, trades]);
 
-  // 그날의 모든 거래 (매수/매도)
+  // 그날의 모든 거래 (매수/매도) — 필터 반영
   const selectedAllTxs = useMemo(() => {
     if (!selectedDate) return [];
-    return txs
+    return filteredTxs
       .filter((t) => t.date === selectedDate)
       .slice()
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  }, [selectedDate, txs]);
+  }, [selectedDate, filteredTxs]);
 
   const selectedDayPL = useMemo(
     () => selectedTrades.reduce((s, t) => s + t.pl, 0),
@@ -121,6 +144,44 @@ export default function PLCalendarPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
             {error}
+          </div>
+        )}
+
+        {/* 소유자 필터 */}
+        {ownersList.length > 0 && (
+          <div>
+            <div className="text-[11px] font-bold text-gray-500 mb-1.5">소유자</div>
+            <div className="flex gap-1.5 overflow-x-auto -mx-5 px-5 pb-1">
+              <button
+                onClick={() => {
+                  setOwnerFilter(null);
+                  setSelectedDate(null);
+                }}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                  ownerFilter === null
+                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                    : 'bg-white border-gray-200 text-gray-700'
+                }`}
+              >
+                전체
+              </button>
+              {ownersList.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => {
+                    setOwnerFilter(o.id);
+                    setSelectedDate(null);
+                  }}
+                  className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                    ownerFilter === o.id
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-white border-gray-200 text-gray-700'
+                  }`}
+                >
+                  {o.name}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -201,7 +262,7 @@ export default function PLCalendarPage() {
                     ? 'text-blue-400'
                     : 'text-gray-700';
 
-              const hasAnyTx = txs.some((t) => t.date === ds);
+              const hasAnyTx = filteredTxs.some((t) => t.date === ds);
               return (
                 <button
                   key={i}
