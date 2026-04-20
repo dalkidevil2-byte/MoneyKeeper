@@ -118,11 +118,31 @@ export default function PortfolioPage() {
   );
 
   // 보유 집계 (필터 반영)
+  const holdingsByTicker = useMemo(() => computeHoldings(filteredTxs), [filteredTxs]);
   const aggregated = useMemo(
-    () => aggregateByTicker(computeHoldings(filteredTxs)),
-    [filteredTxs]
+    () => aggregateByTicker(holdingsByTicker),
+    [holdingsByTicker]
   );
   const realizedPL = useMemo(() => computeRealizedPL(filteredTxs), [filteredTxs]);
+
+  // ticker별 "소유자·증권사" 라벨 (다수면 "외 N계좌")
+  const holdersByTicker = useMemo(() => {
+    const ownerMap = Object.fromEntries(owners.map((o) => [o.id, o.name]));
+    const accLabelMap = Object.fromEntries(
+      accounts.map((a) => [
+        a.id,
+        [ownerMap[a.owner_id], a.broker_name].filter(Boolean).join(' · '),
+      ])
+    );
+    const map: Record<string, string[]> = {};
+    for (const h of holdingsByTicker) {
+      const label = accLabelMap[h.accountId];
+      if (!label) continue;
+      if (!map[h.ticker]) map[h.ticker] = [];
+      if (!map[h.ticker].includes(label)) map[h.ticker].push(label);
+    }
+    return map;
+  }, [holdingsByTicker, owners, accounts]);
 
   // 시세 조회 (모든 보유 종목 — 필터와 무관하게 전체 ticker fetch)
   const allTickers = useMemo(
@@ -399,6 +419,13 @@ export default function PortfolioPage() {
                         <div className="text-sm font-semibold text-gray-900 truncate">
                           {h.companyName || h.ticker}
                         </div>
+                        {holdersByTicker[h.ticker]?.length > 0 && (
+                          <div className="text-[10px] text-indigo-500 mt-0.5 truncate">
+                            {holdersByTicker[h.ticker].length <= 2
+                              ? holdersByTicker[h.ticker].join(' / ')
+                              : `${holdersByTicker[h.ticker][0]} 외 ${holdersByTicker[h.ticker].length - 1}계좌`}
+                          </div>
+                        )}
                         <div className="text-xs text-gray-500 mt-0.5">
                           {h.ticker} · {formatQty(h.qty)}주
                         </div>

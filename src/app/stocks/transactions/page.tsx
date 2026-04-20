@@ -11,9 +11,13 @@ import StockTransactionSheet, {
 type TxRow = ExistingTx & {
   account?: { id: string; broker_name: string; owner_id: string };
 };
+type Owner = { id: string; name: string };
+type Account = { id: string; owner_id: string; broker_name: string };
 
 export default function StockTransactionsPage() {
   const [txs, setTxs] = useState<TxRow[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<
@@ -26,16 +30,35 @@ export default function StockTransactionsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/stocks/transactions?limit=500');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setTxs(json.transactions ?? []);
+      const [tRes, oRes, aRes] = await Promise.all([
+        fetch('/api/stocks/transactions?limit=500'),
+        fetch('/api/stocks/owners'),
+        fetch('/api/stocks/accounts'),
+      ]);
+      if (!tRes.ok) throw new Error(`HTTP ${tRes.status}`);
+      const tJson = await tRes.json();
+      const oJson = await oRes.json();
+      const aJson = await aRes.json();
+      setTxs(tJson.transactions ?? []);
+      setOwners(oJson.owners ?? []);
+      setAccounts(aJson.accounts ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // account_id → "소유자 · 증권사" 라벨
+  const accountLabel = useMemo(() => {
+    const ownerMap = Object.fromEntries(owners.map((o) => [o.id, o.name]));
+    const map: Record<string, string> = {};
+    for (const a of accounts) {
+      const owner = ownerMap[a.owner_id] ?? '';
+      map[a.id] = [owner, a.broker_name].filter(Boolean).join(' · ');
+    }
+    return map;
+  }, [owners, accounts]);
 
   useEffect(() => {
     load();
@@ -119,6 +142,11 @@ export default function StockTransactionsPage() {
                               {t.company_name || t.ticker}
                             </span>
                           </div>
+                          {accountLabel[t.account_id] && (
+                            <div className="text-[10px] text-indigo-500 mt-0.5">
+                              {accountLabel[t.account_id]}
+                            </div>
+                          )}
                           <div className="text-[11px] text-gray-400 mt-0.5">
                             {t.ticker} · {t.quantity}주 × {Math.round(t.price).toLocaleString('ko-KR')}
                           </div>
