@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { Search, TrendingDown, Store, ChevronRight, X } from 'lucide-react';
+import { Search, TrendingDown, Store, ChevronRight, X, Pencil, Check, Trash2 } from 'lucide-react';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
 
 interface StoreAvg { store: string; avg: number; count: number }
 interface HistoryRecord {
+  id?: string;              // items.id (편집용)
+  transaction_id?: string;  // 편집용
   date: string;
   price: number;
   unit_price: number;
@@ -99,9 +101,147 @@ function PriceChart({ item }: { item: Item }) {
   );
 }
 
-function ItemDetail({ item, onClose }: { item: Item; onClose: () => void }) {
+function ItemDetail({
+  item,
+  onClose,
+  onRenamed,
+}: {
+  item: Item;
+  onClose: () => void;
+  onRenamed?: () => void;
+}) {
   const savings = item.maxUnitPrice - item.minUnitPrice;
   const savingsPct = item.maxUnitPrice > 0 ? Math.round((savings / item.maxUnitPrice) * 100) : 0;
+
+  // 편집 상태
+  const [editing, setEditing] = useState(false);
+  const [newName, setNewName] = useState(item.name);
+  const [newUnit, setNewUnit] = useState(item.unit);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // 구매 이력 추가 상태
+  const [adding, setAdding] = useState(false);
+  const [txList, setTxList] = useState<
+    Array<{ id: string; date: string; merchant_name: string; amount: number }>
+  >([]);
+  const [addTxId, setAddTxId] = useState('');
+  const [addQty, setAddQty] = useState('1');
+  const [addPrice, setAddPrice] = useState('');
+  const [addSaving, setAddSaving] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+
+  const openAdd = async () => {
+    setAdding(true);
+    setAddErr(null);
+    setAddQty('1');
+    setAddPrice(String(item.avgUnitPrice));
+    try {
+      const res = await fetch('/api/transactions?limit=100');
+      const j = await res.json();
+      setTxList(j.transactions ?? []);
+      if ((j.transactions ?? []).length) setAddTxId(j.transactions[0].id);
+    } catch (e) {
+      setAddErr('거래 목록 로드 실패: ' + (e as Error).message);
+    }
+  };
+
+  const saveAdd = async () => {
+    setAddErr(null);
+    const q = parseFloat(addQty);
+    const p = parseInt(addPrice.replace(/[^0-9]/g, ''));
+    if (!addTxId) return setAddErr('거래를 선택해주세요.');
+    if (!isFinite(q) || q <= 0) return setAddErr('수량을 올바르게 입력해주세요.');
+    if (!isFinite(p) || p <= 0) return setAddErr('가격을 올바르게 입력해주세요.');
+
+    setAddSaving(true);
+    try {
+      const res = await fetch(`/api/transactions/${addTxId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              name: item.name,
+              quantity: q,
+              price: p,
+              unit: item.unit,
+              category_main: item.category,
+              category_sub: '',
+              track: true,
+            },
+          ],
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      setAdding(false);
+      onRenamed?.();
+      onClose();
+    } catch (e) {
+      setAddErr((e as Error).message);
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
+  const deleteRecord = async (r: HistoryRecord) => {
+    if (!r.id || !r.transaction_id) {
+      alert('이 이력은 삭제할 수 없습니다 (ID 없음).');
+      return;
+    }
+    if (!confirm(`${dayjs(r.date).format('YYYY.MM.DD')} ${r.store} 구매 이력을 삭제할까요?`)) {
+      return;
+    }
+    setDeletingId(r.id);
+    try {
+      const res = await fetch(
+        `/api/transactions/${r.transaction_id}/items?item_id=${r.id}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      onRenamed?.(); // 목록 재로드
+      onClose();
+    } catch (e) {
+      alert('삭제 실패: ' + (e as Error).message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const saveRename = async () => {
+    setErr(null);
+    const n = newName.trim();
+    const u = newUnit.trim() || '개';
+    if (!n) return setErr('품목명을 입력해주세요.');
+    if (n === item.name && u === item.unit) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/items/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: { name: item.name, unit: item.unit },
+          to: { name: n, unit: u },
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      setEditing(false);
+      onRenamed?.();
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm">
@@ -110,17 +250,84 @@ function ItemDetail({ item, onClose }: { item: Item; onClose: () => void }) {
           <div className="w-10 h-1 bg-gray-300 rounded-full" />
         </div>
 
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <span>{CATEGORY_EMOJI[item.category] ?? '📦'}</span>
-              {item.name}
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">{item.count}회 구매 · {item.category}</p>
+        <div className="flex items-start justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0 gap-2">
+          <div className="min-w-0 flex-1">
+            {editing ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{CATEGORY_EMOJI[item.category] ?? '📦'}</span>
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="품목명"
+                    className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] text-gray-400">단위</label>
+                  <input
+                    value={newUnit}
+                    onChange={(e) => setNewUnit(e.target.value)}
+                    placeholder="개, L, kg..."
+                    className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+                  <div className="flex-1 text-[11px] text-gray-400">
+                    {item.count}회 구매 전부 일괄 변경
+                  </div>
+                </div>
+                {err && <div className="text-[11px] text-red-500">{err}</div>}
+              </div>
+            ) : (
+              <>
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <span>{CATEGORY_EMOJI[item.category] ?? '📦'}</span>
+                  <span className="truncate">{item.name}</span>
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {item.count}회 구매 · {item.category} · 단위 {item.unit}
+                </p>
+              </>
+            )}
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-            <X size={18} className="text-gray-500" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {editing ? (
+              <>
+                <button
+                  onClick={saveRename}
+                  disabled={saving}
+                  className="p-2 rounded-full text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                  title="저장"
+                >
+                  <Check size={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    setNewName(item.name);
+                    setNewUnit(item.unit);
+                    setErr(null);
+                  }}
+                  className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+                  title="취소"
+                >
+                  <X size={18} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+                  title="품목명/단위 수정"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+                  <X size={18} className="text-gray-500" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
@@ -194,18 +401,107 @@ function ItemDetail({ item, onClose }: { item: Item; onClose: () => void }) {
 
           {/* 구매 이력 */}
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">구매 이력</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-gray-500">구매 이력</p>
+              {!adding && (
+                <button
+                  type="button"
+                  onClick={openAdd}
+                  className="text-xs text-indigo-600 font-semibold"
+                >
+                  + 구매 이력 추가
+                </button>
+              )}
+            </div>
+
+            {adding && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 mb-2 space-y-2">
+                <div>
+                  <label className="text-[11px] text-gray-500">거래 선택</label>
+                  <select
+                    value={addTxId}
+                    onChange={(e) => setAddTxId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                  >
+                    <option value="">선택</option>
+                    {txList.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {dayjs(t.date).format('MM.DD')} · {t.merchant_name || '(가맹점 미입력)'} · {formatAmount(t.amount)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-gray-500">수량 ({item.unit})</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={addQty}
+                      onChange={(e) =>
+                        setAddQty(
+                          e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+                        )
+                      }
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-500">총 가격</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={addPrice}
+                      onChange={(e) => setAddPrice(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+                {addErr && <div className="text-[11px] text-red-500">{addErr}</div>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveAdd}
+                    disabled={addSaving}
+                    className="flex-1 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                  >
+                    {addSaving ? '저장 중…' : '추가'}
+                  </button>
+                  <button
+                    onClick={() => setAdding(false)}
+                    disabled={addSaving}
+                    className="px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs"
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
               {[...item.history].reverse().map((r, i) => (
-                <div key={i} className={`flex items-center justify-between px-4 py-3 ${
-                  i < item.history.length - 1 ? 'border-b border-gray-50' : ''
-                }`}>
-                  <div>
-                    <p className="text-sm text-gray-700">{dayjs(r.date).format('YYYY.MM.DD (ddd)')}</p>
-                    <p className="text-xs text-gray-400">{r.store}{r.quantity > 1 ? ` · ${r.quantity}개` : ''}</p>
+                <div
+                  key={r.id ?? i}
+                  className={`flex items-center gap-3 px-4 py-3 ${
+                    i < item.history.length - 1 ? 'border-b border-gray-50' : ''
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700">
+                      {dayjs(r.date).format('YYYY.MM.DD (ddd)')}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {r.store}
+                      {r.quantity > 1 ? ` · ${r.quantity}${r.unit || item.unit}` : ''}
+                    </p>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${r.unit_price === item.minUnitPrice ? 'text-emerald-600' : 'text-gray-800'}`}>
+                  <div className="text-right shrink-0">
+                    <p
+                      className={`text-sm font-bold ${
+                        r.unit_price === item.minUnitPrice
+                          ? 'text-emerald-600'
+                          : 'text-gray-800'
+                      }`}
+                    >
                       {formatAmount(r.unit_price)}/{r.unit || item.unit}
                       {r.unit_price === item.minUnitPrice && ' 🏆'}
                     </p>
@@ -213,6 +509,14 @@ function ItemDetail({ item, onClose }: { item: Item; onClose: () => void }) {
                       <p className="text-xs text-gray-400">합계 {formatAmount(r.price)}</p>
                     )}
                   </div>
+                  <button
+                    onClick={() => deleteRecord(r)}
+                    disabled={deletingId === r.id || !r.id}
+                    className="shrink-0 p-2 rounded-lg border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 active:bg-red-200 disabled:opacity-40"
+                    title="이 구매 이력 삭제"
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -229,11 +533,16 @@ export default function ItemTracker() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Item | null>(null);
 
-  useEffect(() => {
+  const loadItems = () => {
+    setLoading(true);
     fetch('/api/items')
       .then((r) => r.json())
       .then((d) => setItems(d.items ?? []))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadItems();
   }, []);
 
   const filtered = search.trim()
@@ -324,7 +633,13 @@ export default function ItemTracker() {
         </>
       )}
 
-      {selected && <ItemDetail item={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ItemDetail
+          item={selected}
+          onClose={() => setSelected(null)}
+          onRenamed={loadItems}
+        />
+      )}
     </div>
   );
 }

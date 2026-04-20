@@ -52,7 +52,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   const [error, setError] = useState<string | null>(null);
 
   // 세부 품목
-  interface ItemRow { id: string; name: string; price: number; quantity: number; unit: string; category_main: string; category_sub: string; }
+  interface ItemRow { id: string; name: string; price: number; quantity: number; unit: string; category_main: string; category_sub: string; track: boolean; }
   const [items, setItems] = useState<ItemRow[]>([]);
   const [itemsLoaded, setItemsLoaded] = useState(false);
   const [savedItemId, setSavedItemId] = useState<string | null>(null);
@@ -152,7 +152,13 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   useEffect(() => {
     fetch(`/api/transactions/${tx.id}/items`)
       .then((r) => r.json())
-      .then((d) => { setItems(d.items ?? []); setItemsLoaded(true); });
+      .then((d) => { setItems(d.items ?? []); setItemsLoaded(true); })
+      .catch((e) => {
+        console.error('[items load]', e);
+        // 실패해도 섹션은 표시 (빈 목록 + 추가 가능)
+        setItems([]);
+        setItemsLoaded(true);
+      });
   }, [tx.id]);
 
   const updateItem = (id: string, fields: Partial<ItemRow>) => {
@@ -173,6 +179,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
         unit: '개',
         category_main: '',
         category_sub: '',
+        track: false,
       },
     ]);
     setExpandedItemId(localId);
@@ -221,6 +228,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                 price: item.price,
                 category_main: item.category_main,
                 category_sub: item.category_sub,
+                track: !!item.track,
               },
             ],
           }),
@@ -249,6 +257,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
               price: item.price,
               category_main: item.category_main,
               category_sub: item.category_sub,
+              track: !!item.track,
             }),
           }
         );
@@ -561,24 +570,24 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
           )}
 
           {/* 세부 품목 */}
-          {itemsLoaded && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Package size={14} className="text-indigo-400" />
-                  <p className="text-xs font-medium text-gray-500">
-                    세부 품목 {items.length > 0 && `(${items.length})`}
-                    {itemsSaving && <span className="text-indigo-400 ml-1">저장 중...</span>}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addNewItem}
-                  className="text-xs text-indigo-600 font-semibold flex items-center gap-0.5"
-                >
-                  + 품목 추가
-                </button>
+          <div className="bg-indigo-50/40 rounded-2xl p-3 border border-indigo-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Package size={16} className="text-indigo-500" />
+                <p className="text-sm font-bold text-indigo-700">
+                  세부 품목 {items.length > 0 && `(${items.length})`}
+                  {itemsSaving && <span className="text-indigo-400 ml-1 text-xs font-normal">저장 중...</span>}
+                  {!itemsLoaded && <span className="text-gray-400 ml-1 text-xs font-normal">로딩…</span>}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={addNewItem}
+                className="px-2.5 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg active:bg-indigo-700"
+              >
+                + 품목 추가
+              </button>
+            </div>
               {items.length === 0 && (
                 <div className="bg-gray-50 rounded-2xl px-4 py-6 text-center text-xs text-gray-400 mb-2">
                   세부 품목이 없습니다. 위의 "+ 품목 추가" 버튼으로 추가하세요.
@@ -722,6 +731,16 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                             />
                           </div>
                         </div>
+                        {/* 품목 추적 토글 */}
+                        <label className="flex items-center gap-2 cursor-pointer px-1 py-1 text-xs text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={!!item.track}
+                            onChange={(e) => updateItem(item.id, { track: e.target.checked })}
+                            className="rounded border-gray-300 accent-indigo-500"
+                          />
+                          <span>📊 품목 추적에 추가</span>
+                        </label>
                         {itemError && savedItemId !== item.id && (
                           <div className="text-xs text-red-500 px-1">{itemError}</div>
                         )}
@@ -747,8 +766,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+          </div>
 
           {/* 메모 */}
           <div>

@@ -177,6 +177,7 @@ CREATE TABLE items (
   category_main TEXT DEFAULT '',
   category_sub TEXT DEFAULT '',
   essential BOOLEAN DEFAULT false,
+  track BOOLEAN NOT NULL DEFAULT false,  -- 품목 추적 탭에 노출 여부 (즐겨찾기)
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );

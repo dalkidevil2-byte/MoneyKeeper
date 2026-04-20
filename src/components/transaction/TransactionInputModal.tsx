@@ -43,10 +43,10 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
   // 세부 품목
   // 구매단위만 (용량/규격은 품목명에 포함: 예 "맥주 500ml")
   const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
-  interface LineItem { id: string; name: string; quantity: number; price: number; unit: string }
+  interface LineItem { id: string; name: string; quantity: number; price: number; unit: string; track: boolean }
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [showLineItems, setShowLineItems] = useState(false);
-  const addLineItem = () => setLineItems((p) => [...p, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개' }]);
+  const addLineItem = () => setLineItems((p) => [...p, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개', track: false }]);
   const removeLineItem = (id: string) => setLineItems((p) => p.filter((i) => i.id !== id));
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
     const next = lineItems.map((i) => (i.id === id ? { ...i, [field]: value } : i));
@@ -398,10 +398,33 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
     const storeName = ocrResult?.store_name || '마트';
     const total = items.reduce((s: number, i: any) => s + Math.abs(i.amount), 0);
 
-    // 카테고리 중 가장 많이 쓰인 것 선택
-    const catCount: Record<string, number> = {};
-    items.forEach((i: any) => { catCount[i.category_main] = (catCount[i.category_main] ?? 0) + 1; });
-    const topCat = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '식비';
+    // 대분류: 금액 가중치로 최빈값
+    const mainWeight: Record<string, number> = {};
+    items.forEach((i: any) => {
+      const k = i.category_main || '기타';
+      mainWeight[k] = (mainWeight[k] ?? 0) + Math.abs(i.amount);
+    });
+    const topCat =
+      Object.entries(mainWeight).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '식비';
+
+    // 소분류: topCat에 해당하는 품목 중 금액 가중치로 최빈값
+    const subWeight: Record<string, number> = {};
+    items
+      .filter((i: any) => (i.category_main || '기타') === topCat && i.category_sub)
+      .forEach((i: any) => {
+        subWeight[i.category_sub] =
+          (subWeight[i.category_sub] ?? 0) + Math.abs(i.amount);
+      });
+    const topSub =
+      Object.entries(subWeight).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+
+    // 거래 대표 품목명: 첫 품목 + 외 N건 (가맹점과 별개)
+    const representativeName =
+      items.length === 1
+        ? items[0].name
+        : items.length > 1
+          ? `${items[0].name} 외 ${items.length - 1}건`
+          : ''; // items 0개는 onConfirm에서 이미 막혀 있음
 
     // 1. 거래 1건 생성 (총액)
     const txRes = await fetch('/api/transactions', {
@@ -412,15 +435,10 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
         date: meta.date,
         type: 'variable_expense',
         amount: total,
-        name:
-          items.length === 1
-            ? items[0].name
-            : items.length > 1
-              ? `${items[0].name} 외 ${items.length - 1}건`
-              : storeName,
+        name: representativeName,
         merchant_name: storeName,
         category_main: topCat,
-        category_sub: '',
+        category_sub: topSub,
         payment_method_id: meta.payment_method_id || null,
         member_id: meta.member_id || null,
         memo: `OCR 등록 (${items.length}개 품목)`,
@@ -443,6 +461,8 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
           price: Math.abs(item.amount),
           unit: item.unit || '개',
           category_main: item.category_main || '',
+          category_sub: item.category_sub || '',
+          track: !!item.track,
         })),
       }),
     });
@@ -1003,7 +1023,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                             } catch {}
                           }
 
-                          setLineItems([{ id: crypto.randomUUID(), name: defaultName, quantity: 1, price: 0, unit: defaultUnit }]);
+                          setLineItems([{ id: crypto.randomUUID(), name: defaultName, quantity: 1, price: 0, unit: defaultUnit, track: false }]);
                         }
                       }}
                       className="w-full flex items-center justify-between px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100"
@@ -1082,6 +1102,15 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                                     className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
                                   />
                                 </div>
+                                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-500">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.track}
+                                    onChange={(e) => updateLineItem(item.id, 'track', e.target.checked)}
+                                    className="rounded border-gray-300 accent-indigo-500"
+                                  />
+                                  <span>📊 품목 추적에 추가</span>
+                                </label>
                               </div>
                             </div>
                           );

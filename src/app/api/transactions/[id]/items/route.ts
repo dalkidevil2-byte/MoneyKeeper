@@ -1,13 +1,49 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
+import { updateNotionPage, type ItemForNotion } from '@/lib/notion';
+
+// ─── Notion 본문(세부 품목) 재동기화 — fire-and-forget ───
+async function refreshNotionItems(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  transactionId: string
+) {
+  try {
+    const { data: tx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+    if (!tx?.notion_page_id) return;
+
+    const { data: items } = await supabase
+      .from('items')
+      .select('name, quantity, price, unit, category_main, category_sub')
+      .eq('transaction_id', transactionId);
+
+    await updateNotionPage(
+      tx.notion_page_id,
+      tx as never,
+      (items ?? []) as ItemForNotion[]
+    );
+    await supabase
+      .from('transactions')
+      .update({
+        sync_status: 'synced',
+        last_synced_at: new Date().toISOString(),
+      })
+      .eq('id', transactionId);
+  } catch (err) {
+    console.error('[refreshNotionItems]', err);
+  }
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from('items')
-    .select('*')
+    .select('id, name, price, quantity, unit, unit_price, category_main, category_sub, track')
     .eq('transaction_id', id)
     .order('created_at');
 
@@ -31,6 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       unit: item.unit || '개',
       category_main: item.category_main || '',
       category_sub: item.category_sub || '',
+      track: !!item.track,
     };
   }).filter((r: any) => r.name.length >= 1 && r.price > 0);
 
@@ -43,6 +80,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data, error } = await supabase.from('items').insert(rows).select();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  refreshNotionItems(supabase, id).catch(() => {});
+
   return NextResponse.json({ items: data }, { status: 201 });
 }
 
@@ -59,6 +99,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { error } = await supabase.from('items').delete().eq('transaction_id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  refreshNotionItems(supabase, id).catch(() => {});
+
   return NextResponse.json({ success: true });
 }
 
@@ -79,6 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.quantity !== undefined) updateFields.quantity = body.quantity;
   if (body.unit !== undefined) updateFields.unit = body.unit;
   if (body.price !== undefined) updateFields.price = body.price;
+  if (body.track !== undefined) updateFields.track = !!body.track;
 
   const { data, error } = await supabase
     .from('items')
@@ -89,5 +133,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  refreshNotionItems(supabase, id).catch(() => {});
+
   return NextResponse.json({ item: data });
 }

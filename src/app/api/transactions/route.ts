@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { createNotionPage } from '@/lib/notion';
+import { createNotionPage, type ItemForNotion } from '@/lib/notion';
 import type { CreateTransactionInput } from '@/types';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -128,8 +128,11 @@ export async function POST(req: NextRequest) {
     // 계좌 잔액 업데이트
     await updateAccountBalances(supabase, data);
 
-    // Notion 동기화는 사용자 확인 후 수동으로 실행 (TransactionConfirmSheet)
-    // syncToNotion(supabase, data);
+    // Notion 자동 동기화 (fire-and-forget — 실패해도 거래 저장은 성공)
+    // NOTE: await 하지 않음으로써 응답 지연 최소화
+    syncToNotion(supabase, data).catch((e) =>
+      console.error('[Notion auto-sync]', e)
+    );
 
     return NextResponse.json({ transaction: data }, { status: 201 });
   } catch (error) {
@@ -173,7 +176,12 @@ async function updateAccountBalances(supabase: ReturnType<typeof createServerSup
 // ─────────────────────────────────────────
 async function syncToNotion(supabase: ReturnType<typeof createServerSupabaseClient>, tx: any) {
   try {
-    const notionPageId = await createNotionPage(tx);
+    // 생성 직후엔 items가 아직 없을 가능성이 높지만 혹시 있으면 포함
+    const { data: items } = await supabase
+      .from('items')
+      .select('name, quantity, price, unit, category_main, category_sub')
+      .eq('transaction_id', tx.id);
+    const notionPageId = await createNotionPage(tx, (items ?? []) as ItemForNotion[]);
 
     if (notionPageId) {
       await supabase

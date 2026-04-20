@@ -17,6 +17,7 @@ interface OcrItem {
   category_main: string;
   category_sub: string;
   selected: boolean;
+  track: boolean;
 }
 
 interface Props {
@@ -41,6 +42,7 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
       unit: item.unit || '개',
       category_sub: item.category_sub || '',
       selected: item.amount > 0,
+      track: false,
     }))
   );
   const [date, setDate] = useState(result.date || dayjs().format('YYYY-MM-DD'));
@@ -288,12 +290,23 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                         단가: {formatAmount(Math.round(item.amount / item.quantity))}/{item.unit}
                       </p>
                     )}
-                    <button
-                      onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
-                      className="flex items-center gap-1 text-xs text-rose-400 font-medium"
-                    >
-                      <Trash2 size={12} /> 항목 삭제
-                    </button>
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={item.track}
+                          onChange={(e) => updateItem(item.id, { track: e.target.checked })}
+                          className="rounded border-gray-300 accent-indigo-500"
+                        />
+                        <span>📊 품목 추적에 추가</span>
+                      </label>
+                      <button
+                        onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+                        className="flex items-center gap-1 text-xs text-rose-400 font-medium"
+                      >
+                        <Trash2 size={12} /> 항목 삭제
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

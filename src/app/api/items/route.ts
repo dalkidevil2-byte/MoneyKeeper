@@ -3,9 +3,14 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
-const ONE_YEAR_AGO = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+// 추적 기간: 2년 (이관 데이터 포함)
+const TRACK_SINCE = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000)
+  .toISOString()
+  .slice(0, 10);
 
 type ItemRecord = {
+  id?: string;              // items.id (편집용)
+  transaction_id?: string;  // 편집용
   date: string;
   price: number;
   unit_price: number;
@@ -23,7 +28,7 @@ export async function GET() {
     .select('id, date, merchant_name, name, amount, category_main, type')
     .eq('household_id', DEFAULT_HOUSEHOLD_ID)
     .neq('status', 'cancelled')
-    .gte('date', ONE_YEAR_AGO)
+    .gte('date', TRACK_SINCE)
     .order('date', { ascending: true });
 
   if (!txs || txs.length === 0) return NextResponse.json({ items: [] });
@@ -34,11 +39,12 @@ export async function GET() {
   // key: "품목명__단위" 로 묶어 단위별 단가 비교를 정확하게
   const itemMap = new Map<string, { name: string; unit: string; category: string; records: ItemRecord[] }>();
 
-  // ── Source 1: items 테이블 (명시적 품목 입력) ──
+  // ── Source 1: items 테이블 — 추적 체크된 품목만 ──
   const { data: itemRows } = await supabase
     .from('items')
-    .select('id, name, price, quantity, unit_price, unit, category_main, transaction_id')
-    .in('transaction_id', txIds);
+    .select('id, name, price, quantity, unit_price, unit, category_main, transaction_id, track')
+    .in('transaction_id', txIds)
+    .eq('track', true);
 
   for (const row of itemRows ?? []) {
     const tx = txMap.get(row.transaction_id);
@@ -52,6 +58,8 @@ export async function GET() {
       itemMap.set(key, { name, unit, category: row.category_main || '기타', records: [] });
     }
     itemMap.get(key)!.records.push({
+      id: row.id,
+      transaction_id: row.transaction_id,
       date: tx.date,
       price: row.price,
       unit_price: row.unit_price ?? row.price,
@@ -61,37 +69,12 @@ export async function GET() {
     });
   }
 
-  // items 테이블에 품목이 있는 거래 ID 집합 (fallback 중복 방지용)
-  const txIdsWithItems = new Set((itemRows ?? []).map((r) => r.transaction_id));
-
-  // ── Source 2: OCR 방식 거래 (name ≠ merchant_name) 레거시 fallback ──
-  for (const tx of txs) {
-    if (tx.type !== 'variable_expense') continue;
-    if (txIdsWithItems.has(tx.id)) continue;
-    const name = tx.name?.trim();
-    if (!name || name.length < 2) continue;
-    if (!tx.merchant_name || tx.merchant_name === tx.name) continue;
-    const unit = '개';
-    const key = `${name}__${unit}`;
-
-    if (!itemMap.has(key)) {
-      itemMap.set(key, { name, unit, category: tx.category_main || '기타', records: [] });
-    }
-    itemMap.get(key)!.records.push({
-      date: tx.date,
-      price: tx.amount,
-      unit_price: tx.amount,
-      quantity: 1,
-      unit,
-      store: tx.merchant_name,
-    });
-  }
+  // Source 2(거래명 기반 fallback)는 제거 — track 플래그 도입 후 items 테이블만 사용
 
   const items = [...itemMap.values()]
     .map(({ name, unit, category, records }) => {
-      // 날짜순 정렬
+      // 날짜순 정렬 — 1회 구매도 기본 정보는 표시 (가격 비교는 2회 이상부터)
       records.sort((a, b) => a.date.localeCompare(b.date));
-      if (records.length < 2) return null;
 
       const unitPrices = records.map((r) => r.unit_price);
       const avgUnitPrice = Math.round(unitPrices.reduce((s, p) => s + p, 0) / unitPrices.length);
