@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
 스키마:
 {
   "store_name": "가게명",
-  "date": "YYYY-MM-DD (없으면 오늘)",
+  "date": "YYYY-MM-DD 형식. 영수증에서 명확히 읽을 수 있을 때만 기입. 읽을 수 없으면 반드시 빈 문자열로. 과거·미래 추정 금지.",
   "items": [
     {
       "name": "상품명 (용량/규격 포함 — 예: 맥주 500ml, 우유 1L, 계란 30구)",

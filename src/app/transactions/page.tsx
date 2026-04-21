@@ -32,22 +32,22 @@ function CalendarView({
 }) {
   const firstDay = dayjs(`${year}-${String(month).padStart(2, '0')}-01`);
   const daysInMonth = firstDay.daysInMonth();
-  // 월요일 기준 시작 오프셋 (0=월 ~ 6=일)
-  const startOffset = (firstDay.day() + 6) % 7;
+  // 일요일 기준 시작 오프셋 (0=일 ~ 6=토)
+  const startOffset = firstDay.day();
   const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
   const cells = Array.from({ length: totalCells }, (_, i) => {
     const dayNum = i - startOffset + 1;
     return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
   });
 
-  const DOW = ['월', '화', '수', '목', '금', '토', '일'];
+  const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
   return (
     <div>
       {/* 요일 헤더 */}
       <div className="grid grid-cols-7 mb-1">
         {DOW.map((d, i) => (
-          <div key={d} className={`text-center text-xs font-medium py-1 ${i === 5 ? 'text-blue-400' : i === 6 ? 'text-rose-400' : 'text-gray-400'}`}>
+          <div key={d} className={`text-center text-xs font-medium py-1 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>
             {d}
           </div>
         ))}
@@ -61,7 +61,7 @@ function CalendarView({
           const data = calendarData[dateStr];
           const isToday = dateStr === today;
           const isSelected = selectedDate === dateStr;
-          const dow = idx % 7; // 0=월 ... 6=일
+          const dow = idx % 7; // 0=일 ... 6=토
           const intensity = data?.expense ? Math.min(Math.round((data.expense / maxDayExpense) * 5), 5) : 0;
           const bgColors = ['bg-white', 'bg-rose-50', 'bg-rose-100', 'bg-rose-200', 'bg-rose-300', 'bg-rose-400'];
 
@@ -77,9 +77,9 @@ function CalendarView({
             >
               <span className={`text-xs font-semibold block mb-0.5
                 ${isToday ? 'w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px]' : ''}
-                ${!isToday && dow === 5 ? 'text-blue-500' : ''}
-                ${!isToday && dow === 6 ? 'text-rose-500' : ''}
-                ${!isToday && dow < 5 ? 'text-gray-700' : ''}
+                ${!isToday && dow === 0 ? 'text-rose-500' : ''}
+                ${!isToday && dow === 6 ? 'text-blue-500' : ''}
+                ${!isToday && dow > 0 && dow < 6 ? 'text-gray-700' : ''}
               `}>
                 {dayNum}
               </span>

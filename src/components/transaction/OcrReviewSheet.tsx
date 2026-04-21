@@ -45,7 +45,17 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
       track: false,
     }))
   );
-  const [date, setDate] = useState(result.date || dayjs().format('YYYY-MM-DD'));
+  // OCR 날짜 검증: 형식 불량이거나 오늘보다 뒤이거나 3년 이전이면 오늘 날짜로 fallback
+  const today = dayjs();
+  const sanitizeDate = (raw: string | undefined): string => {
+    if (!raw) return today.format('YYYY-MM-DD');
+    const m = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? dayjs(raw) : null;
+    if (!m || !m.isValid()) return today.format('YYYY-MM-DD');
+    if (m.isAfter(today, 'day')) return today.format('YYYY-MM-DD');
+    if (today.diff(m, 'year') > 3) return today.format('YYYY-MM-DD');
+    return m.format('YYYY-MM-DD');
+  };
+  const [date, setDate] = useState(sanitizeDate(result.date));
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [memberId, setMemberId] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);

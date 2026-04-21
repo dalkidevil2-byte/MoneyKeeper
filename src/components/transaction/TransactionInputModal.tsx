@@ -715,7 +715,9 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 mb-1 block">가맹점</label>
+                    <label className="text-xs text-gray-400 mb-1 block">
+                      {form.type === 'income' ? '지급처' : '가맹점'}
+                    </label>
                     <input
                       type="text"
                       value={form.merchant_name ?? ''}
@@ -727,22 +729,26 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                           name: !f.name || f.name === f.merchant_name ? e.target.value : f.name,
                         }))
                       }
-                      placeholder="어디서?"
+                      placeholder={form.type === 'income' ? '어디로부터? (회사/은행)' : '어디서?'}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                     />
                   </div>
                 </div>
 
-                {/* 구매항목 (가맹점과 별도) */}
+                {/* 거래명 / 수입 종류 */}
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">
-                    구매항목 <span className="text-gray-300">(가맹점과 별도)</span>
+                    {form.type === 'income' ? '수입 종류' : (
+                      <>
+                        구매항목 <span className="text-gray-300">(가맹점과 별도)</span>
+                      </>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={form.name ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="무엇을?"
+                    placeholder={form.type === 'income' ? '예: 4월 월급, 상여금, 배당금' : '무엇을?'}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                   />
                 </div>
@@ -779,7 +785,29 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                   </div>
                 </div>
 
-                {/* 결제수단 */}
+                {/* 수입일 때: 입금 계좌 select */}
+                {form.type === 'income' && (
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">💰 입금 계좌</label>
+                    <select
+                      value={form.account_to_id ?? ''}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, account_to_id: e.target.value || undefined }))
+                      }
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                    >
+                      <option value="">선택</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* 결제수단 (수입 외) */}
+                {form.type !== 'income' && (
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">결제수단</label>
                   <select
@@ -858,6 +886,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                     );
                   })()}
                 </div>
+                )}
 
                 {/* 자금이동 전용: 계좌 선택 */}
                 {form.type === 'transfer' && (
@@ -1076,19 +1105,22 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-gray-400 w-8 flex-shrink-0">수량</span>
                                   <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
-                                    <button onClick={() => updateLineItem(item.id, 'quantity', Math.max(1, item.quantity - 1))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Minus size={11} /></button>
+                                    <button onClick={() => updateLineItem(item.id, 'quantity', Math.max(0.01, +(item.quantity - 1).toFixed(2)))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Minus size={11} /></button>
                                     <input
                                       type="text"
-                                      inputMode="numeric"
+                                      inputMode="decimal"
                                       value={item.quantity}
                                       onChange={(e) => {
-                                        const raw = e.target.value.replace(/[^0-9]/g, '');
-                                        updateLineItem(item.id, 'quantity', raw === '' ? 1 : parseInt(raw));
+                                        // 숫자 + 소수점 1개만 허용
+                                        const raw = e.target.value
+                                          .replace(/[^0-9.]/g, '')
+                                          .replace(/(\..*)\./g, '$1');
+                                        updateLineItem(item.id, 'quantity', raw === '' || raw === '.' ? 1 : parseFloat(raw));
                                       }}
                                       onFocus={(e) => e.target.select()}
-                                      className="w-10 text-center text-sm py-1 focus:outline-none"
+                                      className="w-14 text-center text-sm py-1 focus:outline-none"
                                     />
-                                    <button onClick={() => updateLineItem(item.id, 'quantity', item.quantity + 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Plus size={11} /></button>
+                                    <button onClick={() => updateLineItem(item.id, 'quantity', +(item.quantity + 1).toFixed(2))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Plus size={11} /></button>
                                   </div>
                                   {unitPrice && <p className="text-xs text-indigo-500 font-medium ml-auto">{unitPrice.toLocaleString()}원/{item.unit}</p>}
                                 </div>

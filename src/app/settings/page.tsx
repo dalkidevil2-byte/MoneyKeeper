@@ -842,16 +842,48 @@ export default function SettingsPage() {
                     </select>
                   </div>
                   <select
-                    value={ftForm.payment_method_id}
-                    onChange={(e) => setFTForm((f) => ({ ...f, payment_method_id: e.target.value }))}
+                    value={
+                      ftForm.payment_method_id
+                        ? ftForm.payment_method_id
+                        : ftForm.account_from_id
+                          ? `account:${ftForm.account_from_id}`
+                          : ''
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.startsWith('account:')) {
+                        setFTForm((f) => ({
+                          ...f,
+                          payment_method_id: '',
+                          account_from_id: v.replace('account:', ''),
+                        }));
+                      } else {
+                        setFTForm((f) => ({
+                          ...f,
+                          payment_method_id: v,
+                          account_from_id: '',
+                        }));
+                      }
+                    }}
                     className="w-full border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none"
                   >
-                    <option value="">결제수단</option>
-                    {paymentMethods.map((pm) => (
-                      <option key={pm.id} value={pm.id}>
-                        {pm.name}
-                      </option>
-                    ))}
+                    <option value="">결제수단 / 출금 계좌</option>
+                    <optgroup label="💳 결제수단">
+                      {paymentMethods.map((pm) => (
+                        <option key={pm.id} value={pm.id}>
+                          {pm.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {accounts.length > 0 && (
+                      <optgroup label="🏦 계좌 (직접 출금 — 관리비·통신비 등)">
+                        {accounts.map((a) => (
+                          <option key={a.id} value={`account:${a.id}`}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                   <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer pt-1">
                     <input

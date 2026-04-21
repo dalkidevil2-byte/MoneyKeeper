@@ -5,6 +5,18 @@ import dayjs from 'dayjs';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
+// 단가/반복 구매 분석이 부적절한 카테고리 (쇼핑·취미 등은 개별 품목이 다 다르므로)
+const NON_RECURRING_CATEGORIES = new Set([
+  '쇼핑',
+  '의료',
+  '교육',
+  '취미',
+  '출장',
+  '경조사',
+  '주거',
+  '저축/투자',
+]);
+
 export async function GET() {
   const supabase = createServerSupabaseClient();
   const today = dayjs();
@@ -23,9 +35,10 @@ export async function GET() {
 
   const insights: any[] = [];
 
-  // ── 1. 반복 가맹점 분석 ──
+  // ── 1. 반복 가맹점 분석 (쇼핑·취미 등은 제외) ──
   const merchantMap: Record<string, { dates: string[]; amounts: number[]; category: string }> = {};
   for (const tx of txs) {
+    if (NON_RECURRING_CATEGORIES.has(tx.category_main)) continue;
     const key = tx.merchant_name || tx.name;
     if (!key || key.length < 2) continue;
     if (!merchantMap[key]) merchantMap[key] = { dates: [], amounts: [], category: tx.category_main };
@@ -131,9 +144,10 @@ export async function GET() {
     }
   }
 
-  // ── 3. 자주 구매하는 품목 (OCR로 저장된 개별 품목) ──
+  // ── 3. 자주 구매하는 품목 (OCR로 저장된 개별 품목, 쇼핑·취미 제외) ──
   const itemMap: Record<string, { count: number; amounts: number[]; dates: string[] }> = {};
   for (const tx of txs) {
+    if (NON_RECURRING_CATEGORIES.has(tx.category_main)) continue;
     // OCR 품목은 merchant_name이 가게명, name이 품목명으로 다름
     if (tx.merchant_name && tx.name && tx.merchant_name !== tx.name && tx.name.length >= 2) {
       const key = tx.name;
