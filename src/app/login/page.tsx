@@ -29,13 +29,17 @@ export default function LoginPage() {
       if (res.ok) {
         router.replace('/');
       } else {
-        const data = await res.json();
-        setError(data.error ?? '로그인에 실패했어요');
+        let msg = '로그인에 실패했어요';
+        try {
+          const data = await res.json();
+          msg = data.error ?? msg;
+        } catch { /* non-JSON response */ }
+        setError(msg);
         setPassword('');
         inputRef.current?.focus();
       }
     } catch {
-      setError('네트워크 오류가 발생했어요');
+      setError('서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
