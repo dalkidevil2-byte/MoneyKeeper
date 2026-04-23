@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, Plus, Wallet, CreditCard, PiggyBank, Users, Check, Pencil, Tag, Trash2, RepeatIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Plus, Wallet, CreditCard, PiggyBank, Users, Check, Pencil, Tag, Trash2, RepeatIcon, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { useAccounts, usePaymentMethods, useBudgets, useMembers, useCustomCategories, useFixedExpenseTemplates } from '@/hooks/useAccounts';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
@@ -9,6 +10,13 @@ import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
 
 export default function SettingsPage() {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/login');
+  };
+
   const { accounts, loading: accLoading } = useAccounts();
   const { paymentMethods, loading: pmLoading } = usePaymentMethods();
   const { budgets, loading: budgetLoading, refetch: refetchBudgets } = useBudgets();
@@ -1091,6 +1099,17 @@ export default function SettingsPage() {
             )}
           </div>
           <p className="text-xs text-gray-400 px-1 mt-1.5">기본 카테고리는 변경할 수 없어요</p>
+        </section>
+
+        {/* 로그아웃 */}
+        <section>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-white border border-rose-200 text-rose-500 rounded-2xl text-sm font-medium active:scale-[0.98] transition-all hover:bg-rose-50"
+          >
+            <LogOut size={16} />
+            로그아웃
+          </button>
         </section>
 
         {/* Notion 연동 안내 */}
