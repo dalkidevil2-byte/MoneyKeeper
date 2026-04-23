@@ -14,13 +14,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '비밀번호가 틀렸어요' }, { status: 401 });
   }
 
-  const token = await createToken();
+  const token = createToken();
   const res = NextResponse.json({ ok: true });
   res.cookies.set('auth_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 30, // 30일
+    maxAge: 60 * 60 * 24 * 30,
     path: '/',
   });
   return res;

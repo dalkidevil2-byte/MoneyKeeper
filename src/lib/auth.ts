@@ -1,27 +1,10 @@
-const SECRET = process.env.AUTH_SECRET ?? 'fallback-secret-change-me';
+// btoa/atob은 브라우저, Edge 런타임, Node.js 18+ 모두에서 사용 가능
+const SECRET = process.env.AUTH_SECRET ?? 'fallback-secret';
 
-async function getKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify']
-  );
+export function createToken(): string {
+  return btoa(`authenticated:${SECRET}`);
 }
 
-export async function createToken(): Promise<string> {
-  const key = await getKey(SECRET);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('authenticated'));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
-}
-
-export async function verifyToken(token: string): Promise<boolean> {
-  try {
-    const key = await getKey(SECRET);
-    const sigBytes = Uint8Array.from(atob(token), (c) => c.charCodeAt(0));
-    return await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode('authenticated'));
-  } catch {
-    return false;
-  }
+export function verifyToken(token: string): boolean {
+  return token === createToken();
 }
