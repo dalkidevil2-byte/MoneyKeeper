@@ -86,8 +86,15 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
             />
           </div>
 
-          {/* 옵션 목록 */}
-          <div className="max-h-48 overflow-y-auto">
+          {/* 옵션 목록 — 스크롤 가능, 우측 인디케이터 */}
+          <div
+            className="max-h-72 overflow-y-auto"
+            style={{
+              scrollbarWidth: 'thin',
+              WebkitOverflowScrolling: 'touch',
+              boxShadow: 'inset 0 -10px 8px -10px rgba(0,0,0,0.08)',
+            }}
+          >
             {/* 선택 안함 */}
             {!query && (
               <button

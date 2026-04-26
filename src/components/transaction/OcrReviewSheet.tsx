@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X, Check, Trash2, Store, ChevronDown } from 'lucide-react';
 import { formatAmount } from '@/lib/parser';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
+import { useCustomCategories } from '@/hooks/useAccounts';
+import CategoryCombobox from '@/components/CategoryCombobox';
 import dayjs from 'dayjs';
 
 const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
@@ -35,6 +37,47 @@ interface Props {
 }
 
 export default function OcrReviewSheet({ result, paymentMethods, members, onConfirm, onClose }: Props) {
+  // 사용자 정의 카테고리 머지
+  const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
+
+  const allMainCategories = useMemo(() => {
+    const customs = customCategories
+      .map((c) => c.category_main)
+      .filter(
+        (m, i, arr) =>
+          m && arr.indexOf(m) === i && !CATEGORY_MAIN_OPTIONS.includes(m as never)
+      );
+    return [...CATEGORY_MAIN_OPTIONS, ...customs] as string[];
+  }, [customCategories]);
+
+  const getSubOptions = (main: string) => {
+    const defaults = CATEGORY_SUB_MAP[main] ?? [];
+    const customs = customCategories
+      .filter((c) => c.category_main === main && c.category_sub)
+      .map((c) => c.category_sub)
+      .filter((s, i, arr) => arr.indexOf(s) === i && !defaults.includes(s));
+    return [...defaults, ...customs];
+  };
+
+  const handleAddMain = async (name: string) => {
+    await fetch('/api/custom-categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_main: name, category_sub: '' }),
+    });
+    refetchCategories();
+  };
+
+  const handleAddSubFor = async (main: string, sub: string) => {
+    if (!main) return;
+    await fetch('/api/custom-categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_main: main, category_sub: sub }),
+    });
+    refetchCategories();
+  };
+
   const [items, setItems] = useState<OcrItem[]>(
     result.items.map((item, i) => ({
       ...item,
@@ -270,29 +313,26 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">대분류</label>
-                        <select
+                        <CategoryCombobox
                           value={item.category_main}
-                          onChange={(e) => updateItem(item.id, { category_main: e.target.value, category_sub: '' })}
-                          className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
-                        >
-                          {CATEGORY_MAIN_OPTIONS.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
+                          onChange={(v) => updateItem(item.id, { category_main: v, category_sub: '' })}
+                          options={allMainCategories}
+                          onAddOption={handleAddMain}
+                        />
                       </div>
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">소분류</label>
-                        <select
+                        <CategoryCombobox
                           value={item.category_sub}
-                          onChange={(e) => updateItem(item.id, { category_sub: e.target.value })}
+                          onChange={(v) => updateItem(item.id, { category_sub: v })}
+                          options={getSubOptions(item.category_main)}
                           disabled={!item.category_main}
-                          className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none disabled:opacity-40"
-                        >
-                          <option value="">선택</option>
-                          {(CATEGORY_SUB_MAP[item.category_main] ?? []).map((s: string) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
+                          onAddOption={
+                            item.category_main
+                              ? (sub) => handleAddSubFor(item.category_main, sub)
+                              : undefined
+                          }
+                        />
                       </div>
                     </div>
                     {item.quantity > 0 && item.amount > 0 && (
