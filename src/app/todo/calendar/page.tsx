@@ -309,14 +309,33 @@ export default function TodoCalendarPage() {
     return m;
   }, [members]);
 
-  // 그리드 (일요일 시작)
+  // 그리드 (일요일 시작) — 이전/다음 달 날짜도 채워서 주간 단위로 끊김 없게
   const firstDay = month.startOf('month');
   const startOffset = firstDay.day();
   const daysInMonth = month.daysInMonth();
-  const cells: (dayjs.Dayjs | null)[] = [];
-  for (let i = 0; i < startOffset; i++) cells.push(null);
+  const cells: dayjs.Dayjs[] = [];
+  // 이전 달 마지막 날짜들로 첫 주 채우기
+  if (startOffset > 0) {
+    const prev = month.subtract(1, 'month');
+    const prevDays = prev.daysInMonth();
+    for (let i = startOffset - 1; i >= 0; i--) {
+      cells.push(prev.date(prevDays - i));
+    }
+  }
+  // 현재 달
   for (let d = 1; d <= daysInMonth; d++) cells.push(month.date(d));
-  while (cells.length % 7 !== 0) cells.push(null);
+  // 다음 달로 마지막 주 채우기 (그리드를 7의 배수로)
+  const nextMonth = month.add(1, 'month');
+  let nextDay = 1;
+  while (cells.length % 7 !== 0) {
+    cells.push(nextMonth.date(nextDay));
+    nextDay++;
+  }
+  // 항상 6주 (42칸) 표시 — 다음 달 일정도 한 주 더 미리보기
+  while (cells.length < 42) {
+    cells.push(nextMonth.date(nextDay));
+    nextDay++;
+  }
 
   // ──────────────────────────────────────
   // 슬롯 할당: 다일 일정도 매 셀에서 같은 row 에 위치하도록
@@ -578,14 +597,6 @@ export default function TodoCalendarPage() {
             const lastCol = dow === 6;
             const cellBorder = `${lastCol ? '' : 'border-r border-gray-100'} border-b border-gray-100`;
 
-            if (!cell) {
-              return (
-                <div
-                  key={idx}
-                  className={`bg-gray-50 min-h-[88px] ${cellBorder}`}
-                />
-              );
-            }
             const key = cell.format('YYYY-MM-DD');
             const slots = slotsByDate[key] ?? [];
             const visibleSlots = slots.slice(0, MAX_CHIPS_PER_CELL);
@@ -594,6 +605,7 @@ export default function TodoCalendarPage() {
             const isHoliday = holidayList.length > 0;
             const isSelected = key === selected;
             const isToday = key === dayjs().format('YYYY-MM-DD');
+            const isOtherMonth = cell.month() !== month.month();
             const isDropTarget =
               chipDrag?.moved && chipDrag.targetDate === key && chipDrag.fromDate !== key;
 
@@ -610,7 +622,9 @@ export default function TodoCalendarPage() {
                     setSelected(key);
                   }
                 }}
-                className={`bg-white min-h-[88px] flex flex-col py-1 text-left transition-colors ${cellBorder} ${
+                className={`min-h-[88px] flex flex-col py-1 text-left transition-colors ${cellBorder} ${
+                  isOtherMonth ? 'bg-gray-50/60' : 'bg-white'
+                } ${
                   isDropTarget ? 'bg-amber-100/80 ring-2 ring-amber-400 ring-inset z-20' : ''
                 } ${
                   isSelected ? 'ring-2 ring-amber-400 ring-inset z-10' : ''
@@ -643,10 +657,10 @@ export default function TodoCalendarPage() {
                       isToday
                         ? 'w-5 h-5 rounded-full bg-amber-500 text-white'
                         : isHoliday || dow === 0
-                          ? 'text-rose-500'
+                          ? isOtherMonth ? 'text-rose-300' : 'text-rose-500'
                           : dow === 6
-                            ? 'text-blue-400'
-                            : 'text-gray-700'
+                            ? isOtherMonth ? 'text-blue-300' : 'text-blue-400'
+                            : isOtherMonth ? 'text-gray-300' : 'text-gray-700'
                     }`}
                   >
                     {cell.date()}
