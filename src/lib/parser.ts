@@ -169,23 +169,27 @@ export function parseTransactionText(text: string): ParsedTransaction {
   const amount = parseAmount(text);
   const date = parseDate(text);
   const paymentHint = parsePaymentHint(text);
-  const merchant = extractMerchant(text);
+  const extracted = extractMerchant(text);
   const { main: categoryMain, sub: categorySub } = inferCategory(text);
 
-  // 거래명 구성
-  const name = merchant
-    ? merchant
-    : is_transfer
+  // "에서/from"이 있으면 가맹점, 없으면 구매항목으로 간주
+  // 예: "스타벅스에서 커피 5000원" → merchant="스타벅스", name="커피" 가 이상적이나
+  //     현재 파서는 단어 1개만 추출하므로 보수적으로 처리:
+  //   - "에서" 키워드 있을 때만 merchant_name으로
+  //   - 그 외엔 name(구매항목)에만 채우고 merchant_name은 빈값으로 둠 (사용자 입력 유도)
+  const hasMerchantHint = /에서|매장|가게|점\s*$/.test(text);
+  const merchant = hasMerchantHint ? extracted : '';
+  const itemName = is_transfer
     ? `${from || '?'} → ${to || '?'}`
-    : text.slice(0, 20);
+    : extracted || text.slice(0, 20);
 
   const confidence: ParsedTransaction['confidence'] =
-    amount !== null && (merchant || is_transfer) ? 'high' : amount !== null ? 'medium' : 'low';
+    amount !== null && (extracted || is_transfer) ? 'high' : amount !== null ? 'medium' : 'low';
 
   return {
     amount,
     merchant_name: merchant,
-    name,
+    name: itemName,
     type,
     category_main: categoryMain,
     category_sub: categorySub,

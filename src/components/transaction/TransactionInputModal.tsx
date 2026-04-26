@@ -722,12 +722,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
                       type="text"
                       value={form.merchant_name ?? ''}
                       onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          merchant_name: e.target.value,
-                          // name이 비어있거나 기존 가맹점값과 같았다면 같이 갱신
-                          name: !f.name || f.name === f.merchant_name ? e.target.value : f.name,
-                        }))
+                        setForm((f) => ({ ...f, merchant_name: e.target.value }))
                       }
                       placeholder={form.type === 'income' ? '어디로부터? (회사/은행)' : '어디서?'}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"

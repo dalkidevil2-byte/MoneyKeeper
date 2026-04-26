@@ -353,12 +353,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                 type="text"
                 value={form.merchant_name}
                 onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    merchant_name: e.target.value,
-                    // name이 비어있거나 기존 가맹점값과 같았을 때만 동기화
-                    name: !f.name || f.name === f.merchant_name ? e.target.value : f.name,
-                  }))
+                  setForm((f) => ({ ...f, merchant_name: e.target.value }))
                 }
                 placeholder="어디서?"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
