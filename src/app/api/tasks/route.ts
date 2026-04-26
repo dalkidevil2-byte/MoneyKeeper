@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status');
   const memberId = searchParams.get('member_id');
   const type = searchParams.get('type');
+  const kind = searchParams.get('kind');
   const categoryMain = searchParams.get('category_main');
   const includeCancelled = searchParams.get('include_cancelled') === '1';
   const includeCompletions = searchParams.get('include_completions') === '1';
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
       );
     }
     if (type) query = query.eq('type', type);
+    if (kind) query = query.eq('kind', kind);
     if (categoryMain) query = query.eq('category_main', categoryMain);
     if (from) query = query.gte('due_date', from);
     if (to) query = query.lte('due_date', to);
@@ -52,7 +54,28 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ tasks: data ?? [] });
+    // todo 들의 체크리스트 진행률 (카드 미리보기용) — kind 필터로 todo 만 요청한 경우만
+    const tasksData = (data ?? []) as unknown as Array<Record<string, unknown>>;
+    const checklistMap: Record<string, { total: number; done: number }> = {};
+    if (kind === 'todo' && tasksData.length > 0) {
+      const ids = tasksData.map((t) => t.id as string);
+      const { data: items } = await supabase
+        .from('task_checklist_items')
+        .select('task_id, is_done')
+        .in('task_id', ids);
+      for (const it of items ?? []) {
+        const key = it.task_id as string;
+        if (!checklistMap[key]) checklistMap[key] = { total: 0, done: 0 };
+        checklistMap[key].total += 1;
+        if (it.is_done) checklistMap[key].done += 1;
+      }
+    }
+    const enriched = tasksData.map((t) => ({
+      ...t,
+      checklist_summary: checklistMap[t.id as string] ?? null,
+    }));
+
+    return NextResponse.json({ tasks: enriched });
   } catch (error) {
     console.error('[GET /tasks]', error);
     return NextResponse.json({ error: '할일 목록을 불러오지 못했습니다.' }, { status: 500 });
@@ -88,6 +111,10 @@ export async function POST(req: NextRequest) {
 
     const insertData = {
       household_id: body.household_id ?? DEFAULT_HOUSEHOLD_ID,
+      kind: body.kind ?? 'event',
+      start_date: body.start_date ?? null,
+      deadline_date: body.deadline_date ?? null,
+      deadline_time: body.deadline_time ?? null,
       type: body.type ?? 'one_time',
       title: body.title.trim(),
       memo: body.memo ?? '',
@@ -104,6 +131,7 @@ export async function POST(req: NextRequest) {
       recurrence: body.recurrence ?? null,
       until_date: body.until_date ?? null,
       until_count: body.until_count ?? null,
+      goal_id: body.goal_id ?? null,
       status: 'pending' as const,
       is_active: true,
     };

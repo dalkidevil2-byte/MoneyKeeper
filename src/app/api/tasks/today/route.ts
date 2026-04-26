@@ -27,7 +27,9 @@ export async function GET(req: NextRequest) {
       .select(`*, member:members!member_id(id, name, color)`)
       .eq('household_id', householdId)
       .neq('status', 'cancelled')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      // 일정(event) 만 — todo 는 별도 리스트
+      .eq('kind', 'event');
     // 멤버 필터: 본인 + 다중 담당 포함 + 공유(담당 없음) 모두 포함
     if (memberId) {
       q = q.or(

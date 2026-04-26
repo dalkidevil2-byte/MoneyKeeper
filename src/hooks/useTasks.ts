@@ -11,6 +11,7 @@ interface UseTasksParams {
   status?: string;
   member_id?: string;
   type?: 'one_time' | 'routine';
+  kind?: 'event' | 'todo';
   category_main?: string;
   include_cancelled?: boolean;
   include_completions?: boolean;
@@ -35,6 +36,7 @@ export function useTasks(params: UseTasksParams = {}) {
     if (params.status) sp.set('status', params.status);
     if (params.member_id) sp.set('member_id', params.member_id);
     if (params.type) sp.set('type', params.type);
+    if (params.kind) sp.set('kind', params.kind);
     if (params.category_main) sp.set('category_main', params.category_main);
     if (params.include_cancelled) sp.set('include_cancelled', '1');
     if (params.include_completions) sp.set('include_completions', '1');

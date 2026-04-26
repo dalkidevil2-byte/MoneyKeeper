@@ -31,7 +31,20 @@ export async function GET(
       .gte('completed_on', since)
       .order('completed_on', { ascending: false });
 
-    return NextResponse.json({ task: { ...task, completions: completions ?? [] } });
+    // 체크리스트
+    const { data: checklist } = await supabase
+      .from('task_checklist_items')
+      .select('*')
+      .eq('task_id', id)
+      .order('position', { ascending: true });
+
+    return NextResponse.json({
+      task: {
+        ...task,
+        completions: completions ?? [],
+        checklist: checklist ?? [],
+      },
+    });
   } catch (error) {
     console.error('[GET /tasks/:id]', error);
     return NextResponse.json({ error: '할일을 불러오지 못했습니다.' }, { status: 500 });
@@ -72,6 +85,11 @@ export async function PATCH(
       'until_date',
       'until_count',
       'excluded_dates',
+      'goal_id',
+      'kind',
+      'start_date',
+      'deadline_date',
+      'deadline_time',
       'is_active',
       'type',
     ] as const;

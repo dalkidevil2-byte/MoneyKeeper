@@ -14,7 +14,7 @@ import {
   FlaskConical,
   Calendar,
   Repeat,
-  Archive,
+  Target,
 } from 'lucide-react';
 
 type Tab = {
@@ -53,10 +53,11 @@ const PAPER_TABS: Tab[] = [
 const TODO_TABS: Tab[] = [
   { href: '/todo',          icon: Home,     label: '오늘' },
   { href: '/todo/calendar', icon: Calendar, label: '캘린더' },
+  { href: '/todo/goals',    icon: Target,   label: '목표' },
   { href: '/todo/routines', icon: Repeat,   label: '루틴' },
-  { href: '/todo/archive',  icon: Archive,  label: '기록' },
   { href: '/todo/settings', icon: Settings, label: '설정' },
 ];
+
 
 export default function BottomNav() {
   const pathname = usePathname();

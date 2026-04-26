@@ -5,11 +5,12 @@ import { X, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useMembers, useCustomCategories } from '@/hooks/useAccounts';
 import { useSaveTask } from '@/hooks/useTasks';
+import { useGoals } from '@/hooks/useGoals';
 import CategoryCombobox from '@/components/CategoryCombobox';
 import RoutineFrequencyPicker from './RoutineFrequencyPicker';
 import RoutineEndPicker from './RoutineEndPicker';
 import RoutineScopeDialog, { type RoutineScope } from './RoutineScopeDialog';
-import type { Task, RecurrenceRule, TaskPriority } from '@/types';
+import type { Task, RecurrenceRule, TaskPriority, TaskKind } from '@/types';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 
 interface Props {
@@ -29,6 +30,8 @@ interface Props {
    * 일간보기에서 열면 그 날짜, 캘린더에서 열면 선택된 날짜.
    */
   occurrenceDate?: string;
+  /** 새 일정 생성 시 prefill (자연어 입력 결과 등) */
+  defaults?: Partial<Task> | null;
 }
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -42,12 +45,17 @@ export default function TaskFormSheet({
   defaultStartTime,
   defaultEndTime,
   occurrenceDate,
+  defaults,
 }: Props) {
   const isEdit = !!initial;
   const { members } = useMembers();
   const { categories: customCats, refetch: refetchCats } = useCustomCategories();
   const { create, update, remove } = useSaveTask();
 
+  const [kind, setKind] = useState<TaskKind>('event');
+  const [startDateTodo, setStartDateTodo] = useState<string>('');
+  const [deadlineDate, setDeadlineDate] = useState<string>('');
+  const [deadlineTime, setDeadlineTime] = useState<string>('');
   const [type, setType] = useState<'one_time' | 'routine'>('one_time');
   const [title, setTitle] = useState('');
   const [memo, setMemo] = useState('');
@@ -64,6 +72,8 @@ export default function TaskFormSheet({
   const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
   const [untilDate, setUntilDate] = useState<string | null>(null);
   const [untilCount, setUntilCount] = useState<number | null>(null);
+  const [goalId, setGoalId] = useState<string | ''>('');
+  const { goals: activeGoals } = useGoals('active');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -74,6 +84,10 @@ export default function TaskFormSheet({
   useEffect(() => {
     if (!open) return;
     if (initial) {
+      setKind(initial.kind ?? 'event');
+      setStartDateTodo(initial.start_date ?? '');
+      setDeadlineDate(initial.deadline_date ?? '');
+      setDeadlineTime(initial.deadline_time?.slice(0, 5) ?? '');
       setType(initial.type);
       setTitle(initial.title);
       setMemo(initial.memo ?? '');
@@ -97,26 +111,38 @@ export default function TaskFormSheet({
       setRecurrence(initial.recurrence ?? null);
       setUntilDate(initial.until_date ?? null);
       setUntilCount(initial.until_count ?? null);
+      setGoalId(initial.goal_id ?? '');
     } else {
-      setType('one_time');
-      setTitle('');
-      setMemo('');
-      setSelectedMemberIds([]);
-      setMultiMode(false);
-      setIsFixed(!!defaultStartTime);
-      setDueDate(defaultDate ?? dayjs().format('YYYY-MM-DD'));
-      setEndDate(defaultDate ?? dayjs().format('YYYY-MM-DD'));
-      setDueTime(defaultStartTime ?? '');
-      setEndTime(defaultEndTime ?? '');
-      setPriority('normal');
-      setCategoryMain('');
-      setCategorySub('');
-      setRecurrence({ freq: 'daily' });
-      setUntilDate(null);
-      setUntilCount(null);
+      const d = defaults ?? {};
+      setKind((d.kind as TaskKind) ?? 'event');
+      setStartDateTodo(d.start_date ?? '');
+      setDeadlineDate(d.deadline_date ?? '');
+      setDeadlineTime(d.deadline_time?.slice(0, 5) ?? '');
+      setType((d.type as 'one_time' | 'routine') ?? 'one_time');
+      setTitle(d.title ?? '');
+      setMemo(d.memo ?? '');
+      const dTids = d.target_member_ids && d.target_member_ids.length > 0
+        ? d.target_member_ids
+        : d.member_id
+          ? [d.member_id]
+          : [];
+      setSelectedMemberIds(dTids);
+      setMultiMode(dTids.length > 1);
+      setIsFixed(!!(d.is_fixed ?? defaultStartTime));
+      setDueDate(d.due_date ?? defaultDate ?? dayjs().format('YYYY-MM-DD'));
+      setEndDate(d.end_date ?? d.due_date ?? defaultDate ?? dayjs().format('YYYY-MM-DD'));
+      setDueTime(d.due_time?.slice(0, 5) ?? defaultStartTime ?? '');
+      setEndTime(d.end_time?.slice(0, 5) ?? defaultEndTime ?? '');
+      setPriority(d.priority ?? 'normal');
+      setCategoryMain(d.category_main ?? '');
+      setCategorySub(d.category_sub ?? '');
+      setRecurrence(d.recurrence ?? { freq: 'daily' });
+      setUntilDate(d.until_date ?? null);
+      setUntilCount(d.until_count ?? null);
+      setGoalId(d.goal_id ?? '');
     }
     setErr(null);
-  }, [open, initial, defaultDate, defaultStartTime, defaultEndTime]);
+  }, [open, initial, defaultDate, defaultStartTime, defaultEndTime, defaults]);
 
   if (!open) return null;
 
@@ -162,6 +188,10 @@ export default function TaskFormSheet({
   // 현재 폼 값으로 payload 빌드
   const buildPayload = () => ({
     household_id: HOUSEHOLD_ID,
+    kind,
+    start_date: kind === 'todo' ? startDateTodo || null : null,
+    deadline_date: kind === 'todo' ? deadlineDate || null : null,
+    deadline_time: kind === 'todo' ? (deadlineTime ? `${deadlineTime}:00` : null) : null,
     type,
     title: title.trim(),
     memo,
@@ -179,6 +209,7 @@ export default function TaskFormSheet({
     recurrence: type === 'routine' ? recurrence : null,
     until_date: type === 'routine' ? untilDate : null,
     until_count: type === 'routine' ? untilCount : null,
+    goal_id: goalId || null,
   });
 
   // 실제 저장 실행 — scope 가 routine 수정에서만 의미 있음
@@ -321,7 +352,47 @@ export default function TaskFormSheet({
 
         {/* 본문 */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* 타입 토글 */}
+          {/* kind 토글 — 일정/할일 */}
+          <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => {
+                setKind('event');
+              }}
+              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${
+                kind === 'event'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-500'
+              }`}
+            >
+              📅 일정
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setKind('todo');
+                // 할일은 단일 + 종일 기본
+                setType('one_time');
+                setIsFixed(false);
+                if (!deadlineDate) setDeadlineDate(dueDate || dayjs().format('YYYY-MM-DD'));
+              }}
+              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${
+                kind === 'todo'
+                  ? 'bg-white text-amber-600 shadow-sm'
+                  : 'text-gray-500'
+              }`}
+            >
+              ✅ 할일
+            </button>
+          </div>
+          <div className="text-[11px] text-gray-400 -mt-2 px-1">
+            {kind === 'event'
+              ? '특정 날짜·시간에 해야 하는 일정 (캘린더에 표시)'
+              : '기한까지 끝내면 되는 할일 (할일 리스트에서 임박순 정렬)'}
+          </div>
+
+          {/* 타입 토글 — event 일 때만 일회성/루틴 선택 */}
+          {kind === 'event' && (
           <div className="flex gap-2">
             <button
               type="button"
@@ -349,6 +420,7 @@ export default function TaskFormSheet({
               루틴
             </button>
           </div>
+          )}
 
           {/* 제목 */}
           <div>
@@ -362,7 +434,47 @@ export default function TaskFormSheet({
             />
           </div>
 
-          {/* 종일 / 시간 지정 토글 */}
+          {/* todo 모드 — 시작일/기한 입력 */}
+          {kind === 'todo' && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-xs text-gray-500">시작일</span>
+                <input
+                  type="date"
+                  value={startDateTodo}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setStartDateTodo(v);
+                    if (deadlineDate && v && deadlineDate < v) setDeadlineDate(v);
+                  }}
+                  placeholder="(선택)"
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-xs text-gray-500">기한</span>
+                <input
+                  type="date"
+                  value={deadlineDate}
+                  min={startDateTodo || undefined}
+                  onChange={(e) => setDeadlineDate(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+                <input
+                  type="time"
+                  value={deadlineTime}
+                  onChange={(e) => setDeadlineTime(e.target.value)}
+                  className="w-28 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div className="text-[11px] text-gray-400">
+                💡 시작일이 미래면 그 날짜가 와야 할일 리스트에 보여요. 시작일 비워두면 즉시 표시.
+              </div>
+            </div>
+          )}
+
+          {/* 종일 / 시간 지정 토글 — event 전용 */}
+          {kind === 'event' && (
           <div className="flex gap-2">
             <button
               type="button"
@@ -387,9 +499,10 @@ export default function TaskFormSheet({
               시간 지정
             </button>
           </div>
+          )}
 
-          {/* 시작 / 종료 (one_time = 기간, routine = 시작일만) */}
-          {type === 'one_time' ? (
+          {/* 시작 / 종료 (one_time = 기간, routine = 시작일만) — event 전용 */}
+          {kind === 'event' && (type === 'one_time' ? (
             <div className="space-y-2">
               {/* 시작 */}
               <div className="flex items-center gap-2">
@@ -467,10 +580,10 @@ export default function TaskFormSheet({
                 </div>
               )}
             </div>
-          )}
+          ))}
 
-          {/* 루틴 빈도 */}
-          {type === 'routine' && (
+          {/* 루틴 빈도 — event + routine 일 때만 */}
+          {kind === 'event' && type === 'routine' && (
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">반복 규칙</label>
@@ -634,6 +747,36 @@ export default function TaskFormSheet({
             </div>
           </div>
 
+          {/* 목표 연결 */}
+          {activeGoals.length > 0 && (
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">목표 연결 (선택)</label>
+              <select
+                value={goalId}
+                onChange={(e) => setGoalId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white"
+              >
+                <option value="">(연결 없음)</option>
+                {activeGoals.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.emoji} {g.title}
+                  </option>
+                ))}
+              </select>
+              <div className="text-[11px] text-gray-400 mt-1">
+                완료할 때마다 이 목표의 진행률이 자동으로 +1 됩니다.
+              </div>
+            </div>
+          )}
+
+          {/* 체크리스트 (수정 모드 전용) */}
+          {isEdit && initial && <ChecklistSection taskId={initial.id} />}
+
+          {/* 작업 세션 (todo + 수정 모드 전용) */}
+          {isEdit && initial && kind === 'todo' && (
+            <WorkSessionsSection taskId={initial.id} />
+          )}
+
           {/* 메모 */}
           <div>
             <label className="text-xs text-gray-500 mb-1 block">메모 (선택)</label>
@@ -686,6 +829,298 @@ export default function TaskFormSheet({
           else performDelete(scope);
         }}
       />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// 체크리스트 섹션 (수정 모드 전용)
+// ─────────────────────────────────────────
+import type { TaskChecklistItem, TaskWorkSession } from '@/types';
+import { Plus as PlusIcon, Trash2 as Trash2Icon, Clock as ClockIcon } from 'lucide-react';
+
+function ChecklistSection({ taskId }: { taskId: string }) {
+  const [items, setItems] = useState<TaskChecklistItem[]>([]);
+  const [newTitle, setNewTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    const res = await fetch(`/api/tasks/${taskId}/checklist`);
+    const data = await res.json();
+    setItems(data.items ?? []);
+  };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
+
+  const add = async () => {
+    if (!newTitle.trim()) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/checklist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setItems((prev) => [...prev, data.item]);
+        setNewTitle('');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (it: TaskChecklistItem) => {
+    setItems((prev) =>
+      prev.map((x) => (x.id === it.id ? { ...x, is_done: !it.is_done } : x)),
+    );
+    await fetch(`/api/tasks/${taskId}/checklist`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: it.id, is_done: !it.is_done }),
+    });
+  };
+
+  const rename = async (it: TaskChecklistItem, title: string) => {
+    setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, title } : x)));
+    await fetch(`/api/tasks/${taskId}/checklist`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: it.id, title }),
+    });
+  };
+
+  const remove = async (it: TaskChecklistItem) => {
+    setItems((prev) => prev.filter((x) => x.id !== it.id));
+    await fetch(`/api/tasks/${taskId}/checklist?item_id=${it.id}`, {
+      method: 'DELETE',
+    });
+  };
+
+  const doneCount = items.filter((x) => x.is_done).length;
+
+  return (
+    <div>
+      <label className="text-xs text-gray-500 mb-1 flex items-center justify-between">
+        <span>체크리스트 ({doneCount}/{items.length})</span>
+      </label>
+      <div className="space-y-1.5">
+        {items.map((it) => (
+          <div
+            key={it.id}
+            className="flex items-center gap-2 px-2 py-1.5 bg-white border border-gray-100 rounded-lg"
+          >
+            <button
+              type="button"
+              onClick={() => toggle(it)}
+              className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                it.is_done
+                  ? 'bg-amber-500 border-amber-500 text-white'
+                  : 'border-gray-300 hover:border-amber-400'
+              }`}
+              aria-label={it.is_done ? '해제' : '완료'}
+            >
+              {it.is_done && (
+                <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M3 7.5L6 10.5L11 4.5"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </button>
+            <input
+              type="text"
+              value={it.title}
+              onChange={(e) => rename(it, e.target.value)}
+              className={`flex-1 bg-transparent text-sm focus:outline-none ${
+                it.is_done ? 'line-through text-gray-400' : 'text-gray-800'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => remove(it)}
+              className="text-gray-300 hover:text-rose-500 p-1"
+              aria-label="삭제"
+            >
+              <Trash2Icon size={13} />
+            </button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 px-2">
+          <PlusIcon size={14} className="text-gray-400 shrink-0" />
+          <input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !busy) {
+                e.preventDefault();
+                void add();
+              }
+            }}
+            placeholder="체크 항목 추가"
+            className="flex-1 bg-transparent text-sm focus:outline-none placeholder-gray-400"
+          />
+          <button
+            type="button"
+            onClick={add}
+            disabled={busy || !newTitle.trim()}
+            className="text-xs text-indigo-600 font-semibold disabled:opacity-30"
+          >
+            추가
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// 작업 세션 섹션 — todo 의 "실제로 할 시간" 슬롯
+// ─────────────────────────────────────────
+function WorkSessionsSection({ taskId }: { taskId: string }) {
+  const [sessions, setSessions] = useState<TaskWorkSession[]>([]);
+  const [busy, setBusy] = useState(false);
+  const todayStr = dayjs().format('YYYY-MM-DD');
+
+  const load = async () => {
+    const res = await fetch(`/api/tasks/${taskId}/sessions`);
+    const data = await res.json();
+    setSessions(data.sessions ?? []);
+  };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
+
+  const addSession = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_date: todayStr,
+          start_time: '14:00:00',
+          end_time: '15:00:00',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) setSessions((prev) => [...prev, data.session]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateSession = async (s: TaskWorkSession, patch: Partial<TaskWorkSession>) => {
+    setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, ...patch } : x)));
+    await fetch(`/api/tasks/${taskId}/sessions`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: s.id, ...patch }),
+    });
+  };
+
+  const removeSession = async (s: TaskWorkSession) => {
+    setSessions((prev) => prev.filter((x) => x.id !== s.id));
+    await fetch(`/api/tasks/${taskId}/sessions?session_id=${s.id}`, { method: 'DELETE' });
+  };
+
+  return (
+    <div>
+      <label className="text-xs text-gray-500 mb-1 flex items-center justify-between">
+        <span className="inline-flex items-center gap-1">
+          <ClockIcon size={12} /> 작업 시간 ({sessions.length})
+        </span>
+        <button
+          type="button"
+          onClick={addSession}
+          disabled={busy}
+          className="text-[11px] text-indigo-600 font-semibold inline-flex items-center gap-0.5"
+        >
+          <PlusIcon size={11} /> 시간 슬롯 추가
+        </button>
+      </label>
+      {sessions.length === 0 ? (
+        <div className="text-[11px] text-gray-400 py-3 text-center bg-gray-50 rounded-lg border border-dashed border-gray-200">
+          아직 작업 시간이 없어요. <br />
+          <span className="text-gray-500">언제 할지 시간 슬롯을 추가하면 일간 타임테이블에 보여요.</span>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-2 px-2 py-1.5 bg-amber-50/60 rounded-lg border border-amber-100"
+            >
+              <button
+                type="button"
+                onClick={() => updateSession(s, { is_done: !s.is_done })}
+                className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                  s.is_done
+                    ? 'bg-amber-500 border-amber-500 text-white'
+                    : 'border-gray-300 hover:border-amber-400'
+                }`}
+                aria-label={s.is_done ? '해제' : '완료'}
+              >
+                {s.is_done && (
+                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                    <path
+                      d="M3 7.5L6 10.5L11 4.5"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </button>
+              <input
+                type="date"
+                value={s.session_date}
+                onChange={(e) => updateSession(s, { session_date: e.target.value })}
+                className="px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+              />
+              <input
+                type="time"
+                value={s.start_time?.slice(0, 5) ?? ''}
+                onChange={(e) =>
+                  updateSession(s, {
+                    start_time: e.target.value ? `${e.target.value}:00` : null,
+                  })
+                }
+                className="w-20 px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+              />
+              <span className="text-xs text-gray-400">~</span>
+              <input
+                type="time"
+                value={s.end_time?.slice(0, 5) ?? ''}
+                onChange={(e) =>
+                  updateSession(s, {
+                    end_time: e.target.value ? `${e.target.value}:00` : null,
+                  })
+                }
+                className="w-20 px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => removeSession(s)}
+                className="text-gray-300 hover:text-rose-500 p-1"
+                aria-label="삭제"
+              >
+                <Trash2Icon size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

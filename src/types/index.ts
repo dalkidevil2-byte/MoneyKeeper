@@ -281,6 +281,7 @@ export const PAYMENT_METHOD_TYPE_LABELS: Record<PaymentMethodType, string> = {
 // ─────────────────────────────────────────
 // TODO 모듈 타입
 // ─────────────────────────────────────────
+export type TaskKind = 'event' | 'todo';
 export type TaskType = 'one_time' | 'routine';
 export type TaskStatus = 'pending' | 'done' | 'snoozed' | 'cancelled';
 export type TaskPriority = 'low' | 'normal' | 'high';
@@ -296,6 +297,12 @@ export type RecurrenceRule =
 export interface Task {
   id: string;
   household_id: string;
+  kind: TaskKind;
+  /** kind='todo' 일 때 시작일 (이 날부터 리스트 노출) */
+  start_date: string | null;
+  /** kind='todo' 일 때 기한일 (event 는 due_date 그대로 사용) */
+  deadline_date: string | null;
+  deadline_time: string | null;
   type: TaskType;
   title: string;
   memo: string;
@@ -319,12 +326,47 @@ export interface Task {
   source: 'manual' | 'notion';
   source_external_id: string | null;
   notion_last_edited_time: string | null;
+  goal_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
   // 조인 데이터
   member?: Member;
   completions?: TaskCompletion[];
+  checklist?: TaskChecklistItem[];
+  /** 리스트 응답에서 체크리스트 진행률 요약 */
+  checklist_summary?: { total: number; done: number } | null;
+}
+
+export interface TaskChecklistItem {
+  id: string;
+  task_id: string;
+  household_id: string;
+  title: string;
+  is_done: boolean;
+  done_at: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 할일(todo) 의 작업 세션 — 실제로 일하기로 잡은 시간 슬롯 */
+export interface TaskWorkSession {
+  id: string;
+  task_id: string;
+  household_id: string;
+  session_date: string;          // YYYY-MM-DD
+  start_time: string | null;     // HH:MM:SS  (null = 종일)
+  end_time: string | null;
+  is_done: boolean;
+  done_at: string | null;
+  note: string;
+  created_at: string;
+  updated_at: string;
+  // 카드 표시용
+  task_title?: string;
+  task_color?: string;
+  member?: Member;
 }
 
 export interface TaskCompletion {
@@ -339,6 +381,10 @@ export interface TaskCompletion {
 
 export interface CreateTaskInput {
   household_id: string;
+  kind?: TaskKind;
+  start_date?: string | null;
+  deadline_date?: string | null;
+  deadline_time?: string | null;
   type: TaskType;
   title: string;
   memo?: string;
@@ -355,6 +401,7 @@ export interface CreateTaskInput {
   recurrence?: RecurrenceRule | null;
   until_date?: string | null;
   until_count?: number | null;
+  goal_id?: string | null;
 }
 
 // 오늘의 할일 통합 응답 (one_time + routine 인스턴스)
@@ -382,6 +429,80 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+// ─────────────────────────────────────────
+// 목표 (Goals)
+// ─────────────────────────────────────────
+export type GoalType = 'frequency' | 'quantitative' | 'deadline';
+export type GoalStatus = 'active' | 'paused' | 'achieved' | 'cancelled';
+
+export interface Goal {
+  id: string;
+  household_id: string;
+  type: GoalType;
+  title: string;
+  memo: string;
+  emoji: string;
+  category_main: string;
+  member_id: string | null;
+  target_member_ids: string[];
+  freq_count: number | null;
+  freq_period: 'week' | 'month' | null;
+  target_value: number | null;
+  unit: string;
+  start_date: string | null;
+  due_date: string | null;
+  status: GoalStatus;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // 계산 필드
+  current_value?: number;
+  progress_rate?: number;
+  linked_task_count?: number;
+  member?: Member;
+  // 단건 조회 시
+  linked_tasks?: Array<{
+    id: string;
+    title: string;
+    type: 'one_time' | 'routine';
+    is_fixed: boolean;
+    due_date: string | null;
+    due_time: string | null;
+    recurrence: RecurrenceRule | null;
+    member?: Member;
+  }>;
+  events?: Array<{
+    id: string;
+    occurred_on: string;
+    delta: number;
+    source: string;
+    note: string;
+  }>;
+}
+
+export interface CreateGoalInput {
+  household_id?: string;
+  type: GoalType;
+  title: string;
+  memo?: string;
+  emoji?: string;
+  category_main?: string;
+  member_id?: string | null;
+  target_member_ids?: string[];
+  freq_count?: number | null;
+  freq_period?: 'week' | 'month' | null;
+  target_value?: number | null;
+  unit?: string;
+  start_date?: string | null;
+  due_date?: string | null;
+}
+
+export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
+  frequency: '빈도',
+  quantitative: '성취',
+  deadline: '마감',
+};
 
 // ─────────────────────────────────────────
 // 노션 가져오기 소스

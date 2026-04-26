@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
@@ -86,6 +86,8 @@ function TodoDayPage() {
   // 드래그 상태 — resize(top/bottom) 또는 move(블록 이동)
   const [drag, setDrag] = useState<{
     taskId: string;
+    /** todo 세션이면 session id, event 시간 일정이면 null */
+    sessionId: string | null;
     mode: 'resize_top' | 'resize_bottom' | 'move';
     startY: number;
     origStart: number;
@@ -112,6 +114,25 @@ function TodoDayPage() {
 
   const allDayTasks = allTasks.filter((t) => !t.is_fixed);
   const timedTasks = allTasks.filter((t) => t.is_fixed && t.due_time);
+
+  // 그 날의 todo 세션 (별도 fetch)
+  const [sessions, setSessions] = useState<Array<Record<string, unknown>>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/tasks/sessions?from=${date}&to=${date}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setSessions(d.sessions ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [date]);
+  const refetchSessions = useCallback(() => {
+    fetch(`/api/tasks/sessions?from=${date}&to=${date}`)
+      .then((r) => r.json())
+      .then((d) => setSessions(d.sessions ?? []));
+  }, [date]);
 
   // 스크롤 ref — 진입 시 6시로
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -159,20 +180,65 @@ function TodoDayPage() {
   const holidayMap = useMemo(() => getHolidaysMap(day.year()), [day]);
   const holidays = holidayMap[date] ?? [];
 
-  // 시간 task 위치 계산
+  // 시간 task 위치 계산 — event 시간 일정 + todo 작업 세션 통합
   const timedItems = useMemo(() => {
-    return timedTasks.map((t) => {
+    type T = {
+      task: Task;
+      top: number;
+      height: number;
+      startMin: number;
+      endMin: number;
+      /** todo 세션이면 session id, event 면 null */
+      sessionId: string | null;
+      isDone?: boolean;
+    };
+    const out: T[] = [];
+
+    // event 시간 일정
+    for (const t of timedTasks) {
       const [sh, sm] = (t.due_time ?? '00:00').split(':').map(Number);
       const [eh, em] = (t.end_time ?? t.due_time ?? '00:00').split(':').map(Number);
       const startMin = sh * 60 + sm;
       let endMin = eh * 60 + em;
-      // 종료 = 시작이거나 0이면 1시간 기본
       if (endMin <= startMin) endMin = startMin + 60;
-      const top = (startMin / 60) * HOUR_HEIGHT;
-      const height = ((endMin - startMin) / 60) * HOUR_HEIGHT;
-      return { task: t, top, height, startMin, endMin };
-    });
-  }, [timedTasks]);
+      out.push({
+        task: t,
+        top: (startMin / 60) * HOUR_HEIGHT,
+        height: ((endMin - startMin) / 60) * HOUR_HEIGHT,
+        startMin,
+        endMin,
+        sessionId: null,
+      });
+    }
+
+    // todo 세션 (그 날짜 + start_time 있는 것)
+    for (const sRaw of sessions) {
+      const s = sRaw as unknown as {
+        id: string;
+        start_time: string | null;
+        end_time: string | null;
+        is_done: boolean;
+        task: Task | null;
+      };
+      if (!s.start_time || !s.task) continue;
+      const [sh, sm] = s.start_time.split(':').map(Number);
+      const [eh, em] = (s.end_time ?? s.start_time).split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      let endMin = eh * 60 + em;
+      if (endMin <= startMin) endMin = startMin + 60;
+      out.push({
+        task: s.task,
+        top: (startMin / 60) * HOUR_HEIGHT,
+        height: ((endMin - startMin) / 60) * HOUR_HEIGHT,
+        startMin,
+        endMin,
+        sessionId: s.id,
+        isDone: s.is_done,
+      });
+    }
+
+    return out;
+  }, [timedTasks, sessions]);
 
   // 겹침 처리: 시간이 겹치는 task 끼리 그룹 만들고 lane 배정
   const positioned = useMemo(() => {
@@ -218,22 +284,20 @@ function TodoDayPage() {
   // ── 드래그 시작 ──
   const startDrag = (
     e: React.PointerEvent,
-    task: Task,
+    p: { task: Task; sessionId: string | null; startMin: number; endMin: number },
     mode: 'resize_top' | 'resize_bottom' | 'move'
   ) => {
     e.stopPropagation();
     e.preventDefault();
-    const origStart = timeToMin(task.due_time);
-    const origEndRaw = timeToMin(task.end_time ?? task.due_time);
-    const origEnd = origEndRaw > origStart ? origEndRaw : origStart + 60;
     setDrag({
-      taskId: task.id,
+      taskId: p.task.id,
+      sessionId: p.sessionId,
       mode,
       startY: e.clientY,
-      origStart,
-      origEnd,
-      curStart: origStart,
-      curEnd: origEnd,
+      origStart: p.startMin,
+      origEnd: p.endMin,
+      curStart: p.startMin,
+      curEnd: p.endMin,
       moved: false,
     });
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -275,12 +339,27 @@ function TodoDayPage() {
       }, 50);
       if (d.curStart === d.origStart && d.curEnd === d.origEnd) return;
       try {
-        await update(d.taskId, {
-          is_fixed: true,
-          due_time: minToTimeStr(d.curStart),
-          end_time: minToTimeStr(d.curEnd),
-        });
-        refetch();
+        if (d.sessionId) {
+          // todo 작업 세션 — sessions API
+          await fetch(`/api/tasks/${d.taskId}/sessions`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: d.sessionId,
+              start_time: minToTimeStr(d.curStart),
+              end_time: minToTimeStr(d.curEnd),
+            }),
+          });
+          refetchSessions();
+        } else {
+          // event 시간 일정 — task API
+          await update(d.taskId, {
+            is_fixed: true,
+            due_time: minToTimeStr(d.curStart),
+            end_time: minToTimeStr(d.curEnd),
+          });
+          refetch();
+        }
       } catch (err) {
         console.error('[drag save]', err);
         alert('저장 실패');
@@ -442,7 +521,8 @@ function TodoDayPage() {
             const widthPct = 100 / p.lanes;
             const leftPct = widthPct * p.lane;
             // 드래그 중이면 미리보기 위치/높이로 덮어쓰기
-            const isDragging = drag?.taskId === p.task.id;
+            const isDragging =
+              drag?.taskId === p.task.id && drag?.sessionId === p.sessionId;
             const top = isDragging
               ? (drag!.curStart / 60) * HOUR_HEIGHT
               : p.top;
@@ -457,15 +537,17 @@ function TodoDayPage() {
               : (p.task.end_time && p.task.end_time !== p.task.due_time
                   ? p.task.end_time.slice(0, 5)
                   : '');
+            const isSession = !!p.sessionId;
+            const sessionDone = !!p.isDone;
             return (
               <div
-                key={p.task.id}
+                key={p.sessionId ?? p.task.id}
                 onClick={(e) => {
                   // 본문 영역 click 으로도 select (single-click)
                   e.stopPropagation();
                   select(p.task);
                 }}
-                className={`absolute rounded-lg text-white text-left text-[11px] leading-tight overflow-hidden shadow-sm border border-white/30 ${completed ? 'opacity-50 line-through' : ''} ${isDragging ? 'ring-2 ring-white/70 z-30' : ''} ${selectedId === p.task.id ? 'ring-2 ring-blue-400 z-30' : ''}`}
+                className={`absolute rounded-lg text-white text-left text-[11px] leading-tight overflow-hidden shadow-sm border ${isSession ? 'border-dashed border-white/60' : 'border-white/30'} ${completed || sessionDone ? 'opacity-50 line-through' : ''} ${isDragging ? 'ring-2 ring-white/70 z-30' : ''} ${selectedId === p.task.id ? 'ring-2 ring-blue-400 z-30' : ''}`}
                 style={{
                   top: top + 1,
                   height: Math.max(height - 2, 18),
@@ -478,7 +560,7 @@ function TodoDayPage() {
               >
                 {/* 위쪽 핸들 */}
                 <div
-                  onPointerDown={(e) => startDrag(e, p.task, 'resize_top')}
+                  onPointerDown={(e) => startDrag(e, p, 'resize_top')}
                   className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize z-10 flex items-center justify-center"
                   aria-label="시작 시간 조절"
                 >
@@ -486,7 +568,7 @@ function TodoDayPage() {
                 </div>
                 {/* 본문 — 드래그=이동, 클릭=선택, 더블클릭=편집 */}
                 <div
-                  onPointerDown={(e) => startDrag(e, p.task, 'move')}
+                  onPointerDown={(e) => startDrag(e, p, 'move')}
                   onClick={(e) => {
                     if (justDraggedRef.current) return;
                     e.stopPropagation();
@@ -506,7 +588,7 @@ function TodoDayPage() {
                 </div>
                 {/* 아래쪽 핸들 */}
                 <div
-                  onPointerDown={(e) => startDrag(e, p.task, 'resize_bottom')}
+                  onPointerDown={(e) => startDrag(e, p, 'resize_bottom')}
                   className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize z-10 flex items-center justify-center"
                   aria-label="종료 시간 조절"
                 >

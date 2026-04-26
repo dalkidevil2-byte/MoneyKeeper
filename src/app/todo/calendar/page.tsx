@@ -104,6 +104,35 @@ export default function TodoCalendarPage() {
     return Array.from(map.values());
   }, [tasks, routines]);
 
+  // todo 의 deadline 날짜 → 개수 매핑 (점 표시용)
+  const todoDeadlinesByDate = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const t of allTasks) {
+      if (t.kind !== 'todo') continue;
+      if (t.status === 'cancelled' || t.status === 'done') continue;
+      if (!t.deadline_date) continue;
+      m[t.deadline_date] = (m[t.deadline_date] ?? 0) + 1;
+    }
+    return m;
+  }, [allTasks]);
+
+  // todo 작업 세션 (월간 fetch) — 캘린더 점 표시용
+  const [sessionsByDate, setSessionsByDate] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const from = month.startOf('month').format('YYYY-MM-DD');
+    const to = month.endOf('month').format('YYYY-MM-DD');
+    fetch(`/api/tasks/sessions?from=${from}&to=${to}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const map: Record<string, number> = {};
+        for (const s of d.sessions ?? []) {
+          if (!s.session_date) continue;
+          map[s.session_date] = (map[s.session_date] ?? 0) + 1;
+        }
+        setSessionsByDate(map);
+      });
+  }, [month]);
+
   // chip 드래그 처리
   const startChipDrag = (e: React.PointerEvent, task: Task, fromDate: string) => {
     e.stopPropagation();
@@ -587,8 +616,28 @@ export default function TodoCalendarPage() {
                   isSelected ? 'ring-2 ring-amber-400 ring-inset z-10' : ''
                 }`}
               >
-                {/* 날짜 숫자 */}
-                <div className="flex items-center justify-end mb-0.5 px-1">
+                {/* 날짜 숫자 + todo deadline/session 점 */}
+                <div className="flex items-center justify-between mb-0.5 px-1">
+                  <div className="flex items-center gap-1">
+                    {todoDeadlinesByDate[key] ? (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[9px] text-amber-600 font-bold"
+                        title={`할일 마감 ${todoDeadlinesByDate[key]}건`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        {todoDeadlinesByDate[key]}
+                      </span>
+                    ) : null}
+                    {sessionsByDate[key] ? (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[9px] text-indigo-500 font-bold"
+                        title={`작업 시간 ${sessionsByDate[key]}건`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                        {sessionsByDate[key]}
+                      </span>
+                    ) : null}
+                  </div>
                   <span
                     className={`inline-flex items-center justify-center text-[11px] font-semibold ${
                       isToday

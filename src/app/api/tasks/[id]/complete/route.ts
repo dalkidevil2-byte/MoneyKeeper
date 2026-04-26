@@ -25,10 +25,10 @@ export async function POST(
     const memberId: string | null = body.member_id ?? null;
     const note: string = body.note ?? '';
 
-    // 작업 정보 조회 (type 알아야 함)
+    // 작업 정보 조회 (type, goal_id 알아야 함)
     const { data: task, error: fetchErr } = await supabase
       .from('tasks')
-      .select('id, type, household_id, member_id')
+      .select('id, type, household_id, member_id, goal_id')
       .eq('id', id)
       .single();
     if (fetchErr || !task) {
@@ -63,6 +63,25 @@ export async function POST(
         .eq('id', id);
     }
 
+    // 목표 자동 집계 — task 가 goal 에 연결돼 있으면 progress event 추가
+    if (task.goal_id && completion) {
+      const { error: progErr } = await supabase
+        .from('goal_progress_events')
+        .upsert(
+          {
+            goal_id: task.goal_id,
+            household_id: householdId,
+            occurred_on: completedOn,
+            delta: 1,
+            source: task.type === 'routine' ? 'routine_completion' : 'task_completion',
+            task_id: id,
+            task_completion_id: completion.id,
+          },
+          { onConflict: 'goal_id,task_completion_id' },
+        );
+      if (progErr) console.error('[goal auto-progress]', progErr);
+    }
+
     return NextResponse.json({ completion });
   } catch (error) {
     console.error('[POST /tasks/:id/complete]', error);
@@ -84,12 +103,27 @@ export async function DELETE(
   const date = searchParams.get('date') ?? dayjs().format('YYYY-MM-DD');
 
   try {
+    // 삭제 전에 completion id 확보 → 연관 progress event 도 정리
+    const { data: existing } = await supabase
+      .from('task_completions')
+      .select('id')
+      .eq('task_id', id)
+      .eq('completed_on', date)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('task_completions')
       .delete()
       .eq('task_id', id)
       .eq('completed_on', date);
     if (error) throw error;
+
+    if (existing) {
+      await supabase
+        .from('goal_progress_events')
+        .delete()
+        .eq('task_completion_id', existing.id);
+    }
 
     const { data: task } = await supabase
       .from('tasks')

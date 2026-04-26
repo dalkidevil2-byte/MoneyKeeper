@@ -153,6 +153,8 @@ function computeUntilCountEndDate(
 export function shouldShowOnCalendar(task: Task, date: Dayjs | string): boolean {
   if (!task.is_active) return false;
   if (task.status === 'cancelled') return false;
+  // 할일(todo)은 캘린더 chip 으로 표시하지 않음 — 별도로 deadline 점만 찍음
+  if (task.kind === 'todo') return false;
 
   const target = dayjs(date).format('YYYY-MM-DD');
   const completions = task.completions ?? [];
