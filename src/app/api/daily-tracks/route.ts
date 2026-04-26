@@ -54,15 +54,33 @@ export async function GET(req: NextRequest) {
       .in('track_id', trackIds)
       .gte('done_on', earliestStart);
 
+    const todayStr = today.format('YYYY-MM-DD');
+    const todayDow = today.day();
+
     const enriched = tracks.map((t) => {
       const ps = periodStart(t.period_unit);
-      const count = (logs ?? []).filter(
-        (l) => l.track_id === t.id && (l.done_on as string) >= ps,
-      ).length;
+      const trackLogs = (logs ?? []).filter((l) => l.track_id === t.id);
+      const count = trackLogs.filter((l) => (l.done_on as string) >= ps).length;
+      const totalCount = trackLogs.length;
+
+      // 오늘 활성화 여부 — 요일 / 시작일 / 종료일 / until_count 종합
+      let isActiveToday = true;
+      if (t.start_date && todayStr < (t.start_date as string)) isActiveToday = false;
+      if (t.end_date && todayStr > (t.end_date as string)) isActiveToday = false;
+      const wds = (t.weekdays as number[] | null) ?? [];
+      if (Array.isArray(wds) && wds.length > 0 && !wds.includes(todayDow)) {
+        isActiveToday = false;
+      }
+      if (t.until_count != null && totalCount >= (t.until_count as number)) {
+        isActiveToday = false;
+      }
+
       return {
         ...t,
         current_count: count,
+        total_count: totalCount,
         is_done_today: count >= t.target_count,
+        is_active_today: isActiveToday,
       };
     });
     return NextResponse.json({ tracks: enriched });
@@ -94,6 +112,11 @@ export async function POST(req: NextRequest) {
       period_unit: body.period_unit ?? 'day',
       start_date: body.start_date ?? null,
       end_date: body.end_date ?? null,
+      weekdays:
+        Array.isArray(body.weekdays) && body.weekdays.length > 0
+          ? body.weekdays
+          : null,
+      until_count: body.until_count ?? null,
       is_active: true,
     };
     const { data, error } = await supabase

@@ -447,6 +447,8 @@ export interface DailyTrack {
   period_unit: DailyTrackPeriod;
   start_date: string | null;
   end_date: string | null;
+  weekdays: number[] | null;    // 활성 요일 (0=일, 6=토). null/빈 배열이면 매일
+  until_count: number | null;   // 총 N회 완료까지만 (도달 시 자동 비활성)
   is_active: boolean;
   position: number;
   created_at: string;
@@ -454,7 +456,9 @@ export interface DailyTrack {
   // 계산 필드
   member?: Member;
   current_count?: number;       // 현재 주기 안의 완료 수
+  total_count?: number;         // 누적 총 횟수
   is_done_today?: boolean;      // (current_count >= target_count)
+  is_active_today?: boolean;    // 오늘 활성화 (요일/기간 만족)
 }
 
 export interface CreateDailyTrackInput {
@@ -468,6 +472,8 @@ export interface CreateDailyTrackInput {
   period_unit?: DailyTrackPeriod;
   start_date?: string | null;
   end_date?: string | null;
+  weekdays?: number[] | null;
+  until_count?: number | null;
 }
 
 export const DAILY_TRACK_PERIOD_LABELS: Record<DailyTrackPeriod, string> = {

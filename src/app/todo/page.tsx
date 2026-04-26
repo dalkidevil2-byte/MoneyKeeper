@@ -8,6 +8,7 @@ import TaskCard from '@/components/todo/TaskCard';
 import NotificationBell from '@/components/todo/NotificationBell';
 import QuickInputBar from '@/components/todo/QuickInputBar';
 import TaskFormSheet from '@/components/todo/TaskFormSheet';
+import DailyTrackDetailSheet from '@/components/todo/DailyTrackDetailSheet';
 import { useTodayTasks, useCompleteTask, useTasks } from '@/hooks/useTasks';
 import { useMembers } from '@/hooks/useAccounts';
 import type { Task, TodayTask, DailyTrack } from '@/types';
@@ -26,6 +27,7 @@ export default function TodoHomePage() {
   });
   // Daily Track Record
   const [dailyTracks, setDailyTracks] = useState<DailyTrack[]>([]);
+  const [trackDetailId, setTrackDetailId] = useState<string | null>(null);
   const refetchTracks = () => {
     const sp = new URLSearchParams({
       household_id: process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!,
@@ -262,20 +264,28 @@ export default function TodoHomePage() {
           }}
         />
 
-        {/* Daily Track Record — 매일/주기적 체크 */}
-        {dailyTracks.length > 0 && (
+        {/* Daily Track Record — 오늘 활성화된 항목만 */}
+        {dailyTracks.filter((t) => t.is_active_today !== false).length > 0 && (
           <section>
             <h2 className="text-sm font-bold text-gray-700 mb-2">
-              📌 Daily Track ({dailyTracks.filter((t) => t.is_done_today).length}/
-              {dailyTracks.length})
+              📌 Daily Track (
+              {
+                dailyTracks.filter(
+                  (t) => t.is_active_today !== false && t.is_done_today,
+                ).length
+              }
+              /{dailyTracks.filter((t) => t.is_active_today !== false).length})
             </h2>
             <div className="space-y-1.5">
-              {dailyTracks.map((t) => (
+              {dailyTracks
+                .filter((t) => t.is_active_today !== false)
+                .map((t) => (
                 <DailyTrackRow
                   key={t.id}
                   track={t}
                   onCheck={() => checkTrack(t)}
                   onUncheck={() => uncheckTrack(t)}
+                  onClick={() => setTrackDetailId(t.id)}
                 />
               ))}
             </div>
@@ -299,6 +309,14 @@ export default function TodoHomePage() {
         defaults={sheetDefaults}
         occurrenceDate={todayKey}
       />
+
+      {trackDetailId && (
+        <DailyTrackDetailSheet
+          trackId={trackDetailId}
+          onClose={() => setTrackDetailId(null)}
+          onChanged={refetchTracks}
+        />
+      )}
     </div>
   );
 }
@@ -504,20 +522,26 @@ function DailyTrackRow({
   track,
   onCheck,
   onUncheck,
+  onClick,
 }: {
   track: DailyTrack;
   onCheck: () => void;
   onUncheck: () => void;
+  onClick?: () => void;
 }) {
   const cur = track.current_count ?? 0;
   const tgt = track.target_count;
   const allDone = cur >= tgt;
   return (
     <div
-      className={`flex items-center gap-3 px-3 py-2.5 bg-white rounded-2xl border border-gray-100 ${allDone ? 'opacity-60' : ''}`}
+      onClick={onClick}
+      className={`flex items-center gap-3 px-3 py-2.5 bg-white rounded-2xl border border-gray-100 cursor-pointer ${allDone ? 'opacity-60' : ''}`}
     >
       <button
-        onClick={() => (allDone ? onUncheck() : onCheck())}
+        onClick={(e) => {
+          e.stopPropagation();
+          allDone ? onUncheck() : onCheck();
+        }}
         className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-colors ${
           allDone
             ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -560,7 +584,10 @@ function DailyTrackRow({
       </div>
       {cur > 0 && !allDone && (
         <button
-          onClick={onCheck}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCheck();
+          }}
           className="text-[11px] px-2 py-1 rounded bg-amber-500 text-white font-bold"
         >
           +1

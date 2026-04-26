@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, X, CheckCircle2, Circle, MoreHorizontal } from 'lucide-react';
 import type { DailyTrack, DailyTrackPeriod } from '@/types';
-import { DAILY_TRACK_PERIOD_LABELS } from '@/types';
+import { DAILY_TRACK_PERIOD_LABELS, WEEKDAY_LABELS } from '@/types';
 import { useMembers } from '@/hooks/useAccounts';
+import DailyTrackDetailSheet from '@/components/todo/DailyTrackDetailSheet';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -13,6 +14,7 @@ export default function DailyTracksPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<DailyTrack | null>(null);
   const [creating, setCreating] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const refetch = async () => {
     setLoading(true);
@@ -59,6 +61,7 @@ export default function DailyTracksPage() {
               onCheck={() => check(t)}
               onUncheck={() => uncheck(t)}
               onEdit={() => setEditing(t)}
+              onDetail={() => setDetailId(t.id)}
             />
           ))
         )}
@@ -85,6 +88,18 @@ export default function DailyTracksPage() {
           }}
         />
       )}
+
+      {detailId && (
+        <DailyTrackDetailSheet
+          trackId={detailId}
+          onClose={() => setDetailId(null)}
+          onChanged={refetch}
+          onEdit={(t) => {
+            setDetailId(null);
+            setEditing(t);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -94,11 +109,13 @@ function TrackRow({
   onCheck,
   onUncheck,
   onEdit,
+  onDetail,
 }: {
   track: DailyTrack;
   onCheck: () => void;
   onUncheck: () => void;
   onEdit: () => void;
+  onDetail: () => void;
 }) {
   const cur = track.current_count ?? 0;
   const tgt = track.target_count;
@@ -128,7 +145,7 @@ function TrackRow({
           <Circle size={18} className="text-gray-300" />
         )}
       </button>
-      <div className="flex-1 min-w-0" onClick={onEdit}>
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onDetail}>
         <div className="flex items-center gap-2">
           <span className="text-lg leading-none">{track.emoji || '✅'}</span>
           <span
@@ -192,8 +209,20 @@ function TrackFormSheet({
   const [periodUnit, setPeriodUnit] = useState<DailyTrackPeriod>(
     initial?.period_unit ?? 'day',
   );
+  const [weekdays, setWeekdays] = useState<number[]>(initial?.weekdays ?? []);
+  const [startDate, setStartDate] = useState<string>(initial?.start_date ?? '');
+  const [endDate, setEndDate] = useState<string>(initial?.end_date ?? '');
+  const [untilCount, setUntilCount] = useState<number | ''>(
+    initial?.until_count ?? '',
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const toggleWeekday = (d: number) => {
+    setWeekdays((prev) =>
+      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort(),
+    );
+  };
 
   const submit = async () => {
     if (!title.trim()) {
@@ -211,6 +240,10 @@ function TrackFormSheet({
         target_member_ids: memberId ? [memberId] : [],
         target_count: targetCount,
         period_unit: periodUnit,
+        weekdays: weekdays.length > 0 ? weekdays : null,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        until_count: untilCount === '' ? null : untilCount,
       };
       const res = isEdit
         ? await fetch(`/api/daily-tracks/${initial.id}`, {
@@ -289,6 +322,81 @@ function TrackFormSheet({
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
               예: 하루 3회 양치, 주 1회 화장실 청소, 월 1회 칫솔 바꾸기
+            </div>
+          </div>
+
+          {/* 활성 요일 (선택) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">활성 요일 (선택)</label>
+            <div className="flex gap-1.5">
+              {WEEKDAY_LABELS.map((label, i) => {
+                const active = weekdays.includes(i);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => toggleWeekday(i)}
+                    className={`flex-1 py-1.5 text-xs rounded-lg ${
+                      active
+                        ? 'bg-amber-500 text-white font-bold'
+                        : 'bg-gray-100 text-gray-500'
+                    } ${i === 0 ? '' : ''} ${i === 6 ? '' : ''}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              아무 요일도 선택 안 하면 매일 노출. 특정 요일만 누르면 그 요일만.
+            </div>
+          </div>
+
+          {/* 기간 (선택) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">기간 (선택)</label>
+            <div className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-xs text-gray-500">시작</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="w-12 shrink-0 text-xs text-gray-500">종료</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              />
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              비워두면 무기한. 기간 지나면 자동 비활성화.
+            </div>
+          </div>
+
+          {/* 총 횟수 제한 (선택) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">총 횟수 제한 (선택)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={untilCount}
+                onChange={(e) =>
+                  setUntilCount(e.target.value === '' ? '' : parseInt(e.target.value) || 1)
+                }
+                placeholder="(무제한)"
+                className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              />
+              <span className="text-sm text-gray-600">회 완료까지만</span>
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              예: 30회 운동 챌린지. 도달 시 자동 보관.
             </div>
           </div>
 
