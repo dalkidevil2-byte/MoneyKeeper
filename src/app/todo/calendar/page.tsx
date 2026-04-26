@@ -662,7 +662,8 @@ export default function TodoCalendarPage() {
                 )}
 
                 {/* chip 들 — 슬롯 기반 (다일 일정도 같은 row 유지) */}
-                <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
+                {/* overflow-visible: 다일 일정 chip 의 음수 마진(-mx-px) 이 셀 보더 위로 겹쳐서 막대가 끊기지 않도록 */}
+                <div className="flex flex-col gap-0.5 flex-1 max-h-[64px] overflow-visible">
                   {visibleSlots.map((t, slotIdx) => {
                     if (!t) {
                       return (
