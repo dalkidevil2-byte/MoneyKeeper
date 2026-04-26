@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/todo/telegram/dispatch",
-      "schedule": "* * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
