@@ -220,26 +220,6 @@ export default function TodoHomePage() {
           </section>
         )}
 
-        {/* Daily Track Record — 매일/주기적 체크 */}
-        {dailyTracks.length > 0 && (
-          <section>
-            <h2 className="text-sm font-bold text-gray-700 mb-2">
-              📌 Daily Track ({dailyTracks.filter((t) => t.is_done_today).length}/
-              {dailyTracks.length})
-            </h2>
-            <div className="space-y-1.5">
-              {dailyTracks.map((t) => (
-                <DailyTrackRow
-                  key={t.id}
-                  track={t}
-                  onCheck={() => checkTrack(t)}
-                  onUncheck={() => uncheckTrack(t)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
         {/* 오늘 일정 (event) */}
         <section>
           <h2 className="text-sm font-bold text-gray-700 mb-2">📅 오늘의 일정</h2>
@@ -281,6 +261,26 @@ export default function TodoHomePage() {
             refetch();
           }}
         />
+
+        {/* Daily Track Record — 매일/주기적 체크 */}
+        {dailyTracks.length > 0 && (
+          <section>
+            <h2 className="text-sm font-bold text-gray-700 mb-2">
+              📌 Daily Track ({dailyTracks.filter((t) => t.is_done_today).length}/
+              {dailyTracks.length})
+            </h2>
+            <div className="space-y-1.5">
+              {dailyTracks.map((t) => (
+                <DailyTrackRow
+                  key={t.id}
+                  track={t}
+                  onCheck={() => checkTrack(t)}
+                  onUncheck={() => uncheckTrack(t)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       {/* FAB */}
