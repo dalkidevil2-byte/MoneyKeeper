@@ -431,6 +431,52 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 // ─────────────────────────────────────────
+// Daily Track Record (DTR)
+// ─────────────────────────────────────────
+export type DailyTrackPeriod = 'day' | 'week' | 'month';
+
+export interface DailyTrack {
+  id: string;
+  household_id: string;
+  title: string;
+  emoji: string;
+  category_main: string;
+  member_id: string | null;
+  target_member_ids: string[];
+  target_count: number;
+  period_unit: DailyTrackPeriod;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  // 계산 필드
+  member?: Member;
+  current_count?: number;       // 현재 주기 안의 완료 수
+  is_done_today?: boolean;      // (current_count >= target_count)
+}
+
+export interface CreateDailyTrackInput {
+  household_id?: string;
+  title: string;
+  emoji?: string;
+  category_main?: string;
+  member_id?: string | null;
+  target_member_ids?: string[];
+  target_count?: number;
+  period_unit?: DailyTrackPeriod;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export const DAILY_TRACK_PERIOD_LABELS: Record<DailyTrackPeriod, string> = {
+  day: '하루',
+  week: '주',
+  month: '월',
+};
+
+// ─────────────────────────────────────────
 // 목표 (Goals)
 // ─────────────────────────────────────────
 export type GoalType = 'frequency' | 'quantitative' | 'deadline';

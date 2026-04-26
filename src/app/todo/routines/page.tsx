@@ -34,8 +34,8 @@ export default function RoutinesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-white pb-24">
       <div className="px-5 pt-6 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">루틴 관리</h1>
-        <p className="text-sm text-gray-500 mt-1">반복되는 할일을 한 곳에서</p>
+        <h1 className="text-2xl font-bold text-gray-900">기념일·반복 일정</h1>
+        <p className="text-sm text-gray-500 mt-1">생일·기념일·연례 행사 (캘린더에 표시됨)</p>
       </div>
 
       <div className="px-5 space-y-5">

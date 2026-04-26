@@ -15,6 +15,7 @@ import {
   Calendar,
   Repeat,
   Target,
+  CheckCircle2,
 } from 'lucide-react';
 
 type Tab = {
@@ -51,12 +52,15 @@ const PAPER_TABS: Tab[] = [
 
 // 할일 섹션 바텀 네비 (홈 = /todo)
 const TODO_TABS: Tab[] = [
-  { href: '/todo',          icon: Home,     label: '오늘' },
-  { href: '/todo/calendar', icon: Calendar, label: '캘린더' },
-  { href: '/todo/goals',    icon: Target,   label: '목표' },
-  { href: '/todo/routines', icon: Repeat,   label: '루틴' },
-  { href: '/todo/settings', icon: Settings, label: '설정' },
+  { href: '/todo',          icon: Home,         label: '오늘' },
+  { href: '/todo/calendar', icon: Calendar,     label: '캘린더' },
+  { href: '/todo/tracks',   icon: CheckCircle2, label: 'Daily' },
+  { href: '/todo/goals',    icon: Target,       label: '목표' },
+  { href: '/todo/settings', icon: Settings,     label: '설정' },
 ];
+
+// 루틴(기념일/연례 일정) 페이지는 설정 안 진입 링크로만 노출됨.
+void Repeat;
 
 
 export default function BottomNav() {

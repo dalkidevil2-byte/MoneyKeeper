@@ -10,7 +10,8 @@ import QuickInputBar from '@/components/todo/QuickInputBar';
 import TaskFormSheet from '@/components/todo/TaskFormSheet';
 import { useTodayTasks, useCompleteTask, useTasks } from '@/hooks/useTasks';
 import { useMembers } from '@/hooks/useAccounts';
-import type { Task, TodayTask } from '@/types';
+import type { Task, TodayTask, DailyTrack } from '@/types';
+import { DAILY_TRACK_PERIOD_LABELS } from '@/types';
 
 dayjs.locale('ko');
 
@@ -23,9 +24,35 @@ export default function TodoHomePage() {
     kind: 'todo',
     member_id: memberFilter || undefined,
   });
+  // Daily Track Record
+  const [dailyTracks, setDailyTracks] = useState<DailyTrack[]>([]);
+  const refetchTracks = () => {
+    const sp = new URLSearchParams({
+      household_id: process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!,
+    });
+    if (memberFilter) sp.set('member_id', memberFilter);
+    fetch(`/api/daily-tracks?${sp.toString()}`)
+      .then((r) => r.json())
+      .then((d) => setDailyTracks(d.tracks ?? []));
+  };
+  useEffect(() => {
+    refetchTracks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberFilter]);
+
   const refetch = () => {
     refetchToday();
     refetchTodos();
+    refetchTracks();
+  };
+
+  const checkTrack = async (t: DailyTrack) => {
+    await fetch(`/api/daily-tracks/${t.id}/check`, { method: 'POST' });
+    refetchTracks();
+  };
+  const uncheckTrack = async (t: DailyTrack) => {
+    await fetch(`/api/daily-tracks/${t.id}/check`, { method: 'DELETE' });
+    refetchTracks();
   };
 
   // 진입 시 노션 자동 sync (30분 throttle 은 서버에서)
@@ -187,6 +214,26 @@ export default function TodoHomePage() {
                   onToggle={() => handleToggle(item)}
                   onClick={() => openEdit(item.task)}
                   showOverdue
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Daily Track Record — 매일/주기적 체크 */}
+        {dailyTracks.length > 0 && (
+          <section>
+            <h2 className="text-sm font-bold text-gray-700 mb-2">
+              📌 Daily Track ({dailyTracks.filter((t) => t.is_done_today).length}/
+              {dailyTracks.length})
+            </h2>
+            <div className="space-y-1.5">
+              {dailyTracks.map((t) => (
+                <DailyTrackRow
+                  key={t.id}
+                  track={t}
+                  onCheck={() => checkTrack(t)}
+                  onUncheck={() => uncheckTrack(t)}
                 />
               ))}
             </div>
@@ -449,6 +496,82 @@ function TodoGroup({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function DailyTrackRow({
+  track,
+  onCheck,
+  onUncheck,
+}: {
+  track: DailyTrack;
+  onCheck: () => void;
+  onUncheck: () => void;
+}) {
+  const cur = track.current_count ?? 0;
+  const tgt = track.target_count;
+  const allDone = cur >= tgt;
+  return (
+    <div
+      className={`flex items-center gap-3 px-3 py-2.5 bg-white rounded-2xl border border-gray-100 ${allDone ? 'opacity-60' : ''}`}
+    >
+      <button
+        onClick={() => (allDone ? onUncheck() : onCheck())}
+        className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-colors ${
+          allDone
+            ? 'bg-emerald-500 border-emerald-500 text-white'
+            : cur > 0
+              ? 'bg-amber-100 border-amber-400 text-amber-700'
+              : 'border-gray-300 text-transparent hover:border-amber-400'
+        }`}
+        aria-label={allDone ? '취소' : '체크'}
+      >
+        {allDone ? (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M3 7.5L6 10.5L11 4.5"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : cur > 0 ? (
+          <span>
+            {cur}/{tgt}
+          </span>
+        ) : (
+          <span>·</span>
+        )}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base leading-none">{track.emoji || '✅'}</span>
+          <span
+            className={`text-sm font-semibold truncate ${allDone ? 'line-through text-gray-400' : 'text-gray-800'}`}
+          >
+            {track.title}
+          </span>
+        </div>
+        <div className="text-[10px] text-gray-500 mt-0.5">
+          {DAILY_TRACK_PERIOD_LABELS[track.period_unit]} {track.target_count}회
+        </div>
+      </div>
+      {cur > 0 && !allDone && (
+        <button
+          onClick={onCheck}
+          className="text-[11px] px-2 py-1 rounded bg-amber-500 text-white font-bold"
+        >
+          +1
+        </button>
+      )}
+      {track.member && (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: track.member.color }}
+        />
+      )}
     </div>
   );
 }

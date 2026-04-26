@@ -38,6 +38,25 @@ export default function TodoSettingsPage() {
         <NotificationSettingsSection />
         <TelegramSettingsSection />
 
+        {/* 기념일/반복 일정 진입 링크 (목록은 별도 페이지) */}
+        <section>
+          <h2 className="text-sm font-bold text-gray-700 mb-2">🎂 기념일·반복 일정</h2>
+          <a
+            href="/todo/routines"
+            className="block bg-white rounded-2xl p-4 border border-gray-100 shadow-sm active:scale-[0.99] transition-transform"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-bold text-gray-800">관리하기</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">
+                  생일·기념일·연례 행사 (캘린더에 표시됨)
+                </div>
+              </div>
+              <span className="text-gray-300">›</span>
+            </div>
+          </a>
+        </section>
+
         <section>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold text-gray-700">📒 노션 가져오기</h2>
