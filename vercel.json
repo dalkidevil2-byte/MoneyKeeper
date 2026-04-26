@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/todo/telegram/dispatch",
+      "schedule": "* * * * *"
+    }
+  ]
+}

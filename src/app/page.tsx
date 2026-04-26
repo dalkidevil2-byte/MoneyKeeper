@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { Wallet, TrendingUp, ChevronRight, Plus } from 'lucide-react';
+import { Wallet, TrendingUp, ChevronRight, ListTodo } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import BudgetSummary from '@/components/home/BudgetSummary';
 import StockSummary from '@/components/home/StockSummary';
+import TodoSummary from '@/components/home/TodoSummary';
+import NotificationBell from '@/components/todo/NotificationBell';
 
 dayjs.locale('ko');
 
@@ -19,15 +21,36 @@ export default function HubPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white pb-24">
       {/* 헤더 */}
-      <div className="px-5 pt-10 pb-6">
-        <h1 className="text-2xl font-bold text-gray-900">My Assistant</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {today.format('YYYY년 M월 D일 dddd')}
-        </p>
+      <div className="px-5 pt-10 pb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">My Assistant</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {today.format('YYYY년 M월 D일 dddd')}
+          </p>
+        </div>
+        <NotificationBell />
       </div>
 
       {/* 앱 카드들 */}
       <div className="px-5 space-y-3">
+        {/* 할일 카드 */}
+        <Link
+          href="/todo"
+          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+              <ListTodo size={28} className="text-amber-600" strokeWidth={2} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">할일</h2>
+              <p className="text-sm text-gray-500 mt-0.5">오늘의 일정 · 루틴</p>
+            </div>
+            <ChevronRight size={20} className="text-gray-300" />
+          </div>
+          <TodoSummary />
+        </Link>
+
         {/* 가계부 카드 */}
         <Link
           href="/budget"
@@ -63,17 +86,6 @@ export default function HubPage() {
           </div>
           <StockSummary />
         </Link>
-
-        {/* 추가 예정 플레이스홀더 */}
-        <div className="bg-gray-50 rounded-2xl p-5 border-2 border-dashed border-gray-200 flex items-center gap-4 opacity-60">
-          <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center shrink-0">
-            <Plus size={28} className="text-gray-400" strokeWidth={2} />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-gray-600">곧 추가 예정</h2>
-            <p className="text-sm text-gray-400 mt-0.5">투두 · 캘린더 · 일기</p>
-          </div>
-        </div>
       </div>
     </div>
   );

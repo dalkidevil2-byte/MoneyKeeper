@@ -11,12 +11,15 @@ export async function PATCH(
   const body = await req.json();
   const { id } = await params;
 
+  const allowed = ['name', 'color', 'is_active', 'telegram_chat_id', 'telegram_username'] as const;
+  const update: Record<string, unknown> = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) update[k] = body[k];
+  }
+
   const { data, error } = await supabase
     .from('members')
-    .update({
-      name: body.name,
-      color: body.color,
-    })
+    .update(update)
     .eq('id', id)
     .select()
     .single();

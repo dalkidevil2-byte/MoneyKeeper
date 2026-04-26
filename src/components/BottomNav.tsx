@@ -12,6 +12,9 @@ import {
   LineChart,
   Receipt,
   FlaskConical,
+  Calendar,
+  Repeat,
+  Archive,
 } from 'lucide-react';
 
 type Tab = {
@@ -46,16 +49,32 @@ const PAPER_TABS: Tab[] = [
   { href: '/stocks/paper/settings',     icon: Settings,     label: '설정' },
 ];
 
+// 할일 섹션 바텀 네비 (홈 = /todo)
+const TODO_TABS: Tab[] = [
+  { href: '/todo',          icon: Home,     label: '오늘' },
+  { href: '/todo/calendar', icon: Calendar, label: '캘린더' },
+  { href: '/todo/routines', icon: Repeat,   label: '루틴' },
+  { href: '/todo/archive',  icon: Archive,  label: '기록' },
+  { href: '/todo/settings', icon: Settings, label: '설정' },
+];
+
 export default function BottomNav() {
   const pathname = usePathname();
 
   // 허브 페이지에서는 바텀 네비 숨김
   if (pathname === '/') return null;
 
-  // 섹션 판별: paper > stock > budget 순서로 먼저 매칭
+  // 섹션 판별: paper > stock > todo > budget 순서로 먼저 매칭
   const isPaperSection = pathname.startsWith('/stocks/paper');
   const isStockSection = pathname.startsWith('/stocks');
-  const tabs = isPaperSection ? PAPER_TABS : isStockSection ? STOCK_TABS : BUDGET_TABS;
+  const isTodoSection = pathname.startsWith('/todo');
+  const tabs = isPaperSection
+    ? PAPER_TABS
+    : isStockSection
+      ? STOCK_TABS
+      : isTodoSection
+        ? TODO_TABS
+        : BUDGET_TABS;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
@@ -64,7 +83,10 @@ export default function BottomNav() {
           // 섹션 홈(/budget, /stocks, /stocks/paper)은 exact match만.
           // 하위 경로가 있을 수 있는 탭은 prefix match 허용.
           const isSectionHome =
-            href === '/budget' || href === '/stocks' || href === '/stocks/paper';
+            href === '/budget' ||
+            href === '/stocks' ||
+            href === '/stocks/paper' ||
+            href === '/todo';
           const active = isSectionHome
             ? pathname === href
             : pathname === href || pathname.startsWith(href + '/');

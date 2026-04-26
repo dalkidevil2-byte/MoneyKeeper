@@ -216,6 +216,55 @@ CREATE TABLE IF NOT EXISTS fixed_expense_templates (
 CREATE INDEX IF NOT EXISTS idx_fixed_expense_templates_household ON fixed_expense_templates(household_id);
 
 -- ─────────────────────────────────────────
+-- 11. tasks (할일/루틴) — TODO 모듈
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  type TEXT NOT NULL DEFAULT 'one_time'
+    CHECK (type IN ('one_time', 'routine')),
+  title TEXT NOT NULL,
+  memo TEXT DEFAULT '',
+  category_main TEXT DEFAULT '',
+  category_sub  TEXT DEFAULT '',
+  member_id UUID REFERENCES members(id) ON DELETE SET NULL,
+  target_member_ids UUID[] DEFAULT '{}',
+  is_fixed BOOLEAN DEFAULT FALSE,
+  due_date DATE,
+  due_time TIME,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','done','snoozed','cancelled')),
+  snoozed_to DATE,
+  completed_at TIMESTAMPTZ,
+  priority TEXT NOT NULL DEFAULT 'normal'
+    CHECK (priority IN ('low','normal','high')),
+  recurrence JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_household_due ON tasks(household_id, due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_household_status ON tasks(household_id, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_household_type ON tasks(household_id, type);
+CREATE INDEX IF NOT EXISTS idx_tasks_member ON tasks(member_id);
+
+-- ─────────────────────────────────────────
+-- 12. task_completions (할일 완료 기록)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS task_completions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  completed_on DATE NOT NULL,
+  completed_at TIMESTAMPTZ DEFAULT now(),
+  member_id UUID REFERENCES members(id) ON DELETE SET NULL,
+  note TEXT DEFAULT '',
+  UNIQUE(task_id, completed_on)
+);
+CREATE INDEX IF NOT EXISTS idx_task_completions_household_date ON task_completions(household_id, completed_on);
+CREATE INDEX IF NOT EXISTS idx_task_completions_task ON task_completions(task_id);
+
+-- ─────────────────────────────────────────
 -- 인덱스
 -- ─────────────────────────────────────────
 CREATE INDEX idx_transactions_household_date ON transactions(household_id, date DESC);
@@ -245,6 +294,7 @@ CREATE TRIGGER trg_transactions_updated_at  BEFORE UPDATE ON transactions  FOR E
 CREATE TRIGGER trg_budgets_updated_at       BEFORE UPDATE ON budgets       FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_receipts_updated_at      BEFORE UPDATE ON receipts      FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_items_updated_at         BEFORE UPDATE ON items         FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_tasks_updated_at         BEFORE UPDATE ON tasks         FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ─────────────────────────────────────────
 -- 시드 데이터 (개발용 기본값)

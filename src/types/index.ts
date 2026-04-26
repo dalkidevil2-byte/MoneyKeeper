@@ -49,6 +49,8 @@ export interface Member {
   role: MemberRole;
   color: string;
   is_active: boolean;
+  telegram_chat_id?: string;
+  telegram_username?: string;
   created_at: string;
   updated_at: string;
 }
@@ -275,3 +277,128 @@ export const PAYMENT_METHOD_TYPE_LABELS: Record<PaymentMethodType, string> = {
   cash: '현금',
   bank_transfer: '계좌이체',
 };
+
+// ─────────────────────────────────────────
+// TODO 모듈 타입
+// ─────────────────────────────────────────
+export type TaskType = 'one_time' | 'routine';
+export type TaskStatus = 'pending' | 'done' | 'snoozed' | 'cancelled';
+export type TaskPriority = 'low' | 'normal' | 'high';
+
+export type RecurrenceRule =
+  | { freq: 'daily' }
+  | { freq: 'weekly'; weekdays: number[] }            // 0=일, 6=토
+  | { freq: 'monthly'; lunar?: boolean }              // 매월 (시작일의 일자), lunar=true면 음력 기준
+  | { freq: 'yearly'; lunar?: boolean }               // 매년 (시작일의 월/일), lunar=true면 음력 기준
+  | { freq: 'interval'; every_days: number }          // N일마다
+  | { freq: 'count_per_period'; count: number; period: 'week' | 'month' };
+
+export interface Task {
+  id: string;
+  household_id: string;
+  type: TaskType;
+  title: string;
+  memo: string;
+  category_main: string;
+  category_sub: string;
+  member_id: string | null;
+  target_member_ids: string[];
+  is_fixed: boolean;            // true=시간 지정, false=종일
+  due_date: string | null;      // 시작일
+  end_date: string | null;      // 종료일 (NULL=단일 일자)
+  due_time: string | null;      // 시작시간 (is_fixed=true 일 때)
+  end_time: string | null;      // 종료시간 (is_fixed=true 일 때)
+  status: TaskStatus;
+  snoozed_to: string | null;
+  completed_at: string | null;
+  priority: TaskPriority;
+  recurrence: RecurrenceRule | null;
+  until_date: string | null;       // 반복 종료일 (포함). 루틴 전용.
+  until_count: number | null;      // 반복 총 횟수 제한. 루틴 전용.
+  excluded_dates: string[];        // 건너뛸 날짜들 (YYYY-MM-DD). 루틴 전용.
+  source: 'manual' | 'notion';
+  source_external_id: string | null;
+  notion_last_edited_time: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // 조인 데이터
+  member?: Member;
+  completions?: TaskCompletion[];
+}
+
+export interface TaskCompletion {
+  id: string;
+  task_id: string;
+  household_id: string;
+  completed_on: string;
+  completed_at: string;
+  member_id: string | null;
+  note: string;
+}
+
+export interface CreateTaskInput {
+  household_id: string;
+  type: TaskType;
+  title: string;
+  memo?: string;
+  category_main?: string;
+  category_sub?: string;
+  member_id?: string | null;
+  target_member_ids?: string[];
+  is_fixed?: boolean;
+  due_date?: string | null;
+  end_date?: string | null;
+  due_time?: string | null;
+  end_time?: string | null;
+  priority?: TaskPriority;
+  recurrence?: RecurrenceRule | null;
+  until_date?: string | null;
+  until_count?: number | null;
+}
+
+// 오늘의 할일 통합 응답 (one_time + routine 인스턴스)
+export interface TodayTask {
+  task: Task;
+  // routine의 경우 표시 기준일 (= 오늘) — one_time은 due_date와 동일
+  occurrence_date: string;
+  // routine의 경우 오늘 완료 여부, one_time은 status==='done'
+  completed_today: boolean;
+  // routine completion id (있을 때만)
+  completion_id?: string;
+}
+
+export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
+  low: '낮음',
+  normal: '보통',
+  high: '높음',
+};
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  pending: '예정',
+  done: '완료',
+  snoozed: '미룸',
+  cancelled: '취소',
+};
+
+export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+// ─────────────────────────────────────────
+// 노션 가져오기 소스
+// ─────────────────────────────────────────
+export interface TodoNotionSource {
+  id: string;
+  household_id: string;
+  name: string;
+  database_id: string;
+  database_url: string;
+  title_property: string;
+  date_property: string;
+  member_property: string;
+  category_property: string;
+  filter_property: string;        // 체크박스 속성명 — true 인 행만 가져옴 (빈값=필터 없음)
+  last_imported_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}

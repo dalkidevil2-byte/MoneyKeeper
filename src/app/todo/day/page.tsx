@@ -1,0 +1,533 @@
+'use client';
+
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ko';
+import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
+import { useTasks, useSaveTask } from '@/hooks/useTasks';
+import { useTaskClipboard } from '@/hooks/useTaskClipboard';
+import { useMembers } from '@/hooks/useAccounts';
+import { shouldShowOnCalendar, isTaskCompletedOn } from '@/lib/task-recurrence';
+import { getHolidaysMap, shortHolidayName } from '@/lib/korean-holidays';
+import TaskFormSheet from '@/components/todo/TaskFormSheet';
+import type { Task } from '@/types';
+
+dayjs.locale('ko');
+
+const HOUR_HEIGHT = 56; // px per hour
+const START_HOUR = 0;   // 그리드 시작 (스크롤 가능)
+const END_HOUR = 24;
+const DEFAULT_SCROLL_HOUR = 6; // 진입 시 6시로 스크롤
+const SNAP_MIN = 30; // 드래그 스냅 (분)
+
+const DEFAULT_COLOR = '#94a3b8';
+
+// "HH:mm" → 분
+function timeToMin(s: string | null | undefined): number {
+  if (!s) return 0;
+  const [h, m] = s.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+// 분 → "HH:mm:ss"
+function minToTimeStr(min: number): string {
+  const m = Math.max(0, Math.min(24 * 60 - 1, min));
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`;
+}
+
+export default function TodoDayPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <TodoDayPage />
+    </Suspense>
+  );
+}
+
+function TodoDayPage() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const initialDate = sp.get('date') ?? dayjs().format('YYYY-MM-DD');
+  const [date, setDate] = useState<string>(initialDate);
+  const day = dayjs(date);
+
+  const { members } = useMembers();
+  const { tasks, refetch: refetchTasks } = useTasks({
+    include_completions: true,
+  });
+  const { tasks: routines, refetch: refetchRoutines } = useTasks({
+    type: 'routine',
+    include_completions: true,
+  });
+  const refetch = () => {
+    refetchTasks();
+    refetchRoutines();
+  };
+  const { update } = useSaveTask();
+
+  // 키보드 단축키 (Ctrl+C / V / Delete)
+  // 붙여넣기 시 현재 보고 있는 날짜 + 마지막 클릭한 시간 라인을 사용
+  const lastHourRef = useRef<number | null>(null);
+  const { selectedId, select } = useTaskClipboard({
+    pasteContext: () => ({
+      date,
+      time:
+        lastHourRef.current != null
+          ? `${String(lastHourRef.current).padStart(2, '0')}:00`
+          : undefined,
+    }),
+    onChanged: () => refetch(),
+  });
+
+  // 직전 드래그가 실제 이동이었는지 — 직후 click 이벤트 무시용
+  const justDraggedRef = useRef(false);
+
+  // 드래그 상태 — resize(top/bottom) 또는 move(블록 이동)
+  const [drag, setDrag] = useState<{
+    taskId: string;
+    mode: 'resize_top' | 'resize_bottom' | 'move';
+    startY: number;
+    origStart: number;
+    origEnd: number;
+    curStart: number;
+    curEnd: number;
+    /** move 인 경우만: 실제 이동이 시작됐는지 (threshold 통과) — 클릭과 구분 */
+    moved?: boolean;
+  } | null>(null);
+
+  // 멤버 색
+  const memberColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const mem of members) m.set(mem.id, mem.color);
+    return m;
+  }, [members]);
+
+  const allTasks = useMemo(() => {
+    const map = new Map<string, Task>();
+    [...tasks, ...routines].forEach((t) => map.set(t.id, t));
+    return Array.from(map.values()).filter((t) => shouldShowOnCalendar(t, day));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, routines, date]);
+
+  const allDayTasks = allTasks.filter((t) => !t.is_fixed);
+  const timedTasks = allTasks.filter((t) => t.is_fixed && t.due_time);
+
+  // 스크롤 ref — 진입 시 6시로
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_HEIGHT - 20;
+    }
+  }, []);
+
+  // 시트
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [prefillStart, setPrefillStart] = useState<string | undefined>();
+  const [prefillEnd, setPrefillEnd] = useState<string | undefined>();
+
+  const openCreateAt = (hour: number) => {
+    const h = String(hour).padStart(2, '0');
+    setEditing(null);
+    setPrefillStart(`${h}:00`);
+    setPrefillEnd(`${String(Math.min(hour + 1, 23)).padStart(2, '0')}:00`);
+    setSheetOpen(true);
+  };
+  const openEdit = (t: Task) => {
+    setEditing(t);
+    setPrefillStart(undefined);
+    setPrefillEnd(undefined);
+    setSheetOpen(true);
+  };
+  const openCreateAllDay = () => {
+    setEditing(null);
+    setPrefillStart(undefined);
+    setPrefillEnd(undefined);
+    setSheetOpen(true);
+  };
+
+  const getTaskColor = (t: Task): string => {
+    if (t.target_member_ids && t.target_member_ids.length > 0) {
+      return memberColorMap.get(t.target_member_ids[0]) ?? DEFAULT_COLOR;
+    }
+    if (t.member_id) return memberColorMap.get(t.member_id) ?? DEFAULT_COLOR;
+    return DEFAULT_COLOR;
+  };
+
+  // 공휴일
+  const holidayMap = useMemo(() => getHolidaysMap(day.year()), [day]);
+  const holidays = holidayMap[date] ?? [];
+
+  // 시간 task 위치 계산
+  const timedItems = useMemo(() => {
+    return timedTasks.map((t) => {
+      const [sh, sm] = (t.due_time ?? '00:00').split(':').map(Number);
+      const [eh, em] = (t.end_time ?? t.due_time ?? '00:00').split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      let endMin = eh * 60 + em;
+      // 종료 = 시작이거나 0이면 1시간 기본
+      if (endMin <= startMin) endMin = startMin + 60;
+      const top = (startMin / 60) * HOUR_HEIGHT;
+      const height = ((endMin - startMin) / 60) * HOUR_HEIGHT;
+      return { task: t, top, height, startMin, endMin };
+    });
+  }, [timedTasks]);
+
+  // 겹침 처리: 시간이 겹치는 task 끼리 그룹 만들고 lane 배정
+  const positioned = useMemo(() => {
+    type Item = (typeof timedItems)[number] & { lane: number; lanes: number };
+    const sorted = [...timedItems].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+    const result: Item[] = [];
+    // 그룹 단위로 lane 처리
+    let group: typeof sorted = [];
+    let groupEnd = -1;
+    const flushGroup = () => {
+      if (group.length === 0) return;
+      // lane 배정 (greedy)
+      const laneEnds: number[] = [];
+      const items: Item[] = [];
+      for (const it of group) {
+        let lane = laneEnds.findIndex((e) => e <= it.startMin);
+        if (lane === -1) {
+          lane = laneEnds.length;
+          laneEnds.push(it.endMin);
+        } else {
+          laneEnds[lane] = it.endMin;
+        }
+        items.push({ ...it, lane, lanes: 0 });
+      }
+      const totalLanes = laneEnds.length;
+      for (const it of items) it.lanes = totalLanes;
+      result.push(...items);
+    };
+    for (const it of sorted) {
+      if (group.length === 0 || it.startMin < groupEnd) {
+        group.push(it);
+        groupEnd = Math.max(groupEnd, it.endMin);
+      } else {
+        flushGroup();
+        group = [it];
+        groupEnd = it.endMin;
+      }
+    }
+    flushGroup();
+    return result;
+  }, [timedItems]);
+
+  // ── 드래그 시작 ──
+  const startDrag = (
+    e: React.PointerEvent,
+    task: Task,
+    mode: 'resize_top' | 'resize_bottom' | 'move'
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const origStart = timeToMin(task.due_time);
+    const origEndRaw = timeToMin(task.end_time ?? task.due_time);
+    const origEnd = origEndRaw > origStart ? origEndRaw : origStart + 60;
+    setDrag({
+      taskId: task.id,
+      mode,
+      startY: e.clientY,
+      origStart,
+      origEnd,
+      curStart: origStart,
+      curEnd: origEnd,
+      moved: false,
+    });
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const handleMove = (e: PointerEvent) => {
+      const dy = e.clientY - drag.startY;
+      // 30분 스냅
+      const deltaMin = Math.round((dy / HOUR_HEIGHT) * 60 / SNAP_MIN) * SNAP_MIN;
+      let curStart = drag.origStart;
+      let curEnd = drag.origEnd;
+      if (drag.mode === 'resize_top') {
+        curStart = Math.max(0, Math.min(drag.origEnd - SNAP_MIN, drag.origStart + deltaMin));
+      } else if (drag.mode === 'resize_bottom') {
+        curEnd = Math.min(24 * 60, Math.max(drag.origStart + SNAP_MIN, drag.origEnd + deltaMin));
+      } else {
+        // move — 길이 유지하고 시작/종료 같이 이동
+        const length = drag.origEnd - drag.origStart;
+        let nextStart = drag.origStart + deltaMin;
+        nextStart = Math.max(0, Math.min(24 * 60 - length, nextStart));
+        curStart = nextStart;
+        curEnd = nextStart + length;
+      }
+      const moved = drag.moved || Math.abs(dy) > 4;
+      setDrag((d) => (d ? { ...d, curStart, curEnd, moved } : d));
+    };
+    const handleUp = async () => {
+      const d = drag;
+      setDrag(null);
+      if (!d) return;
+      // 클릭 수준이거나 변경 없으면 저장 스킵
+      if (d.mode === 'move' && !d.moved) return;
+      // 실제 이동이면 다음 click 1번 무시 (선택 토글 방지)
+      justDraggedRef.current = true;
+      setTimeout(() => {
+        justDraggedRef.current = false;
+      }, 50);
+      if (d.curStart === d.origStart && d.curEnd === d.origEnd) return;
+      try {
+        await update(d.taskId, {
+          is_fixed: true,
+          due_time: minToTimeStr(d.curStart),
+          end_time: minToTimeStr(d.curEnd),
+        });
+        refetch();
+      } catch (err) {
+        console.error('[drag save]', err);
+        alert('저장 실패');
+      }
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag]);
+
+  // 현재 시각 표시 (오늘일 때만)
+  const [now, setNow] = useState(dayjs());
+  useEffect(() => {
+    const id = setInterval(() => setNow(dayjs()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const isToday = day.isSame(now, 'day');
+  const nowTop = (now.hour() * 60 + now.minute()) / 60 * HOUR_HEIGHT;
+
+  return (
+    <div className="min-h-screen bg-white pb-24 flex flex-col">
+      {/* 헤더 */}
+      <div className="px-4 pt-5 pb-2 flex items-center gap-2 border-b border-gray-100">
+        <button
+          onClick={() => router.push('/todo/calendar')}
+          className="p-1.5 text-gray-500"
+          aria-label="캘린더로"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-1">
+          <button
+            onClick={() => setDate(day.subtract(1, 'day').format('YYYY-MM-DD'))}
+            className="p-1.5 text-gray-500"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <button
+            onClick={() => setDate(dayjs().format('YYYY-MM-DD'))}
+            className="text-base font-bold flex flex-col items-center"
+            title="오늘로"
+          >
+            <span>{day.format('M월 D일 (ddd)')}</span>
+            {holidays.length > 0 && (
+              <span className="text-[10px] text-rose-500 font-semibold leading-tight">
+                {shortHolidayName(holidays[0].name)}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setDate(day.add(1, 'day').format('YYYY-MM-DD'))}
+            className="p-1.5 text-gray-500"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+        <div className="w-7" />
+      </div>
+      <div className="hidden md:block text-[10px] text-gray-400 px-4 py-1 border-b border-gray-100">
+        💡 일정 클릭=선택 · 더블클릭=수정 · Ctrl+C/V · Delete
+      </div>
+
+      {/* 종일 영역 */}
+      {allDayTasks.length > 0 ? (
+        <div className="px-3 py-2 border-b border-gray-100 bg-amber-50/50">
+          <div className="text-[10px] text-gray-500 mb-1 font-semibold">종일</div>
+          <div className="flex flex-col gap-1">
+            {allDayTasks.map((t) => {
+              const completed = isTaskCompletedOn(t, date);
+              const isSel = selectedId === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => select(t)}
+                  onDoubleClick={() => openEdit(t)}
+                  className={`text-xs text-white text-left px-2 py-1 rounded truncate ${completed ? 'opacity-50 line-through' : ''} ${isSel ? 'ring-2 ring-blue-400' : ''}`}
+                  style={{ backgroundColor: getTaskColor(t) }}
+                >
+                  {t.title}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={openCreateAllDay}
+          className="px-4 py-2 border-b border-gray-100 text-[11px] text-gray-400 text-left bg-white hover:bg-gray-50"
+        >
+          + 종일 일정 추가
+        </button>
+      )}
+
+      {/* 타임테이블 (스크롤 영역) */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto relative">
+        <div
+          className="relative"
+          style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}
+        >
+          {/* 시간 라벨 + 그리드 라인 */}
+          {Array.from({ length: END_HOUR - START_HOUR }).map((_, i) => {
+            const hour = START_HOUR + i;
+            return (
+              <div
+                key={hour}
+                className="absolute left-0 right-0 flex items-start"
+                style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+              >
+                <div className="w-12 shrink-0 text-[10px] text-gray-400 text-right pr-2 pt-0.5 select-none">
+                  {String(hour).padStart(2, '0')}:00
+                </div>
+                <button
+                  onClick={() => {
+                    lastHourRef.current = hour;
+                    select(null);
+                    openCreateAt(hour);
+                  }}
+                  onMouseEnter={() => {
+                    lastHourRef.current = hour;
+                  }}
+                  className="flex-1 h-full border-t border-gray-100 hover:bg-amber-50/40 active:bg-amber-100/60 transition-colors"
+                  aria-label={`${hour}시 추가`}
+                />
+              </div>
+            );
+          })}
+
+          {/* 30분 보조 라인 */}
+          {Array.from({ length: END_HOUR - START_HOUR }).map((_, i) => (
+            <div
+              key={`half-${i}`}
+              className="absolute left-12 right-0 border-t border-dashed border-gray-100 pointer-events-none"
+              style={{ top: i * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+            />
+          ))}
+
+          {/* 현재 시각 라인 */}
+          {isToday && (
+            <div
+              className="absolute left-12 right-0 z-20 pointer-events-none"
+              style={{ top: nowTop }}
+            >
+              <div className="relative h-0">
+                <div className="absolute -left-1 -top-1.5 w-3 h-3 rounded-full bg-rose-500" />
+                <div className="absolute left-0 right-0 border-t-2 border-rose-500" />
+              </div>
+            </div>
+          )}
+
+          {/* 시간 task 블록 */}
+          {positioned.map((p) => {
+            const completed = isTaskCompletedOn(p.task, date);
+            const widthPct = 100 / p.lanes;
+            const leftPct = widthPct * p.lane;
+            // 드래그 중이면 미리보기 위치/높이로 덮어쓰기
+            const isDragging = drag?.taskId === p.task.id;
+            const top = isDragging
+              ? (drag!.curStart / 60) * HOUR_HEIGHT
+              : p.top;
+            const height = isDragging
+              ? ((drag!.curEnd - drag!.curStart) / 60) * HOUR_HEIGHT
+              : p.height;
+            const startLabel = isDragging
+              ? minToTimeStr(drag!.curStart).slice(0, 5)
+              : p.task.due_time?.slice(0, 5);
+            const endLabel = isDragging
+              ? minToTimeStr(drag!.curEnd).slice(0, 5)
+              : (p.task.end_time && p.task.end_time !== p.task.due_time
+                  ? p.task.end_time.slice(0, 5)
+                  : '');
+            return (
+              <div
+                key={p.task.id}
+                onClick={(e) => {
+                  // 본문 영역 click 으로도 select (single-click)
+                  e.stopPropagation();
+                  select(p.task);
+                }}
+                className={`absolute rounded-lg text-white text-left text-[11px] leading-tight overflow-hidden shadow-sm border border-white/30 ${completed ? 'opacity-50 line-through' : ''} ${isDragging ? 'ring-2 ring-white/70 z-30' : ''} ${selectedId === p.task.id ? 'ring-2 ring-blue-400 z-30' : ''}`}
+                style={{
+                  top: top + 1,
+                  height: Math.max(height - 2, 18),
+                  left: `calc(${leftPct}% + 50px)`,
+                  width: `calc(${widthPct}% - 52px)`,
+                  backgroundColor: getTaskColor(p.task),
+                  touchAction: 'none',
+                }}
+                title={p.task.title}
+              >
+                {/* 위쪽 핸들 */}
+                <div
+                  onPointerDown={(e) => startDrag(e, p.task, 'resize_top')}
+                  className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize z-10 flex items-center justify-center"
+                  aria-label="시작 시간 조절"
+                >
+                  <div className="w-6 h-0.5 rounded bg-white/70" />
+                </div>
+                {/* 본문 — 드래그=이동, 클릭=선택, 더블클릭=편집 */}
+                <div
+                  onPointerDown={(e) => startDrag(e, p.task, 'move')}
+                  onClick={(e) => {
+                    if (justDraggedRef.current) return;
+                    e.stopPropagation();
+                    select(p.task);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    openEdit(p.task);
+                  }}
+                  className="w-full h-full text-left px-1.5 py-1.5 select-none cursor-grab active:cursor-grabbing"
+                >
+                  <div className="font-semibold truncate">{p.task.title}</div>
+                  <div className="text-[9px] opacity-90 truncate">
+                    {startLabel}
+                    {endLabel ? `~${endLabel}` : ''}
+                  </div>
+                </div>
+                {/* 아래쪽 핸들 */}
+                <div
+                  onPointerDown={(e) => startDrag(e, p.task, 'resize_bottom')}
+                  className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize z-10 flex items-center justify-center"
+                  aria-label="종료 시간 조절"
+                >
+                  <div className="w-6 h-0.5 rounded bg-white/70" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <TaskFormSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSaved={refetch}
+        initial={editing}
+        defaultDate={date}
+        defaultStartTime={prefillStart}
+        defaultEndTime={prefillEnd}
+        occurrenceDate={date}
+      />
+    </div>
+  );
+}
