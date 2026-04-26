@@ -468,7 +468,7 @@ export default function TaskFormSheet({
                 />
               </div>
               <div className="text-[11px] text-gray-400">
-                💡 시작일이 미래면 그 날짜가 와야 할일 리스트에 보여요. 시작일 비워두면 즉시 표시.
+                💡 시작일은 "이때부터 할 수 있다" 의미예요. 비워둬도 됩니다.
               </div>
             </div>
           )}

@@ -270,12 +270,10 @@ function TodoSection({
 }) {
   const today = dayjs().startOf('day');
 
-  const todayStr = today.format('YYYY-MM-DD');
-  // 시작일이 미래인 todo 는 숨김 (할일 폭주 방지)
-  const visible = todos.filter((t) => !t.start_date || t.start_date <= todayStr);
+  // 모든 미완료 할일을 노출 (시작일 미래여도 보이게 — 사용자가 "있는 줄도 모르는" 상황 방지)
   // pending 과 done 분리 — done 은 맨 아래 별도 섹션
-  const pending = visible.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
-  const done = visible.filter((t) => t.status === 'done');
+  const pending = todos.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
+  const done = todos.filter((t) => t.status === 'done');
 
   // pending 만 deadline 그룹핑
   const groups: Record<string, Task[]> = {
