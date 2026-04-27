@@ -7,9 +7,11 @@ import dayjs from 'dayjs';
 import StockTransactionSheet, {
   type ExistingTx,
 } from '@/components/stock/StockTransactionSheet';
+import { computeRealizedTrades, type StockTx } from '@/lib/stock-holdings';
 
 type TxRow = ExistingTx & {
   account?: { id: string; broker_name: string; owner_id: string };
+  created_at?: string;
 };
 type Owner = { id: string; name: string };
 type Account = { id: string; owner_id: string; broker_name: string };
@@ -102,6 +104,60 @@ export default function StockTransactionsPage() {
     };
   }, [txs]);
 
+  // 매수 lot별 FIFO 잔여수량 맵 (buy txId → 잔여 주식수)
+  const buyRemainMap = useMemo(() => {
+    const byKey = new Map<string, TxRow[]>();
+    for (const t of txs) {
+      const key = `${t.account_id}-${t.ticker}`;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(t);
+    }
+    const result: Record<string, number> = {};
+    for (const list of byKey.values()) {
+      const sorted = list
+        .slice()
+        .sort(
+          (a, b) =>
+            a.date.localeCompare(b.date) ||
+            (a.created_at ?? '').localeCompare(b.created_at ?? '')
+        );
+      const lots: { txId: string; remaining: number }[] = [];
+      for (const t of sorted) {
+        if (t.type === 'BUY') {
+          lots.push({ txId: t.id, remaining: t.quantity });
+        } else {
+          let toSell = t.quantity;
+          for (const lot of lots) {
+            if (toSell <= 0) break;
+            const take = Math.min(lot.remaining, toSell);
+            lot.remaining -= take;
+            toSell -= take;
+          }
+        }
+      }
+      for (const lot of lots) result[lot.txId] = lot.remaining;
+    }
+    return result;
+  }, [txs]);
+
+  // 매도 거래별 실현손익 맵 (txId → { pl, plPct, avgCostAtSell, sellQty })
+  const realizedMap = useMemo(() => {
+    const trades = computeRealizedTrades(txs as unknown as StockTx[]);
+    const map: Record<
+      string,
+      { pl: number; plPct: number; avgCostAtSell: number; quantity: number }
+    > = {};
+    for (const r of trades) {
+      map[r.txId] = {
+        pl: r.pl,
+        plPct: r.plPct,
+        avgCostAtSell: r.avgCostAtSell,
+        quantity: r.quantity,
+      };
+    }
+    return map;
+  }, [txs]);
+
   // 날짜별 그룹
   const grouped = useMemo(() => {
     const map = new Map<string, TxRow[]>();
@@ -161,12 +217,19 @@ export default function StockTransactionsPage() {
                 {list.map((t) => {
                   const q = quotes[t.ticker];
                   const cost = t.quantity * t.price;
-                  // 매수만 현재가 기준 평가/손익 계산 (매도는 이미 청산된 거래)
                   const isBuy = t.type === 'BUY';
-                  const evalAmount = isBuy && q ? t.quantity * q.price : null;
-                  const diff = evalAmount != null ? evalAmount - cost : null;
-                  const diffPct =
-                    evalAmount != null && cost > 0 ? (diff! / cost) * 100 : null;
+                  // 매수: FIFO 잔여수량 기준 현재가 평가/손익
+                  const remainQty = isBuy ? buyRemainMap[t.id] ?? t.quantity : 0;
+                  const remainCost = isBuy ? remainQty * t.price : 0;
+                  const evalAmount = isBuy && q && remainQty > 0 ? remainQty * q.price : null;
+                  const evalDiff = evalAmount != null ? evalAmount - remainCost : null;
+                  const evalPct =
+                    evalAmount != null && remainCost > 0
+                      ? (evalDiff! / remainCost) * 100
+                      : null;
+                  const isFullySold = isBuy && remainQty === 0 && t.quantity > 0;
+                  // 매도: 거래 시점 평단가 기준 실현손익
+                  const realized = !isBuy ? realizedMap[t.id] ?? null : null;
                   const isKR = /\.(KS|KQ)$/i.test(t.ticker);
                   const fmtPrice = (n: number) =>
                     isKR
@@ -204,10 +267,37 @@ export default function StockTransactionsPage() {
                             </div>
                             {isBuy && q && evalAmount != null && (
                               <div className="text-[11px] text-gray-500 mt-0.5">
-                                현재가 <span className="font-semibold text-gray-700">{fmtPrice(q.price)}</span>
+                                {remainQty < t.quantity && (
+                                  <span className="text-amber-600 font-semibold mr-1">
+                                    잔여 {remainQty}주
+                                  </span>
+                                )}
+                                현재가{' '}
+                                <span className="font-semibold text-gray-700">
+                                  {fmtPrice(q.price)}
+                                </span>
                                 {' · '}평가{' '}
                                 <span className="font-semibold text-gray-800">
                                   {Math.round(evalAmount).toLocaleString('ko-KR')}
+                                </span>
+                              </div>
+                            )}
+                            {isFullySold && (
+                              <div className="text-[11px] text-gray-400 mt-0.5">
+                                전량 매도 완료
+                              </div>
+                            )}
+                            {!isBuy && realized && (
+                              <div className="text-[11px] text-gray-500 mt-0.5">
+                                평단{' '}
+                                <span className="font-semibold text-gray-700">
+                                  {fmtPrice(realized.avgCostAtSell)}
+                                </span>
+                                {' · '}원금{' '}
+                                <span className="font-semibold text-gray-800">
+                                  {Math.round(
+                                    realized.quantity * realized.avgCostAtSell
+                                  ).toLocaleString('ko-KR')}
                                 </span>
                               </div>
                             )}
@@ -221,26 +311,32 @@ export default function StockTransactionsPage() {
                               {t.type === 'BUY' ? '-' : '+'}
                               {Math.round(cost).toLocaleString('ko-KR')}
                             </div>
-                            {diff != null && (
-                              <div
-                                className={`text-[11px] font-semibold mt-0.5 ${
-                                  diff > 0
-                                    ? 'text-rose-500'
-                                    : diff < 0
-                                      ? 'text-blue-500'
-                                      : 'text-gray-400'
-                                }`}
-                              >
-                                {diff > 0 ? '+' : ''}
-                                {Math.round(diff).toLocaleString('ko-KR')}
-                                {diffPct != null && (
-                                  <span className="ml-1 text-[10px]">
-                                    ({diffPct > 0 ? '+' : ''}
-                                    {diffPct.toFixed(1)}%)
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                            {(() => {
+                              // 매수=현재가 손익, 매도=실현손익
+                              const pl = isBuy ? evalDiff : realized?.pl ?? null;
+                              const pct = isBuy ? evalPct : realized?.plPct ?? null;
+                              if (pl == null) return null;
+                              return (
+                                <div
+                                  className={`text-[11px] font-semibold mt-0.5 ${
+                                    pl > 0
+                                      ? 'text-rose-500'
+                                      : pl < 0
+                                        ? 'text-blue-500'
+                                        : 'text-gray-400'
+                                  }`}
+                                >
+                                  {pl > 0 ? '+' : ''}
+                                  {Math.round(pl).toLocaleString('ko-KR')}
+                                  {pct != null && (
+                                    <span className="ml-1 text-[10px]">
+                                      ({pct > 0 ? '+' : ''}
+                                      {pct.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             {isBuy && !q && quotesLoading && (
                               <div className="text-[10px] text-gray-300 mt-0.5">시세…</div>
                             )}
