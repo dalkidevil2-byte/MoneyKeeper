@@ -161,7 +161,9 @@ export default function StockTransactionsPage() {
                 {list.map((t) => {
                   const q = quotes[t.ticker];
                   const cost = t.quantity * t.price;
-                  const evalAmount = q ? t.quantity * q.price : null;
+                  // 매수만 현재가 기준 평가/손익 계산 (매도는 이미 청산된 거래)
+                  const isBuy = t.type === 'BUY';
+                  const evalAmount = isBuy && q ? t.quantity * q.price : null;
                   const diff = evalAmount != null ? evalAmount - cost : null;
                   const diffPct =
                     evalAmount != null && cost > 0 ? (diff! / cost) * 100 : null;
@@ -200,14 +202,12 @@ export default function StockTransactionsPage() {
                             <div className="text-[11px] text-gray-400 mt-0.5">
                               {t.ticker} · {t.quantity}주 × {fmtPrice(t.price)}
                             </div>
-                            {q && (
+                            {isBuy && q && evalAmount != null && (
                               <div className="text-[11px] text-gray-500 mt-0.5">
                                 현재가 <span className="font-semibold text-gray-700">{fmtPrice(q.price)}</span>
                                 {' · '}평가{' '}
                                 <span className="font-semibold text-gray-800">
-                                  {evalAmount != null
-                                    ? Math.round(evalAmount).toLocaleString('ko-KR')
-                                    : '-'}
+                                  {Math.round(evalAmount).toLocaleString('ko-KR')}
                                 </span>
                               </div>
                             )}
@@ -241,7 +241,7 @@ export default function StockTransactionsPage() {
                                 )}
                               </div>
                             )}
-                            {!q && quotesLoading && (
+                            {isBuy && !q && quotesLoading && (
                               <div className="text-[10px] text-gray-300 mt-0.5">시세…</div>
                             )}
                           </div>
