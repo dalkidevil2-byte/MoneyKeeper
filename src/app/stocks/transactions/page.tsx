@@ -13,11 +13,14 @@ type TxRow = ExistingTx & {
 };
 type Owner = { id: string; name: string };
 type Account = { id: string; owner_id: string; broker_name: string };
+type QuoteEntry = { price: number; currency?: string };
 
 export default function StockTransactionsPage() {
   const [txs, setTxs] = useState<TxRow[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [quotes, setQuotes] = useState<Record<string, QuoteEntry>>({});
+  const [quotesLoading, setQuotesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<
@@ -63,6 +66,41 @@ export default function StockTransactionsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // 거래 로드 후 고유 ticker 들의 현재가 조회
+  useEffect(() => {
+    if (txs.length === 0) return;
+    const symbols = Array.from(new Set(txs.map((t) => t.ticker).filter(Boolean)));
+    if (symbols.length === 0) return;
+    let cancelled = false;
+    setQuotesLoading(true);
+    fetch(`/api/stocks/quote?symbols=${encodeURIComponent(symbols.join(','))}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j) => {
+        if (cancelled) return;
+        const results: Array<{
+          symbol: string;
+          regularMarketPrice?: number;
+          currency?: string;
+        }> = j?.quoteResponse?.result ?? j?.results ?? [];
+        const map: Record<string, QuoteEntry> = {};
+        for (const r of results) {
+          if (r.symbol && typeof r.regularMarketPrice === 'number') {
+            map[r.symbol] = { price: r.regularMarketPrice, currency: r.currency };
+          }
+        }
+        setQuotes(map);
+      })
+      .catch(() => {
+        // 시세 실패해도 페이지는 계속 동작
+      })
+      .finally(() => {
+        if (!cancelled) setQuotesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [txs]);
 
   // 날짜별 그룹
   const grouped = useMemo(() => {
@@ -120,51 +158,98 @@ export default function StockTransactionsPage() {
                 <span className="text-[11px] text-gray-400">{list.length}건</span>
               </div>
               <ul className="divide-y divide-gray-50">
-                {list.map((t) => (
-                  <li key={t.id}>
-                    <button
-                      onClick={() => setSheet({ mode: 'edit', tx: t })}
-                      className="w-full text-left px-5 py-3 active:bg-gray-50"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
-                                t.type === 'BUY'
-                                  ? 'bg-red-50 text-red-600'
-                                  : 'bg-blue-50 text-blue-600'
+                {list.map((t) => {
+                  const q = quotes[t.ticker];
+                  const cost = t.quantity * t.price;
+                  const evalAmount = q ? t.quantity * q.price : null;
+                  const diff = evalAmount != null ? evalAmount - cost : null;
+                  const diffPct =
+                    evalAmount != null && cost > 0 ? (diff! / cost) * 100 : null;
+                  const isKR = /\.(KS|KQ)$/i.test(t.ticker);
+                  const fmtPrice = (n: number) =>
+                    isKR
+                      ? Math.round(n).toLocaleString('ko-KR')
+                      : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                  return (
+                    <li key={t.id}>
+                      <button
+                        onClick={() => setSheet({ mode: 'edit', tx: t })}
+                        className="w-full text-left px-5 py-3 active:bg-gray-50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                                  t.type === 'BUY'
+                                    ? 'bg-red-50 text-red-600'
+                                    : 'bg-blue-50 text-blue-600'
+                                }`}
+                              >
+                                {t.type === 'BUY' ? '매수' : '매도'}
+                              </span>
+                              <span className="text-sm font-semibold text-gray-900 truncate">
+                                {t.company_name || t.ticker}
+                              </span>
+                            </div>
+                            {accountLabel[t.account_id] && (
+                              <div className="text-[10px] text-indigo-500 mt-0.5">
+                                {accountLabel[t.account_id]}
+                              </div>
+                            )}
+                            <div className="text-[11px] text-gray-400 mt-0.5">
+                              {t.ticker} · {t.quantity}주 × {fmtPrice(t.price)}
+                            </div>
+                            {q && (
+                              <div className="text-[11px] text-gray-500 mt-0.5">
+                                현재가 <span className="font-semibold text-gray-700">{fmtPrice(q.price)}</span>
+                                {' · '}평가{' '}
+                                <span className="font-semibold text-gray-800">
+                                  {evalAmount != null
+                                    ? Math.round(evalAmount).toLocaleString('ko-KR')
+                                    : '-'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div
+                              className={`text-sm font-semibold ${
+                                t.type === 'BUY' ? 'text-red-500' : 'text-blue-500'
                               }`}
                             >
-                              {t.type === 'BUY' ? '매수' : '매도'}
-                            </span>
-                            <span className="text-sm font-semibold text-gray-900 truncate">
-                              {t.company_name || t.ticker}
-                            </span>
-                          </div>
-                          {accountLabel[t.account_id] && (
-                            <div className="text-[10px] text-indigo-500 mt-0.5">
-                              {accountLabel[t.account_id]}
+                              {t.type === 'BUY' ? '-' : '+'}
+                              {Math.round(cost).toLocaleString('ko-KR')}
                             </div>
-                          )}
-                          <div className="text-[11px] text-gray-400 mt-0.5">
-                            {t.ticker} · {t.quantity}주 × {Math.round(t.price).toLocaleString('ko-KR')}
+                            {diff != null && (
+                              <div
+                                className={`text-[11px] font-semibold mt-0.5 ${
+                                  diff > 0
+                                    ? 'text-rose-500'
+                                    : diff < 0
+                                      ? 'text-blue-500'
+                                      : 'text-gray-400'
+                                }`}
+                              >
+                                {diff > 0 ? '+' : ''}
+                                {Math.round(diff).toLocaleString('ko-KR')}
+                                {diffPct != null && (
+                                  <span className="ml-1 text-[10px]">
+                                    ({diffPct > 0 ? '+' : ''}
+                                    {diffPct.toFixed(1)}%)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {!q && quotesLoading && (
+                              <div className="text-[10px] text-gray-300 mt-0.5">시세…</div>
+                            )}
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <div
-                            className={`text-sm font-semibold ${
-                              t.type === 'BUY' ? 'text-red-500' : 'text-blue-500'
-                            }`}
-                          >
-                            {t.type === 'BUY' ? '-' : '+'}
-                            {Math.round(t.quantity * t.price).toLocaleString('ko-KR')}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  </li>
-                ))}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))
