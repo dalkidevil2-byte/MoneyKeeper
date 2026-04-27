@@ -631,8 +631,8 @@ export default function TodoCalendarPage() {
                   isSelected ? 'ring-2 ring-amber-400 ring-inset z-10' : ''
                 }`}
               >
-                {/* 날짜(좌) + todo deadline/session 점(우) */}
-                <div className="flex items-center justify-between mb-0.5 px-1 gap-1">
+                {/* 날짜(좌) + todo deadline/session 점(우) — 헤더 높이 고정 (today 동그라미 때문에 셀별 차이 방지) */}
+                <div className="flex items-center justify-between mb-0.5 px-1 gap-1 h-5">
                   <span
                     className={`shrink-0 inline-flex items-center justify-center text-[11px] font-semibold ${
                       isToday
