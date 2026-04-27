@@ -454,8 +454,8 @@ export default function TodoCalendarPage() {
       : 'rounded';
     const extendLeft = isMulti && !isStart;
     const extendRight = isMulti && !isEnd;
-    // 모바일 1px 보더 + 셀 padding 모두 덮으려면 2px 가 안전
-    const extendCls = `${extendLeft ? '-ml-0.5' : ''} ${extendRight ? '-mr-0.5' : ''}`;
+    // 셀 보더(1px) + selected ring(2px) 모두 덮어야 막대가 매끈하게 이어짐 → 4px(-1) 사용
+    const extendCls = `${extendLeft ? '-ml-1' : ''} ${extendRight ? '-mr-1' : ''}`;
     const isDraggingThis = chipDrag?.task.id === t.id && chipDrag.moved;
     return (
       <div
@@ -477,7 +477,7 @@ export default function TodoCalendarPage() {
           setEditing(t);
           setSheetOpen(true);
         }}
-        className={`text-[9px] leading-[12px] px-1 py-0.5 ${cornerCls} ${extendCls} truncate font-medium text-white cursor-grab active:cursor-grabbing ${completed ? 'opacity-50 line-through' : ''} ${isSel ? 'ring-2 ring-blue-400' : ''} ${isDraggingThis ? 'opacity-40' : ''}`}
+        className={`relative z-20 text-[9px] leading-[12px] px-1 py-0.5 ${cornerCls} ${extendCls} truncate font-medium text-white cursor-grab active:cursor-grabbing ${completed ? 'opacity-50 line-through' : ''} ${isSel ? 'ring-2 ring-blue-400' : ''} ${isDraggingThis ? 'opacity-40' : ''}`}
         style={{ backgroundColor: color, touchAction: 'none' }}
         title={t.title}
       >
