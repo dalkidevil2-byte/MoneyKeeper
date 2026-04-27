@@ -1199,6 +1199,18 @@ function WorkSessionsSection({ taskId }: { taskId: string }) {
     await fetch(`/api/tasks/${taskId}/sessions?session_id=${s.id}`, { method: 'DELETE' });
   };
 
+  // 빠른 누적 — 슬롯의 종료 시간을 N분 연장 (시작 시간 없으면 무시)
+  const bumpEnd = (s: TaskWorkSession, minutes: number) => {
+    if (!s.start_time) return;
+    const base = s.end_time || s.start_time;
+    const [h, m] = base.split(':').map(Number);
+    const total = (h * 60 + (m || 0) + minutes) % (24 * 60);
+    const eh = Math.floor(total / 60);
+    const em = total % 60;
+    const newEnd = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}:00`;
+    updateSession(s, { end_time: newEnd });
+  };
+
   return (
     <div>
       <label className="text-xs text-gray-500 mb-1 flex items-center justify-between">
@@ -1240,70 +1252,110 @@ function WorkSessionsSection({ taskId }: { taskId: string }) {
         </div>
       ) : (
         <div className="space-y-1.5">
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              className="flex items-center gap-2 px-2 py-1.5 bg-amber-50/60 rounded-lg border border-amber-100"
-            >
-              <button
-                type="button"
-                onClick={() => updateSession(s, { is_done: !s.is_done })}
-                className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
-                  s.is_done
-                    ? 'bg-amber-500 border-amber-500 text-white'
-                    : 'border-gray-300 hover:border-amber-400'
-                }`}
-                aria-label={s.is_done ? '해제' : '완료'}
+          {sessions.map((s) => {
+            // 슬롯 소요시간 계산
+            let slotMin = 0;
+            if (s.start_time && s.end_time) {
+              const [sh, sm] = s.start_time.split(':').map(Number);
+              const [eh, em] = s.end_time.split(':').map(Number);
+              slotMin = eh * 60 + em - (sh * 60 + sm);
+              if (slotMin < 0) slotMin = 0;
+            }
+            const slotLabel = (() => {
+              if (slotMin <= 0) return '0분';
+              const h = Math.floor(slotMin / 60);
+              const m = slotMin % 60;
+              if (h === 0) return `${m}분`;
+              if (m === 0) return `${h}시간`;
+              return `${h}시간 ${m}분`;
+            })();
+            return (
+              <div
+                key={s.id}
+                className="px-2 py-1.5 bg-amber-50/60 rounded-lg border border-amber-100"
               >
-                {s.is_done && (
-                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
-                    <path
-                      d="M3 7.5L6 10.5L11 4.5"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </button>
-              <input
-                type="date"
-                value={s.session_date}
-                onChange={(e) => updateSession(s, { session_date: e.target.value })}
-                className="px-2 py-1 text-xs border border-gray-200 rounded bg-white"
-              />
-              <input
-                type="time"
-                value={s.start_time?.slice(0, 5) ?? ''}
-                onChange={(e) =>
-                  updateSession(s, {
-                    start_time: e.target.value ? `${e.target.value}:00` : null,
-                  })
-                }
-                className="w-20 px-2 py-1 text-xs border border-gray-200 rounded bg-white"
-              />
-              <span className="text-xs text-gray-400">~</span>
-              <input
-                type="time"
-                value={s.end_time?.slice(0, 5) ?? ''}
-                onChange={(e) =>
-                  updateSession(s, {
-                    end_time: e.target.value ? `${e.target.value}:00` : null,
-                  })
-                }
-                className="w-20 px-2 py-1 text-xs border border-gray-200 rounded bg-white"
-              />
-              <button
-                type="button"
-                onClick={() => removeSession(s)}
-                className="text-gray-300 hover:text-rose-500 p-1"
-                aria-label="삭제"
-              >
-                <Trash2Icon size={13} />
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateSession(s, { is_done: !s.is_done })}
+                    className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                      s.is_done
+                        ? 'bg-amber-500 border-amber-500 text-white'
+                        : 'border-gray-300 hover:border-amber-400'
+                    }`}
+                    aria-label={s.is_done ? '해제' : '완료'}
+                  >
+                    {s.is_done && (
+                      <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                        <path
+                          d="M3 7.5L6 10.5L11 4.5"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                  <input
+                    type="date"
+                    value={s.session_date}
+                    onChange={(e) => updateSession(s, { session_date: e.target.value })}
+                    className="px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                  />
+                  <input
+                    type="time"
+                    value={s.start_time?.slice(0, 5) ?? ''}
+                    onChange={(e) =>
+                      updateSession(s, {
+                        start_time: e.target.value ? `${e.target.value}:00` : null,
+                      })
+                    }
+                    className="w-20 px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                  />
+                  <span className="text-xs text-gray-400">~</span>
+                  <input
+                    type="time"
+                    value={s.end_time?.slice(0, 5) ?? ''}
+                    onChange={(e) =>
+                      updateSession(s, {
+                        end_time: e.target.value ? `${e.target.value}:00` : null,
+                      })
+                    }
+                    className="w-20 px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeSession(s)}
+                    className="text-gray-300 hover:text-rose-500 p-1"
+                    aria-label="삭제"
+                  >
+                    <Trash2Icon size={13} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1 mt-1.5 pl-7 flex-wrap">
+                  <span className="text-[10px] text-amber-700 font-semibold mr-1">
+                    ⏱ {slotLabel}
+                  </span>
+                  {[
+                    { m: 10, label: '+10분' },
+                    { m: 30, label: '+30분' },
+                    { m: 60, label: '+1시간' },
+                  ].map((b) => (
+                    <button
+                      key={b.m}
+                      type="button"
+                      onClick={() => bumpEnd(s, b.m)}
+                      disabled={!s.start_time}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700 hover:bg-amber-100 disabled:opacity-30"
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
