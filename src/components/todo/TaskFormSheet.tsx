@@ -1213,14 +1213,14 @@ function WorkSessionsSection({ taskId }: { taskId: string }) {
               const m = eh * 60 + em - (sh * 60 + sm);
               if (m > 0) total += m;
             }
-            if (total === 0) return null;
             const h = Math.floor(total / 60);
             const min = total % 60;
+            const label =
+              total === 0
+                ? '0분'
+                : `${h > 0 ? `${h}시간` : ''}${h > 0 && min > 0 ? ' ' : ''}${min > 0 ? `${min}분` : ''}`;
             return (
-              <span className="ml-1 text-amber-600 font-semibold">
-                ⏱ {h > 0 ? `${h}시간 ` : ''}
-                {min > 0 ? `${min}분` : ''}
-              </span>
+              <span className="ml-1 text-amber-600 font-semibold">⏱ {label}</span>
             );
           })()}
         </span>
