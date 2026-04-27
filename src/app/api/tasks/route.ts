@@ -54,25 +54,50 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    // todo 들의 체크리스트 진행률 (카드 미리보기용) — kind 필터로 todo 만 요청한 경우만
+    // 카드 미리보기용 — todo 일 때만 체크리스트 + 작업 세션 시간 합산
     const tasksData = (data ?? []) as unknown as Array<Record<string, unknown>>;
-    const checklistMap: Record<string, { total: number; done: number }> = {};
+    const checklistMap: Record<
+      string,
+      { total: number; done: number; total_minutes: number }
+    > = {};
+    const sessionMap: Record<string, number> = {}; // task_id → total minutes
     if (kind === 'todo' && tasksData.length > 0) {
       const ids = tasksData.map((t) => t.id as string);
       const { data: items } = await supabase
         .from('task_checklist_items')
-        .select('task_id, is_done')
+        .select('task_id, is_done, estimated_minutes')
         .in('task_id', ids);
       for (const it of items ?? []) {
         const key = it.task_id as string;
-        if (!checklistMap[key]) checklistMap[key] = { total: 0, done: 0 };
+        if (!checklistMap[key]) {
+          checklistMap[key] = { total: 0, done: 0, total_minutes: 0 };
+        }
         checklistMap[key].total += 1;
         if (it.is_done) checklistMap[key].done += 1;
+        const m = (it.estimated_minutes as number | null) ?? 0;
+        if (m > 0) checklistMap[key].total_minutes += m;
+      }
+
+      const { data: sessions } = await supabase
+        .from('task_work_sessions')
+        .select('task_id, start_time, end_time')
+        .in('task_id', ids);
+      for (const s of sessions ?? []) {
+        const start = s.start_time as string | null;
+        const end = s.end_time as string | null;
+        if (!start || !end) continue;
+        const [sh, sm] = start.split(':').map(Number);
+        const [eh, em] = end.split(':').map(Number);
+        const minutes = eh * 60 + em - (sh * 60 + sm);
+        if (minutes <= 0) continue;
+        const tid = s.task_id as string;
+        sessionMap[tid] = (sessionMap[tid] ?? 0) + minutes;
       }
     }
     const enriched = tasksData.map((t) => ({
       ...t,
       checklist_summary: checklistMap[t.id as string] ?? null,
+      session_total_minutes: sessionMap[t.id as string] ?? 0,
     }));
 
     return NextResponse.json({ tasks: enriched });

@@ -340,8 +340,10 @@ export interface Task {
   member?: Member;
   completions?: TaskCompletion[];
   checklist?: TaskChecklistItem[];
-  /** 리스트 응답에서 체크리스트 진행률 요약 */
-  checklist_summary?: { total: number; done: number } | null;
+  /** 리스트 응답에서 체크리스트 진행률 요약 + 예상 분 합 */
+  checklist_summary?: { total: number; done: number; total_minutes: number } | null;
+  /** 리스트 응답에서 작업 세션 합산 분 */
+  session_total_minutes?: number;
 }
 
 export interface TaskChecklistItem {

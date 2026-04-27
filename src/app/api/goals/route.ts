@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       .select('goal_id, occurred_on, delta')
       .in('goal_id', goalIds);
 
-    // 연결된 활성 task 개수
+    // 연결된 활성 task 개수 + 작업 시간 합산
     const { data: linkRows } = await supabase
       .from('tasks')
       .select('id, goal_id')
@@ -41,9 +41,31 @@ export async function GET(req: NextRequest) {
       .neq('status', 'cancelled')
       .eq('is_active', true);
     const linkedCount = new Map<string, number>();
+    const taskToGoal = new Map<string, string>();
     for (const r of linkRows ?? []) {
       if (!r.goal_id) continue;
       linkedCount.set(r.goal_id as string, (linkedCount.get(r.goal_id as string) ?? 0) + 1);
+      taskToGoal.set(r.id as string, r.goal_id as string);
+    }
+    // 작업 세션 시간 → 목표별 합산
+    const goalTimeMap = new Map<string, number>();
+    if (taskToGoal.size > 0) {
+      const taskIds = Array.from(taskToGoal.keys());
+      const { data: sessions } = await supabase
+        .from('task_work_sessions')
+        .select('task_id, start_time, end_time')
+        .in('task_id', taskIds);
+      for (const s of sessions ?? []) {
+        const start = s.start_time as string | null;
+        const end = s.end_time as string | null;
+        if (!start || !end) continue;
+        const [sh, sm] = start.split(':').map(Number);
+        const [eh, em] = end.split(':').map(Number);
+        const m = eh * 60 + em - (sh * 60 + sm);
+        if (m <= 0) continue;
+        const gid = taskToGoal.get(s.task_id as string);
+        if (gid) goalTimeMap.set(gid, (goalTimeMap.get(gid) ?? 0) + m);
+      }
     }
 
     const enriched = (goals ?? []).map((g): Goal => {
@@ -56,6 +78,7 @@ export async function GET(req: NextRequest) {
         current_value: current,
         progress_rate: rate,
         linked_task_count: linkedCount.get(g.id as string) ?? 0,
+        time_total_minutes: goalTimeMap.get(g.id as string) ?? 0,
       };
     });
 

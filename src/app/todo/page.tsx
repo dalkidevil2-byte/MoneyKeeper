@@ -413,6 +413,15 @@ function TodoSection({
   );
 }
 
+function formatMinutes(m: number): string {
+  if (m <= 0) return '0분';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  if (h === 0) return `${min}분`;
+  if (min === 0) return `${h}시간`;
+  return `${h}시간 ${min}분`;
+}
+
 function TodoGroup({
   label,
   tasks,
@@ -495,6 +504,14 @@ function TodoGroup({
                   {t.checklist_summary && t.checklist_summary.total > 0 && (
                     <span className="text-indigo-500 font-semibold">
                       ☑ {t.checklist_summary.done}/{t.checklist_summary.total}
+                      {t.checklist_summary.total_minutes > 0
+                        ? ` · ⏱ ${formatMinutes(t.checklist_summary.total_minutes)}`
+                        : ''}
+                    </span>
+                  )}
+                  {(t.session_total_minutes ?? 0) > 0 && (
+                    <span className="text-amber-600 font-semibold">
+                      🕐 {formatMinutes(t.session_total_minutes!)}
                     </span>
                   )}
                   {t.category_main && (

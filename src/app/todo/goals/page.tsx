@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Minus, MoreHorizontal, CheckCircle2, Link2 } from 'lucide-react';
+import { Plus, Minus, MoreHorizontal, CheckCircle2, Link2, Clock } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useGoals, useSaveGoal } from '@/hooks/useGoals';
 import GoalFormSheet from '@/components/todo/GoalFormSheet';
@@ -114,6 +114,15 @@ export default function GoalsPage() {
   );
 }
 
+function formatGoalMinutes(m: number): string {
+  if (m <= 0) return '0분';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  if (h === 0) return `${min}분`;
+  if (min === 0) return `${h}시간`;
+  return `${h}시간 ${min}분`;
+}
+
 function GoalCard({
   goal,
   onClick,
@@ -177,6 +186,15 @@ function GoalCard({
               >
                 <Link2 size={10} />
                 {goal.linked_task_count}
+              </span>
+            )}
+            {(goal.time_total_minutes ?? 0) > 0 && (
+              <span
+                className="text-[10px] text-amber-600 font-bold inline-flex items-center gap-0.5"
+                title="연결된 작업 시간 합계"
+              >
+                <Clock size={10} />
+                {formatGoalMinutes(goal.time_total_minutes!)}
               </span>
             )}
             {goal.member && (

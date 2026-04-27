@@ -1204,6 +1204,25 @@ function WorkSessionsSection({ taskId }: { taskId: string }) {
       <label className="text-xs text-gray-500 mb-1 flex items-center justify-between">
         <span className="inline-flex items-center gap-1">
           <ClockIcon size={12} /> 작업 시간 ({sessions.length})
+          {(() => {
+            let total = 0;
+            for (const s of sessions) {
+              if (!s.start_time || !s.end_time) continue;
+              const [sh, sm] = s.start_time.split(':').map(Number);
+              const [eh, em] = s.end_time.split(':').map(Number);
+              const m = eh * 60 + em - (sh * 60 + sm);
+              if (m > 0) total += m;
+            }
+            if (total === 0) return null;
+            const h = Math.floor(total / 60);
+            const min = total % 60;
+            return (
+              <span className="ml-1 text-amber-600 font-semibold">
+                ⏱ {h > 0 ? `${h}시간 ` : ''}
+                {min > 0 ? `${min}분` : ''}
+              </span>
+            );
+          })()}
         </span>
         <button
           type="button"
