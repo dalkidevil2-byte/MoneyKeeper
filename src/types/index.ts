@@ -333,6 +333,8 @@ export interface Task {
   expense_account_id: string | null;
   expense_payment_method_id: string | null;
   expense_transaction_id: string | null;
+  /** 할일 자체의 예상 소요시간 (분) — 계획 단계에서 입력. 실제 합산(session_total_minutes)와 비교 */
+  estimated_minutes?: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -422,6 +424,7 @@ export interface CreateTaskInput {
   expense_category_sub?: string | null;
   expense_account_id?: string | null;
   expense_payment_method_id?: string | null;
+  estimated_minutes?: number | null;
 }
 
 // 오늘의 할일 통합 응답 (one_time + routine 인스턴스)

@@ -162,6 +162,7 @@ export async function POST(req: NextRequest) {
       expense_category_sub: body.expense_category_sub ?? '',
       expense_account_id: body.expense_account_id ?? null,
       expense_payment_method_id: body.expense_payment_method_id ?? null,
+      estimated_minutes: body.estimated_minutes ?? null,
       status: 'pending' as const,
       is_active: true,
     };

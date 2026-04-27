@@ -98,6 +98,7 @@ export async function PATCH(
       'deadline_time',
       'is_active',
       'type',
+      'estimated_minutes',
     ] as const;
 
     const update: Record<string, unknown> = {};

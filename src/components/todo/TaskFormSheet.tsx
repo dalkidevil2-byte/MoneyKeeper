@@ -80,6 +80,7 @@ export default function TaskFormSheet({
   const [expenseCategoryMain, setExpenseCategoryMain] = useState('');
   const [expenseAccountId, setExpenseAccountId] = useState<string>('');
   const [expensePaymentMethodId, setExpensePaymentMethodId] = useState<string>('');
+  const [estimatedMinutes, setEstimatedMinutes] = useState<string>('');
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
   const [saving, setSaving] = useState(false);
@@ -124,6 +125,9 @@ export default function TaskFormSheet({
       setExpenseCategoryMain(initial.expense_category_main ?? '');
       setExpenseAccountId(initial.expense_account_id ?? '');
       setExpensePaymentMethodId(initial.expense_payment_method_id ?? '');
+      setEstimatedMinutes(
+        initial.estimated_minutes != null ? String(initial.estimated_minutes) : ''
+      );
     } else {
       const d = defaults ?? {};
       setKind((d.kind as TaskKind) ?? 'event');
@@ -156,6 +160,7 @@ export default function TaskFormSheet({
       setExpenseCategoryMain(d.expense_category_main ?? '');
       setExpenseAccountId(d.expense_account_id ?? '');
       setExpensePaymentMethodId(d.expense_payment_method_id ?? '');
+      setEstimatedMinutes('');
     }
     setErr(null);
   }, [open, initial, defaultDate, defaultStartTime, defaultEndTime, defaults]);
@@ -260,6 +265,7 @@ export default function TaskFormSheet({
     expense_category_main: expenseCategoryMain || '',
     expense_account_id: expenseAccountId || null,
     expense_payment_method_id: expensePaymentMethodId || null,
+    estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
   });
 
   // 실제 저장 실행 — scope 가 routine 수정에서만 의미 있음
@@ -900,9 +906,62 @@ export default function TaskFormSheet({
           {/* 체크리스트 (수정 모드 전용) */}
           {isEdit && initial && <ChecklistSection taskId={initial.id} />}
 
+          {/* 예상 소요시간 — 계획 단계 입력 (todo 전용) */}
+          {kind === 'todo' && (
+            <div>
+              <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                <ClockIcon size={12} /> 예상 소요시간
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step={5}
+                  value={estimatedMinutes}
+                  onChange={(e) => setEstimatedMinutes(e.target.value)}
+                  placeholder="0"
+                  className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"
+                />
+                <span className="text-xs text-gray-500">분</span>
+                <div className="flex gap-1 flex-wrap">
+                  {[
+                    { m: 15, label: '15분' },
+                    { m: 30, label: '30분' },
+                    { m: 60, label: '1시간' },
+                    { m: 120, label: '2시간' },
+                  ].map((b) => (
+                    <button
+                      key={b.m}
+                      type="button"
+                      onClick={() => {
+                        const cur = parseInt(estimatedMinutes || '0') || 0;
+                        setEstimatedMinutes(String(cur + b.m));
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700"
+                    >
+                      +{b.label}
+                    </button>
+                  ))}
+                  {estimatedMinutes && (
+                    <button
+                      type="button"
+                      onClick={() => setEstimatedMinutes('')}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-500 hover:bg-rose-100"
+                    >
+                      초기화
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 작업 세션 (todo + 수정 모드 전용) */}
           {isEdit && initial && kind === 'todo' && (
-            <WorkSessionsSection taskId={initial.id} />
+            <WorkSessionsSection
+              taskId={initial.id}
+              estimatedMinutes={estimatedMinutes ? parseInt(estimatedMinutes) : null}
+            />
           )}
 
           {/* 메모 */}
@@ -1151,7 +1210,13 @@ function ChecklistSection({ taskId }: { taskId: string }) {
 // ─────────────────────────────────────────
 // 작업 세션 섹션 — todo 의 "실제로 할 시간" 슬롯
 // ─────────────────────────────────────────
-function WorkSessionsSection({ taskId }: { taskId: string }) {
+function WorkSessionsSection({
+  taskId,
+  estimatedMinutes,
+}: {
+  taskId: string;
+  estimatedMinutes: number | null;
+}) {
   const [sessions, setSessions] = useState<TaskWorkSession[]>([]);
   const [busy, setBusy] = useState(false);
   const todayStr = dayjs().format('YYYY-MM-DD');
@@ -1211,40 +1276,67 @@ function WorkSessionsSection({ taskId }: { taskId: string }) {
     updateSession(s, { end_time: newEnd });
   };
 
+  // 실제 합산 분
+  let actualTotal = 0;
+  for (const s of sessions) {
+    if (!s.start_time || !s.end_time) continue;
+    const [sh, sm] = s.start_time.split(':').map(Number);
+    const [eh, em] = s.end_time.split(':').map(Number);
+    const m = eh * 60 + em - (sh * 60 + sm);
+    if (m > 0) actualTotal += m;
+  }
+  const fmt = (mm: number): string => {
+    if (mm <= 0) return '0분';
+    const h = Math.floor(mm / 60);
+    const m = mm % 60;
+    if (h === 0) return `${m}분`;
+    if (m === 0) return `${h}시간`;
+    return `${h}시간 ${m}분`;
+  };
+  const diff = estimatedMinutes != null ? actualTotal - estimatedMinutes : null;
+  const diffLabel = (() => {
+    if (diff == null) return null;
+    if (diff === 0) return { text: '예상과 동일', cls: 'text-emerald-600' };
+    if (diff > 0) return { text: `+${fmt(diff)} 초과`, cls: 'text-rose-500' };
+    return { text: `${fmt(-diff)} 남음`, cls: 'text-emerald-600' };
+  })();
+
   return (
     <div>
       <label className="text-xs text-gray-500 mb-1 flex items-center justify-between">
-        <span className="inline-flex items-center gap-1">
-          <ClockIcon size={12} /> 작업 시간 ({sessions.length})
-          {(() => {
-            let total = 0;
-            for (const s of sessions) {
-              if (!s.start_time || !s.end_time) continue;
-              const [sh, sm] = s.start_time.split(':').map(Number);
-              const [eh, em] = s.end_time.split(':').map(Number);
-              const m = eh * 60 + em - (sh * 60 + sm);
-              if (m > 0) total += m;
-            }
-            const h = Math.floor(total / 60);
-            const min = total % 60;
-            const label =
-              total === 0
-                ? '0분'
-                : `${h > 0 ? `${h}시간` : ''}${h > 0 && min > 0 ? ' ' : ''}${min > 0 ? `${min}분` : ''}`;
-            return (
-              <span className="ml-1 text-amber-600 font-semibold">⏱ {label}</span>
-            );
-          })()}
+        <span className="inline-flex items-center gap-1 flex-wrap">
+          <ClockIcon size={12} /> 실제 작업 시간 ({sessions.length})
+          <span className="ml-1 text-amber-600 font-semibold">⏱ {fmt(actualTotal)}</span>
+          {estimatedMinutes != null && (
+            <span className="text-gray-400">
+              / 예상 <span className="text-indigo-600 font-semibold">{fmt(estimatedMinutes)}</span>
+            </span>
+          )}
+          {diffLabel && (
+            <span className={`font-semibold ${diffLabel.cls}`}>· {diffLabel.text}</span>
+          )}
         </span>
         <button
           type="button"
           onClick={addSession}
           disabled={busy}
-          className="text-[11px] text-indigo-600 font-semibold inline-flex items-center gap-0.5"
+          className="text-[11px] text-indigo-600 font-semibold inline-flex items-center gap-0.5 shrink-0"
         >
-          <PlusIcon size={11} /> 시간 슬롯 추가
+          <PlusIcon size={11} /> 슬롯 추가
         </button>
       </label>
+      {estimatedMinutes != null && actualTotal > 0 && (
+        <div className="h-1.5 bg-gray-100 rounded-full mb-2 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              actualTotal > estimatedMinutes ? 'bg-rose-400' : 'bg-amber-400'
+            }`}
+            style={{
+              width: `${Math.min(100, Math.round((actualTotal / Math.max(1, estimatedMinutes)) * 100))}%`,
+            }}
+          />
+        </div>
+      )}
       {sessions.length === 0 ? (
         <div className="text-[11px] text-gray-400 py-3 text-center bg-gray-50 rounded-lg border border-dashed border-gray-200">
           아직 작업 시간이 없어요. <br />
@@ -1326,11 +1418,13 @@ function WorkSessionsSection({ taskId }: { taskId: string }) {
                   />
                   <button
                     type="button"
-                    onClick={() => removeSession(s)}
-                    className="text-gray-300 hover:text-rose-500 p-1"
-                    aria-label="삭제"
+                    onClick={() => {
+                      if (confirm('이 시간 슬롯을 삭제할까요?')) removeSession(s);
+                    }}
+                    className="ml-auto shrink-0 p-1.5 rounded-md text-rose-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100"
+                    aria-label="슬롯 삭제"
                   >
-                    <Trash2Icon size={13} />
+                    <Trash2Icon size={15} />
                   </button>
                 </div>
                 <div className="flex items-center gap-1 mt-1.5 pl-7 flex-wrap">

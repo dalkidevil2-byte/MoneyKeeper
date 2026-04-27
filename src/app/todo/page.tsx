@@ -512,8 +512,20 @@ function TodoGroup({
                   {(t.session_total_minutes ?? 0) > 0 && (
                     <span className="text-amber-600 font-semibold">
                       🕐 {formatMinutes(t.session_total_minutes!)}
+                      {t.estimated_minutes != null && t.estimated_minutes > 0 && (
+                        <span className="text-gray-400 font-normal">
+                          {' '}/ 예상 {formatMinutes(t.estimated_minutes)}
+                        </span>
+                      )}
                     </span>
                   )}
+                  {(t.session_total_minutes ?? 0) === 0 &&
+                    t.estimated_minutes != null &&
+                    t.estimated_minutes > 0 && (
+                      <span className="text-indigo-500 font-semibold">
+                        🎯 예상 {formatMinutes(t.estimated_minutes)}
+                      </span>
+                    )}
                   {t.category_main && (
                     <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
                       {t.category_main}
