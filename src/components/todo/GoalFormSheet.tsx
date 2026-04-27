@@ -279,6 +279,8 @@ export default function GoalFormSheet({ open, onClose, onSaved, initial }: Props
             </div>
           </div>
 
+          {isEdit && initial && <GoalTimeStats goalId={initial.id} />}
+
           {isEdit && initial && (
             <LinkedTasksSection
               goalId={initial.id}
@@ -502,4 +504,53 @@ function summarizeTask(t: Task): string {
   }
   if (t.is_fixed && t.due_time) parts.push(t.due_time.slice(0, 5));
   return parts.join(' · ');
+}
+
+// 목표 소요시간 통계 — 연결된 task 의 work_sessions 합산
+function GoalTimeStats({ goalId }: { goalId: string }) {
+  const [stats, setStats] = useState<{
+    total: number;
+    week: number;
+    month: number;
+  } | null>(null);
+  useEffect(() => {
+    fetch(`/api/goals/${goalId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setStats({
+          total: d.goal?.time_total_minutes ?? 0,
+          week: d.goal?.time_week_minutes ?? 0,
+          month: d.goal?.time_month_minutes ?? 0,
+        });
+      })
+      .catch(() => setStats({ total: 0, week: 0, month: 0 }));
+  }, [goalId]);
+  if (!stats || stats.total === 0) return null;
+  const fmt = (m: number) => {
+    if (m <= 0) return '0분';
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    if (h === 0) return `${min}분`;
+    if (min === 0) return `${h}시간`;
+    return `${h}시간 ${min}분`;
+  };
+  return (
+    <div>
+      <label className="text-xs text-gray-500 mb-1 block">⏱ 투자한 시간</label>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-amber-50 rounded-xl p-2.5 border border-amber-100 text-center">
+          <div className="text-[10px] text-amber-700">이번 주</div>
+          <div className="text-sm font-bold text-amber-900 mt-0.5">{fmt(stats.week)}</div>
+        </div>
+        <div className="bg-amber-50 rounded-xl p-2.5 border border-amber-100 text-center">
+          <div className="text-[10px] text-amber-700">이번 달</div>
+          <div className="text-sm font-bold text-amber-900 mt-0.5">{fmt(stats.month)}</div>
+        </div>
+        <div className="bg-amber-100 rounded-xl p-2.5 border border-amber-200 text-center">
+          <div className="text-[10px] text-amber-800">전체</div>
+          <div className="text-sm font-bold text-amber-900 mt-0.5">{fmt(stats.total)}</div>
+        </div>
+      </div>
+    </div>
+  );
 }

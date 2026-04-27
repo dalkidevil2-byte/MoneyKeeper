@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { useMembers, useCustomCategories } from '@/hooks/useAccounts';
+import { useMembers, useCustomCategories, useAccounts, usePaymentMethods } from '@/hooks/useAccounts';
 import { useSaveTask } from '@/hooks/useTasks';
 import { useGoals } from '@/hooks/useGoals';
 import CategoryCombobox from '@/components/CategoryCombobox';
@@ -74,6 +74,14 @@ export default function TaskFormSheet({
   const [untilCount, setUntilCount] = useState<number | null>(null);
   const [goalId, setGoalId] = useState<string | ''>('');
   const { goals: activeGoals } = useGoals('active');
+
+  // 비용 (가계부 연동)
+  const [expenseAmount, setExpenseAmount] = useState<string>('');
+  const [expenseCategoryMain, setExpenseCategoryMain] = useState('');
+  const [expenseAccountId, setExpenseAccountId] = useState<string>('');
+  const [expensePaymentMethodId, setExpensePaymentMethodId] = useState<string>('');
+  const { accounts } = useAccounts();
+  const { paymentMethods } = usePaymentMethods();
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -112,6 +120,10 @@ export default function TaskFormSheet({
       setUntilDate(initial.until_date ?? null);
       setUntilCount(initial.until_count ?? null);
       setGoalId(initial.goal_id ?? '');
+      setExpenseAmount(initial.expense_amount ? String(initial.expense_amount) : '');
+      setExpenseCategoryMain(initial.expense_category_main ?? '');
+      setExpenseAccountId(initial.expense_account_id ?? '');
+      setExpensePaymentMethodId(initial.expense_payment_method_id ?? '');
     } else {
       const d = defaults ?? {};
       setKind((d.kind as TaskKind) ?? 'event');
@@ -140,6 +152,10 @@ export default function TaskFormSheet({
       setUntilDate(d.until_date ?? null);
       setUntilCount(d.until_count ?? null);
       setGoalId(d.goal_id ?? '');
+      setExpenseAmount(d.expense_amount ? String(d.expense_amount) : '');
+      setExpenseCategoryMain(d.expense_category_main ?? '');
+      setExpenseAccountId(d.expense_account_id ?? '');
+      setExpensePaymentMethodId(d.expense_payment_method_id ?? '');
     }
     setErr(null);
   }, [open, initial, defaultDate, defaultStartTime, defaultEndTime, defaults]);
@@ -185,6 +201,36 @@ export default function TaskFormSheet({
     await refetchCats();
   };
 
+  // 빠른 종료시간 chip — 시작 시간에 N분 더해서 종료 시간 설정
+  const setEndByDuration = (minutes: number) => {
+    if (!dueTime) return;
+    const [h, m] = dueTime.split(':').map(Number);
+    const total = (h * 60 + (m || 0) + minutes) % (24 * 60);
+    const eh = Math.floor(total / 60);
+    const em = total % 60;
+    setEndTime(`${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`);
+  };
+  const QuickDurationChips = () => (
+    <div className="flex gap-1 flex-wrap">
+      {[
+        { m: 15, label: '15분' },
+        { m: 30, label: '30분' },
+        { m: 60, label: '1시간' },
+        { m: 120, label: '2시간' },
+      ].map((b) => (
+        <button
+          key={b.m}
+          type="button"
+          onClick={() => setEndByDuration(b.m)}
+          disabled={!dueTime}
+          className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 hover:bg-amber-100 hover:text-amber-700 disabled:opacity-30"
+        >
+          +{b.label}
+        </button>
+      ))}
+    </div>
+  );
+
   // 현재 폼 값으로 payload 빌드
   const buildPayload = () => ({
     household_id: HOUSEHOLD_ID,
@@ -210,6 +256,10 @@ export default function TaskFormSheet({
     until_date: type === 'routine' ? untilDate : null,
     until_count: type === 'routine' ? untilCount : null,
     goal_id: goalId || null,
+    expense_amount: expenseAmount ? parseInt(expenseAmount) : null,
+    expense_category_main: expenseCategoryMain || '',
+    expense_account_id: expenseAccountId || null,
+    expense_payment_method_id: expensePaymentMethodId || null,
   });
 
   // 실제 저장 실행 — scope 가 routine 수정에서만 의미 있음
@@ -544,6 +594,13 @@ export default function TaskFormSheet({
                   />
                 )}
               </div>
+              {/* 빠른 종료시간 chip — 시간 지정일 때만 의미 */}
+              {isFixed && dueTime && (
+                <div className="flex items-center gap-2">
+                  <span className="w-12 shrink-0 text-[11px] text-gray-400">빠른</span>
+                  <QuickDurationChips />
+                </div>
+              )}
               {dueDate !== endDate && (
                 <div className="text-[11px] text-amber-600">
                   📅 {dayjs(endDate).diff(dayjs(dueDate), 'day') + 1}일 일정
@@ -577,6 +634,12 @@ export default function TaskFormSheet({
                     onChange={(e) => setEndTime(e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
                   />
+                </div>
+              )}
+              {isFixed && dueTime && (
+                <div className="flex items-center gap-2">
+                  <span className="w-12 shrink-0 text-[11px] text-gray-400">빠른</span>
+                  <QuickDurationChips />
                 </div>
               )}
             </div>
@@ -769,6 +832,71 @@ export default function TaskFormSheet({
             </div>
           )}
 
+          {/* 비용 (가계부 연동) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              💰 비용 (선택) — 완료 시 가계부에 자동 등록
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                step={1000}
+                value={expenseAmount}
+                onChange={(e) => setExpenseAmount(e.target.value)}
+                placeholder="금액"
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+              />
+              <span className="text-xs text-gray-400 shrink-0">원</span>
+            </div>
+            {expenseAmount && parseInt(expenseAmount) > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <select
+                  value={expenseCategoryMain}
+                  onChange={(e) => setExpenseCategoryMain(e.target.value)}
+                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                >
+                  <option value="">분류 (선택)</option>
+                  {CATEGORY_MAIN_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={expensePaymentMethodId}
+                  onChange={(e) => {
+                    setExpensePaymentMethodId(e.target.value);
+                    if (e.target.value) setExpenseAccountId('');
+                  }}
+                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                >
+                  <option value="">결제수단 (선택)</option>
+                  {paymentMethods.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={expenseAccountId}
+                  onChange={(e) => {
+                    setExpenseAccountId(e.target.value);
+                    if (e.target.value) setExpensePaymentMethodId('');
+                  }}
+                  className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                >
+                  <option value="">또는 계좌 (선택)</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* 체크리스트 (수정 모드 전용) */}
           {isEdit && initial && <ChecklistSection taskId={initial.id} />}
 
@@ -901,11 +1029,39 @@ function ChecklistSection({ taskId }: { taskId: string }) {
   };
 
   const doneCount = items.filter((x) => x.is_done).length;
+  const totalMinutes = items.reduce((s, x) => s + (x.estimated_minutes ?? 0), 0);
+  const formatDuration = (m: number) => {
+    if (m <= 0) return '';
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    if (h === 0) return `${min}분`;
+    if (min === 0) return `${h}시간`;
+    return `${h}시간 ${min}분`;
+  };
+
+  const updateMinutes = async (it: TaskChecklistItem, minutesStr: string) => {
+    const v = minutesStr === '' ? null : parseInt(minutesStr) || 0;
+    setItems((prev) =>
+      prev.map((x) => (x.id === it.id ? { ...x, estimated_minutes: v } : x)),
+    );
+    await fetch(`/api/tasks/${taskId}/checklist`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: it.id, estimated_minutes: v }),
+    });
+  };
 
   return (
     <div>
       <label className="text-xs text-gray-500 mb-1 flex items-center justify-between">
-        <span>체크리스트 ({doneCount}/{items.length})</span>
+        <span>
+          체크리스트 ({doneCount}/{items.length})
+          {totalMinutes > 0 && (
+            <span className="ml-2 text-amber-600 font-semibold">
+              ⏱ {formatDuration(totalMinutes)}
+            </span>
+          )}
+        </span>
       </label>
       <div className="space-y-1.5">
         {items.map((it) => (
@@ -942,6 +1098,16 @@ function ChecklistSection({ taskId }: { taskId: string }) {
               className={`flex-1 bg-transparent text-sm focus:outline-none ${
                 it.is_done ? 'line-through text-gray-400' : 'text-gray-800'
               }`}
+            />
+            <input
+              type="number"
+              min={0}
+              step={5}
+              value={it.estimated_minutes ?? ''}
+              onChange={(e) => updateMinutes(it, e.target.value)}
+              placeholder="분"
+              className="w-14 px-1.5 py-0.5 text-[11px] border border-gray-200 rounded text-right"
+              aria-label="예상 소요 분"
             />
             <button
               type="button"

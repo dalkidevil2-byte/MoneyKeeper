@@ -454,7 +454,8 @@ export default function TodoCalendarPage() {
       : 'rounded';
     const extendLeft = isMulti && !isStart;
     const extendRight = isMulti && !isEnd;
-    const extendCls = `${extendLeft ? '-ml-px' : ''} ${extendRight ? '-mr-px' : ''}`;
+    // 모바일 1px 보더 + 셀 padding 모두 덮으려면 2px 가 안전
+    const extendCls = `${extendLeft ? '-ml-0.5' : ''} ${extendRight ? '-mr-0.5' : ''}`;
     const isDraggingThis = chipDrag?.task.id === t.id && chipDrag.moved;
     return (
       <div
@@ -630,9 +631,22 @@ export default function TodoCalendarPage() {
                   isSelected ? 'ring-2 ring-amber-400 ring-inset z-10' : ''
                 }`}
               >
-                {/* 날짜 숫자 + todo deadline/session 점 */}
-                <div className="flex items-center justify-between mb-0.5 px-1">
-                  <div className="flex items-center gap-1">
+                {/* 날짜(좌) + todo deadline/session 점(우) */}
+                <div className="flex items-center justify-between mb-0.5 px-1 gap-1">
+                  <span
+                    className={`shrink-0 inline-flex items-center justify-center text-[11px] font-semibold ${
+                      isToday
+                        ? 'w-5 h-5 rounded-full bg-amber-500 text-white'
+                        : isHoliday || dow === 0
+                          ? isOtherMonth ? 'text-rose-300' : 'text-rose-500'
+                          : dow === 6
+                            ? isOtherMonth ? 'text-blue-300' : 'text-blue-400'
+                            : isOtherMonth ? 'text-gray-300' : 'text-gray-700'
+                    }`}
+                  >
+                    {cell.date()}
+                  </span>
+                  <div className="flex items-center gap-1 min-w-0">
                     {todoDeadlinesByDate[key] ? (
                       <span
                         className="inline-flex items-center gap-0.5 text-[9px] text-amber-600 font-bold"
@@ -652,19 +666,6 @@ export default function TodoCalendarPage() {
                       </span>
                     ) : null}
                   </div>
-                  <span
-                    className={`inline-flex items-center justify-center text-[11px] font-semibold ${
-                      isToday
-                        ? 'w-5 h-5 rounded-full bg-amber-500 text-white'
-                        : isHoliday || dow === 0
-                          ? isOtherMonth ? 'text-rose-300' : 'text-rose-500'
-                          : dow === 6
-                            ? isOtherMonth ? 'text-blue-300' : 'text-blue-400'
-                            : isOtherMonth ? 'text-gray-300' : 'text-gray-700'
-                    }`}
-                  >
-                    {cell.date()}
-                  </span>
                 </div>
 
                 {/* 공휴일 라벨 (슬롯 위, 별도 라인) */}

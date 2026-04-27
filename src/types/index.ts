@@ -327,6 +327,12 @@ export interface Task {
   source_external_id: string | null;
   notion_last_edited_time: string | null;
   goal_id: string | null;
+  expense_amount: number | null;
+  expense_category_main: string | null;
+  expense_category_sub: string | null;
+  expense_account_id: string | null;
+  expense_payment_method_id: string | null;
+  expense_transaction_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -346,6 +352,7 @@ export interface TaskChecklistItem {
   is_done: boolean;
   done_at: string | null;
   position: number;
+  estimated_minutes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -361,6 +368,12 @@ export interface TaskWorkSession {
   is_done: boolean;
   done_at: string | null;
   note: string;
+  expense_amount: number | null;
+  expense_category_main: string | null;
+  expense_category_sub: string | null;
+  expense_account_id: string | null;
+  expense_payment_method_id: string | null;
+  expense_transaction_id: string | null;
   created_at: string;
   updated_at: string;
   // 카드 표시용
@@ -402,6 +415,11 @@ export interface CreateTaskInput {
   until_date?: string | null;
   until_count?: number | null;
   goal_id?: string | null;
+  expense_amount?: number | null;
+  expense_category_main?: string | null;
+  expense_category_sub?: string | null;
+  expense_account_id?: string | null;
+  expense_payment_method_id?: string | null;
 }
 
 // 오늘의 할일 통합 응답 (one_time + routine 인스턴스)
@@ -512,6 +530,9 @@ export interface Goal {
   current_value?: number;
   progress_rate?: number;
   linked_task_count?: number;
+  time_total_minutes?: number;
+  time_week_minutes?: number;
+  time_month_minutes?: number;
   member?: Member;
   // 단건 조회 시
   linked_tasks?: Array<{

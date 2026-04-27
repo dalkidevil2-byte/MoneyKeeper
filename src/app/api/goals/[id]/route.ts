@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import dayjs from 'dayjs';
 import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET(
@@ -32,8 +33,43 @@ export async function GET(
       .order('type', { ascending: true })
       .order('due_date', { ascending: true });
 
+    // 연결된 task 들의 work_sessions 시간 합산 (분)
+    const taskIds = (linkedTasks ?? []).map((t) => t.id as string);
+    let totalMinutes = 0;
+    let weekMinutes = 0;
+    let monthMinutes = 0;
+    if (taskIds.length > 0) {
+      const { data: sessions } = await supabase
+        .from('task_work_sessions')
+        .select('session_date, start_time, end_time, is_done')
+        .in('task_id', taskIds);
+      const today = dayjs();
+      const weekStart = today.startOf('week').format('YYYY-MM-DD');
+      const monthStart = today.startOf('month').format('YYYY-MM-DD');
+      for (const s of sessions ?? []) {
+        const start = (s.start_time as string | null);
+        const end = (s.end_time as string | null);
+        if (!start || !end) continue;
+        const [sh, sm] = start.split(':').map(Number);
+        const [eh, em] = end.split(':').map(Number);
+        const minutes = (eh * 60 + em) - (sh * 60 + sm);
+        if (minutes <= 0) continue;
+        totalMinutes += minutes;
+        const d = s.session_date as string;
+        if (d >= weekStart) weekMinutes += minutes;
+        if (d >= monthStart) monthMinutes += minutes;
+      }
+    }
+
     return NextResponse.json({
-      goal: { ...goal, events: events ?? [], linked_tasks: linkedTasks ?? [] },
+      goal: {
+        ...goal,
+        events: events ?? [],
+        linked_tasks: linkedTasks ?? [],
+        time_total_minutes: totalMinutes,
+        time_week_minutes: weekMinutes,
+        time_month_minutes: monthMinutes,
+      },
     });
   } catch (error: any) {
     console.error('[GET /goals/:id]', error);

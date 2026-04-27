@@ -25,10 +25,12 @@ export async function POST(
     const memberId: string | null = body.member_id ?? null;
     const note: string = body.note ?? '';
 
-    // 작업 정보 조회 (type, goal_id 알아야 함)
+    // 작업 정보 조회 (type, goal_id, 비용 정보 알아야 함)
     const { data: task, error: fetchErr } = await supabase
       .from('tasks')
-      .select('id, type, household_id, member_id, goal_id')
+      .select(`id, type, kind, title, household_id, member_id, goal_id,
+               expense_amount, expense_category_main, expense_category_sub,
+               expense_account_id, expense_payment_method_id, expense_transaction_id`)
       .eq('id', id)
       .single();
     if (fetchErr || !task) {
@@ -61,6 +63,45 @@ export async function POST(
         .from('tasks')
         .update({ status: 'done', completed_at: new Date().toISOString() })
         .eq('id', id);
+    }
+
+    // 가계부 자동 거래 생성 — 비용 입력돼있고 아직 transaction 없으면
+    if (
+      task.expense_amount &&
+      task.expense_amount > 0 &&
+      !task.expense_transaction_id
+    ) {
+      try {
+        const { data: trx } = await supabase
+          .from('transactions')
+          .insert({
+            household_id: householdId,
+            member_id: task.member_id ?? null,
+            date: completedOn,
+            type: 'variable_expense' as const,
+            amount: task.expense_amount,
+            name: task.title,
+            merchant_name: '',
+            account_from_id: task.expense_account_id ?? null,
+            payment_method_id: task.expense_payment_method_id ?? null,
+            category_main: task.expense_category_main ?? '',
+            category_sub: task.expense_category_sub ?? '',
+            memo: `[${task.kind === 'todo' ? '할일' : '일정'}] 자동 등록`,
+            input_type: 'manual' as const,
+            status: 'reviewed' as const,
+            sync_status: 'pending' as const,
+          })
+          .select('id')
+          .single();
+        if (trx) {
+          await supabase
+            .from('tasks')
+            .update({ expense_transaction_id: trx.id })
+            .eq('id', id);
+        }
+      } catch (err) {
+        console.error('[task expense → transaction]', err);
+      }
     }
 
     // 목표 자동 집계 — task 가 goal 에 연결돼 있으면 progress event 추가
@@ -123,6 +164,23 @@ export async function DELETE(
         .from('goal_progress_events')
         .delete()
         .eq('task_completion_id', existing.id);
+    }
+
+    // 비용 거래도 cancel (해당 task 의 transaction 이 있으면)
+    const { data: tk } = await supabase
+      .from('tasks')
+      .select('expense_transaction_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (tk?.expense_transaction_id) {
+      await supabase
+        .from('transactions')
+        .update({ status: 'cancelled' })
+        .eq('id', tk.expense_transaction_id);
+      await supabase
+        .from('tasks')
+        .update({ expense_transaction_id: null })
+        .eq('id', id);
     }
 
     const { data: task } = await supabase

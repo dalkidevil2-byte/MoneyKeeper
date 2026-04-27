@@ -86,6 +86,9 @@ export async function PATCH(
       update.is_done = body.is_done;
       update.done_at = body.is_done ? new Date().toISOString() : null;
     }
+    if (Object.prototype.hasOwnProperty.call(body, 'estimated_minutes')) {
+      update.estimated_minutes = body.estimated_minutes;
+    }
     const { data, error } = await supabase
       .from('task_checklist_items')
       .update(update)

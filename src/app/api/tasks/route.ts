@@ -132,6 +132,11 @@ export async function POST(req: NextRequest) {
       until_date: body.until_date ?? null,
       until_count: body.until_count ?? null,
       goal_id: body.goal_id ?? null,
+      expense_amount: body.expense_amount ?? null,
+      expense_category_main: body.expense_category_main ?? '',
+      expense_category_sub: body.expense_category_sub ?? '',
+      expense_account_id: body.expense_account_id ?? null,
+      expense_payment_method_id: body.expense_payment_method_id ?? null,
       status: 'pending' as const,
       is_active: true,
     };

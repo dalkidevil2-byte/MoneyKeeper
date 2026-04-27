@@ -50,6 +50,11 @@ export async function POST(
       start_time: body.start_time ?? null,
       end_time: body.end_time ?? null,
       note: body.note ?? '',
+      expense_amount: body.expense_amount ?? null,
+      expense_category_main: body.expense_category_main ?? '',
+      expense_category_sub: body.expense_category_sub ?? '',
+      expense_account_id: body.expense_account_id ?? null,
+      expense_payment_method_id: body.expense_payment_method_id ?? null,
     };
     const { data, error } = await supabase
       .from('task_work_sessions')
@@ -76,7 +81,11 @@ export async function PATCH(
     if (!sessionId) {
       return NextResponse.json({ error: 'session_id 필요' }, { status: 400 });
     }
-    const allowed = ['session_date', 'start_time', 'end_time', 'note', 'is_done'] as const;
+    const allowed = [
+      'session_date', 'start_time', 'end_time', 'note', 'is_done',
+      'expense_amount', 'expense_category_main', 'expense_category_sub',
+      'expense_account_id', 'expense_payment_method_id', 'expense_transaction_id',
+    ] as const;
     const update: Record<string, unknown> = {};
     for (const k of allowed) {
       if (Object.prototype.hasOwnProperty.call(body, k)) update[k] = body[k];
