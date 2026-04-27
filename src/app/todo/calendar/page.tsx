@@ -681,8 +681,14 @@ export default function TodoCalendarPage() {
                 <div className="flex flex-col gap-0.5 flex-1 max-h-[64px] overflow-visible">
                   {visibleSlots.map((t, slotIdx) => {
                     if (!t) {
+                      // 빈 슬롯 — 실제 chip 과 같은 height 유지해야 다음 row 의 chip 들이 슬롯 align
                       return (
-                        <div key={`empty-${slotIdx}`} className="h-3 invisible">.</div>
+                        <div
+                          key={`empty-${slotIdx}`}
+                          className="text-[9px] leading-[12px] px-1 py-0.5 invisible"
+                        >
+                          .
+                        </div>
                       );
                     }
                     return renderChipForCell(t, key);
