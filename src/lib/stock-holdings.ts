@@ -248,6 +248,53 @@ export function computeOwnerStats(
 }
 
 /** 실현손익 누계 (단순 합계) */
+export type CashFlow = {
+  id: string;
+  account_id: string;
+  date: string;
+  type: 'DEPOSIT' | 'WITHDRAW';
+  amount: number;
+};
+
+/**
+ * 계좌별 현금 잔고 = 입금 합 - 출금 합 - 매수 대금 + 매도 대금
+ * accountId 미지정 시 모든 계좌 합산.
+ */
+export function computeCashBalance(
+  txs: StockTx[],
+  flows: CashFlow[],
+  accountId?: string,
+): number {
+  const ftxs = accountId ? txs.filter((t) => t.account_id === accountId) : txs;
+  const fflows = accountId ? flows.filter((f) => f.account_id === accountId) : flows;
+  let bal = 0;
+  for (const f of fflows) {
+    bal += f.type === 'DEPOSIT' ? f.amount : -f.amount;
+  }
+  for (const t of ftxs) {
+    if (t.type === 'BUY') bal -= t.quantity * t.price;
+    else bal += t.quantity * t.price;
+  }
+  return bal;
+}
+
+/** 계좌 id → 현금잔고 맵 */
+export function computeCashByAccount(
+  txs: StockTx[],
+  flows: CashFlow[],
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const f of flows) {
+    if (!map[f.account_id]) map[f.account_id] = 0;
+    map[f.account_id] += f.type === 'DEPOSIT' ? f.amount : -f.amount;
+  }
+  for (const t of txs) {
+    if (!map[t.account_id]) map[t.account_id] = 0;
+    map[t.account_id] += t.type === 'BUY' ? -t.quantity * t.price : t.quantity * t.price;
+  }
+  return map;
+}
+
 export function computeRealizedPL(txs: StockTx[], accountId?: string): number {
   return computeRealizedTrades(txs, accountId).reduce((s, t) => s + t.pl, 0);
 }

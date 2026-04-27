@@ -17,7 +17,9 @@ import {
   aggregateByTicker,
   computeHoldings,
   computeRealizedPL,
+  computeCashBalance,
   type StockTx,
+  type CashFlow,
 } from '@/lib/stock-holdings';
 import StockTransactionSheet from '@/components/stock/StockTransactionSheet';
 import HoldingDetailSheet from '@/components/stock/HoldingDetailSheet';
@@ -41,6 +43,7 @@ type SelectedHolding = {
 
 export default function PortfolioPage() {
   const [txs, setTxs] = useState<StockTx[]>([]);
+  const [flows, setFlows] = useState<CashFlow[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -59,18 +62,21 @@ export default function PortfolioPage() {
     setLoading(true);
     setError(null);
     try {
-      const [tRes, oRes, aRes] = await Promise.all([
+      const [tRes, oRes, aRes, fRes] = await Promise.all([
         fetch('/api/stocks/transactions?limit=2000'),
         fetch('/api/stocks/owners'),
         fetch('/api/stocks/accounts'),
+        fetch('/api/stocks/cash-flows'),
       ]);
       if (!tRes.ok) throw new Error(`HTTP ${tRes.status}`);
       const tJson = await tRes.json();
       const oJson = await oRes.json();
       const aJson = await aRes.json();
+      const fJson = fRes.ok ? await fRes.json() : { flows: [] };
       setTxs(tJson.transactions ?? []);
       setOwners(oJson.owners ?? []);
       setAccounts(aJson.accounts ?? []);
+      setFlows(fJson.flows ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -172,6 +178,16 @@ export default function PortfolioPage() {
     if (allTickers.length) fetchQuotes(allTickers);
   }, [allTickers, fetchQuotes]);
 
+  // 필터 적용된 cash flows (account → owner 기준)
+  const filteredFlows = useMemo(() => {
+    return flows.filter((f) => {
+      const acc = accountById[f.account_id];
+      if (ownerFilter && acc?.owner_id !== ownerFilter) return false;
+      if (accountFilter && f.account_id !== accountFilter) return false;
+      return true;
+    });
+  }, [flows, ownerFilter, accountFilter, accountById]);
+
   // 합계
   const summary = useMemo(() => {
     let invested = 0;
@@ -181,10 +197,12 @@ export default function PortfolioPage() {
       const p = quotes[a.ticker]?.regularMarketPrice ?? a.avgPrice;
       current += a.qty * p;
     }
+    const cash = computeCashBalance(filteredTxs, filteredFlows);
+    const total = current + cash;
     const unrealized = current - invested;
     const unrealizedPct = invested > 0 ? (unrealized / invested) * 100 : 0;
-    return { invested, current, unrealized, unrealizedPct };
-  }, [aggregated, quotes]);
+    return { invested, current, cash, total, unrealized, unrealizedPct };
+  }, [aggregated, quotes, filteredTxs, filteredFlows]);
 
   const sorted = useMemo(() => {
     return aggregated
@@ -235,7 +253,7 @@ export default function PortfolioPage() {
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div className="flex items-baseline justify-between">
             <div className="text-sm text-gray-500">
-              {hasFilter ? '필터 평가액' : '총 평가액'}
+              {hasFilter ? '필터 총자산' : '총자산 (평가+현금)'}
             </div>
             {hasFilter && (
               <button
@@ -251,7 +269,7 @@ export default function PortfolioPage() {
             )}
           </div>
           <div className="text-3xl font-bold text-gray-900 mt-1">
-            {loading ? '…' : formatKRW(summary.current)}
+            {loading ? '…' : formatKRW(summary.total)}
           </div>
           <div className="flex items-baseline gap-2 mt-1">
             <span
@@ -270,8 +288,27 @@ export default function PortfolioPage() {
               ({summary.unrealizedPct >= 0 ? '+' : ''}
               {summary.unrealizedPct.toFixed(2)}%)
             </span>
+            <span className="text-[11px] text-gray-400 ml-1">평가손익</span>
           </div>
           <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
+            <div>
+              <div className="text-xs text-gray-500">평가액</div>
+              <div className="text-sm font-semibold text-gray-800 mt-0.5">
+                {formatKRW(summary.current)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 flex items-center gap-1">
+                <Coins size={11} className="text-amber-500" /> 현금
+              </div>
+              <div
+                className={`text-sm font-semibold mt-0.5 ${
+                  summary.cash < 0 ? 'text-rose-500' : 'text-gray-800'
+                }`}
+              >
+                {formatKRW(summary.cash)}
+              </div>
+            </div>
             <div>
               <div className="text-xs text-gray-500">원금</div>
               <div className="text-sm font-semibold text-gray-800 mt-0.5">

@@ -6,10 +6,19 @@ import { ChevronLeft, Plus, Pencil, Wallet } from 'lucide-react';
 import OwnerSheet, { type Owner } from '@/components/stock/OwnerSheet';
 import AccountSheet, { type StockAccountRow } from '@/components/stock/AccountSheet';
 import CashFlowSheet from '@/components/stock/CashFlowSheet';
+import {
+  computeCashByAccount,
+  type StockTx,
+  type CashFlow,
+} from '@/lib/stock-holdings';
+
+const formatKRW = (n: number) => Math.round(n).toLocaleString('ko-KR');
 
 export default function StockSettingsPage() {
   const [owners, setOwners] = useState<Owner[]>([]);
   const [accounts, setAccounts] = useState<StockAccountRow[]>([]);
+  const [txs, setTxs] = useState<StockTx[]>([]);
+  const [flows, setFlows] = useState<CashFlow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,15 +43,21 @@ export default function StockSettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [oRes, aRes] = await Promise.all([
+      const [oRes, aRes, tRes, fRes] = await Promise.all([
         fetch('/api/stocks/owners'),
         fetch('/api/stocks/accounts'),
+        fetch('/api/stocks/transactions?limit=2000'),
+        fetch('/api/stocks/cash-flows'),
       ]);
       if (!oRes.ok || !aRes.ok) throw new Error('불러오기 실패');
       const o = await oRes.json();
       const a = await aRes.json();
+      const t = tRes.ok ? await tRes.json() : { transactions: [] };
+      const f = fRes.ok ? await fRes.json() : { flows: [] };
       setOwners(o.owners ?? []);
       setAccounts(a.accounts ?? []);
+      setTxs(t.transactions ?? []);
+      setFlows(f.flows ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -64,6 +79,12 @@ export default function StockSettingsPage() {
     }
     return map;
   }, [accounts]);
+
+  // 계좌별 현금 잔고
+  const cashByAccount = useMemo(
+    () => computeCashByAccount(txs, flows),
+    [txs, flows]
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -206,6 +227,18 @@ export default function StockSettingsPage() {
                                   </div>
                                   <div className="text-[11px] text-gray-400 mt-0.5">
                                     {a.account_number || '계좌번호 없음'}
+                                  </div>
+                                  <div className="text-[11px] mt-0.5">
+                                    <span className="text-gray-500">현금잔고 </span>
+                                    <span
+                                      className={`font-semibold ${
+                                        (cashByAccount[a.id] ?? 0) < 0
+                                          ? 'text-rose-500'
+                                          : 'text-gray-800'
+                                      }`}
+                                    >
+                                      {formatKRW(cashByAccount[a.id] ?? 0)}
+                                    </span>
                                   </div>
                                 </div>
                                 <Pencil size={14} className="text-gray-300 ml-2" />
