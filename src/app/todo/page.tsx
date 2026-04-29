@@ -89,6 +89,25 @@ export default function TodoHomePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 진입 시 구글 캘린더 자동 sync (5분 throttle, 서버에서)
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/google-calendar/auto-sync', { method: 'POST' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || d?.status !== 'ok') return;
+        const p = d.pulled ?? {};
+        if ((p.created ?? 0) + (p.updated ?? 0) + (p.deleted ?? 0) > 0 || (d.pushed ?? 0) > 0) {
+          refetch();
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { complete, uncomplete } = useCompleteTask();
 
   const [sheetOpen, setSheetOpen] = useState(false);
