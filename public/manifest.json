@@ -14,5 +14,35 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "오늘의 할일",
+      "short_name": "오늘",
+      "description": "오늘 할일 + Daily Track",
+      "url": "/todo",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    },
+    {
+      "name": "할일 추가",
+      "short_name": "+ 할일",
+      "description": "빠른 할일 등록",
+      "url": "/todo?quick=1",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    },
+    {
+      "name": "가계부",
+      "short_name": "가계부",
+      "description": "거래 입력 · 예산",
+      "url": "/budget",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    },
+    {
+      "name": "주식 포트폴리오",
+      "short_name": "주식",
+      "description": "보유 종목 · 손익",
+      "url": "/stocks/portfolio",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    }
   ]
 }
