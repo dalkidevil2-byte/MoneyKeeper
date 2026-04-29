@@ -130,6 +130,51 @@ export async function getAccessToken(householdId: string): Promise<{
 }
 
 // ─────────────────────────────────────────
+// 멤버 hex 색 → Google Event colorId 매핑
+// Google 캘린더 이벤트 색은 1~11 고정 팔레트
+// ─────────────────────────────────────────
+const GCAL_PALETTE: { id: string; hex: string }[] = [
+  { id: '1', hex: '#7986cb' },  // Lavender
+  { id: '2', hex: '#33b679' },  // Sage
+  { id: '3', hex: '#8e24aa' },  // Grape
+  { id: '4', hex: '#e67c73' },  // Flamingo
+  { id: '5', hex: '#f6c026' },  // Banana
+  { id: '6', hex: '#f5511d' },  // Tangerine
+  { id: '7', hex: '#039be5' },  // Peacock
+  { id: '8', hex: '#616161' },  // Graphite
+  { id: '9', hex: '#3f51b5' },  // Blueberry
+  { id: '10', hex: '#0b8043' }, // Basil
+  { id: '11', hex: '#d60000' }, // Tomato
+];
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
+  if (!m) return null;
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+function colorDistance(a: [number, number, number], b: [number, number, number]): number {
+  return (
+    (a[0] - b[0]) ** 2 +
+    (a[1] - b[1]) ** 2 +
+    (a[2] - b[2]) ** 2
+  );
+}
+
+function pickColorId(hex: string | null | undefined): string | null {
+  if (!hex) return null;
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  let best: { id: string; dist: number } | null = null;
+  for (const p of GCAL_PALETTE) {
+    const prgb = hexToRgb(p.hex)!;
+    const d = colorDistance(rgb, prgb);
+    if (!best || d < best.dist) best = { id: p.id, dist: d };
+  }
+  return best?.id ?? null;
+}
+
+// ─────────────────────────────────────────
 // Task → Google Event payload 변환
 // ─────────────────────────────────────────
 export function taskToEvent(task: Task): Record<string, unknown> | null {
@@ -163,6 +208,11 @@ export function taskToEvent(task: Task): Record<string, unknown> | null {
     start,
     end,
   };
+
+  // 멤버 색상 → Google colorId
+  const memberColor = task.member?.color ?? null;
+  const colorId = pickColorId(memberColor);
+  if (colorId) event.colorId = colorId;
 
   // 루틴 → RRULE
   if (task.type === 'routine' && task.recurrence) {

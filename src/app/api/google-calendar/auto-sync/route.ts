@@ -5,7 +5,7 @@ import { pullEventsToTasks, pushTaskToGoogle } from '@/lib/google-calendar';
 import type { Task } from '@/types';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
-const THROTTLE_MIN = 5;
+const THROTTLE_MIN = 1;
 
 /**
  * 페이지 진입 시 호출되는 자동 sync.
@@ -36,7 +36,7 @@ export async function POST() {
   try {
     const { data: needsPush } = await supabase
       .from('tasks')
-      .select('*')
+      .select('*, member:members!member_id(id, name, color)')
       .eq('household_id', HOUSEHOLD_ID)
       .eq('kind', 'event')
       .eq('is_active', true)

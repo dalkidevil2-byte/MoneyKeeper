@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Link as LinkIcon, X, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Link as LinkIcon, X, CheckCircle2, Palette, Copy } from 'lucide-react';
 import dayjs from 'dayjs';
 
 type Status =
@@ -149,10 +149,67 @@ export default function GoogleCalendarSection() {
                 <X size={13} /> 해제
               </button>
             </div>
+
+            {/* 보조 도구 */}
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button
+                onClick={async () => {
+                  if (!confirm('이미 동기화된 모든 일정을 다시 push 합니다.\n(색상/제목/시간 갱신용 — 시간이 좀 걸립니다)'))
+                    return;
+                  setBusy(true);
+                  setSyncResult(null);
+                  try {
+                    const res = await fetch('/api/google-calendar/repush', { method: 'POST' });
+                    const j = await res.json();
+                    setSyncResult(`색상 재반영: ${j.updated}건 갱신 / ${j.failed}건 실패 / 총 ${j.total}건`);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                disabled={busy}
+                className="py-2 rounded-xl border border-amber-200 text-amber-700 text-xs font-semibold inline-flex items-center justify-center gap-1 active:bg-amber-50 disabled:opacity-50"
+              >
+                <Palette size={12} /> 색상 재반영
+              </button>
+              <button
+                onClick={async () => {
+                  // 미리보기
+                  setBusy(true);
+                  try {
+                    const res = await fetch('/api/google-calendar/dedupe');
+                    const j = await res.json();
+                    if (j.total_duplicates === 0) {
+                      setSyncResult('중복 없음 ✨');
+                      return;
+                    }
+                    if (
+                      !confirm(
+                        `중복 후보 ${j.total_groups}그룹 / ${j.total_duplicates}건 발견.\n` +
+                          `각 그룹에서 1개만 남기고 나머지를 삭제할까요?\n` +
+                          `(우선순위: 구글 연결됨 > 담당자 있음 > 오래된 것)`,
+                      )
+                    )
+                      return;
+                    const res2 = await fetch('/api/google-calendar/dedupe', { method: 'POST' });
+                    const j2 = await res2.json();
+                    setSyncResult(
+                      `중복 정리: ${j2.removed}건 비활성화 · 구글에서 ${j2.google_deleted}건 삭제`,
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                disabled={busy}
+                className="py-2 rounded-xl border border-rose-200 text-rose-700 text-xs font-semibold inline-flex items-center justify-center gap-1 active:bg-rose-50 disabled:opacity-50"
+              >
+                <Copy size={12} /> 중복 정리
+              </button>
+            </div>
+
             <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
               일정 추가/수정/삭제 시 자동으로 구글 캘린더에 반영돼요.
               <br />
-              구글에서 만든 일정은 "지금 동기화" 버튼으로 가져옵니다.
+              구글에서 만든 일정은 진입 시 자동 가져오기 (5분 throttle).
             </p>
           </>
         )}

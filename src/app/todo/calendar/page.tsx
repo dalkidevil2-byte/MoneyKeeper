@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Plus, CalendarDays, CalendarRange, CalendarC
 import Link from 'next/link';
 import { useTasks, useSaveTask } from '@/hooks/useTasks';
 import { useTaskClipboard } from '@/hooks/useTaskClipboard';
+import { useGCalAutoSync } from '@/hooks/useGCalAutoSync';
 import { useMembers } from '@/hooks/useAccounts';
 import { shouldShowOnCalendar, isTaskCompletedOn } from '@/lib/task-recurrence';
 import { getHolidaysMap, shortHolidayName, type Holiday } from '@/lib/korean-holidays';
@@ -81,24 +82,8 @@ export default function TodoCalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 진입 시 구글 캘린더 자동 sync (5분 throttle)
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/google-calendar/auto-sync', { method: 'POST' })
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled || d?.status !== 'ok') return;
-        const p = d.pulled ?? {};
-        if ((p.created ?? 0) + (p.updated ?? 0) + (p.deleted ?? 0) > 0 || (d.pushed ?? 0) > 0) {
-          refetch();
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // 진입/포커스/visibility 시 구글 캘린더 자동 sync
+  useGCalAutoSync(refetch);
 
   // chip 드래그 상태
   const [chipDrag, setChipDrag] = useState<{
