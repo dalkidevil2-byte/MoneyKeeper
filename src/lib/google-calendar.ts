@@ -455,8 +455,8 @@ export async function pullEventsToTasks(householdId: string): Promise<{
       continue;
     }
 
-    // recurring 인스턴스는 부모 1건만 매칭하면 되므로 instance 는 스킵
-    if (ev.recurringEventId && ev.recurringEventId !== ev.id) continue;
+    // singleEvents=true 로 반복 일정도 인스턴스 단위로 펼쳐서 받으므로
+    // 각 인스턴스를 독립 task 로 저장 (스킵하지 않음)
 
     const fields = eventToTaskFields(ev);
     if (!fields) continue;
