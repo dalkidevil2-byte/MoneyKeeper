@@ -5,6 +5,7 @@ import { Plus, Trash2, X, CheckCircle2, Circle, MoreHorizontal } from 'lucide-re
 import type { DailyTrack, DailyTrackPeriod } from '@/types';
 import { DAILY_TRACK_PERIOD_LABELS, WEEKDAY_LABELS } from '@/types';
 import { useMembers } from '@/hooks/useAccounts';
+import { useToday } from '@/hooks/useToday';
 import DailyTrackDetailSheet from '@/components/todo/DailyTrackDetailSheet';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -26,6 +27,11 @@ export default function DailyTracksPage() {
   useEffect(() => {
     refetch();
   }, []);
+
+  // 자정에 자동 갱신 — 오늘 체크 상태가 다음 날에는 새로 비어 있어야 함
+  useToday(() => {
+    refetch();
+  });
 
   const check = async (t: DailyTrack) => {
     await fetch(`/api/daily-tracks/${t.id}/check`, { method: 'POST' });

@@ -11,6 +11,7 @@ import QuickInputBar from '@/components/todo/QuickInputBar';
 import TaskFormSheet from '@/components/todo/TaskFormSheet';
 import DailyTrackDetailSheet from '@/components/todo/DailyTrackDetailSheet';
 import { useTodayTasks, useCompleteTask, useTasks } from '@/hooks/useTasks';
+import { useToday } from '@/hooks/useToday';
 import { useMembers } from '@/hooks/useAccounts';
 import type { Task, TodayTask, DailyTrack } from '@/types';
 import { DAILY_TRACK_PERIOD_LABELS } from '@/types';
@@ -92,8 +93,11 @@ export default function TodoHomePage() {
   const [editing, setEditing] = useState<Task | null>(null);
   const [sheetDefaults, setSheetDefaults] = useState<Partial<Task> | null>(null);
 
-  const today = dayjs().format('YYYY년 M월 D일 dddd');
-  const todayKey = dayjs().format('YYYY-MM-DD');
+  // 자정 자동 갱신 — 날짜가 넘어가면 데이터 refetch + 표시 업데이트
+  const todayKey = useToday(() => {
+    refetch();
+  });
+  const today = dayjs(todayKey).format('YYYY년 M월 D일 dddd');
 
   const handleToggle = async (item: TodayTask) => {
     try {
