@@ -185,6 +185,36 @@ export function shouldShowOnCalendar(task: Task, date: Dayjs | string): boolean 
 }
 
 /**
+ * Daily Time Table 전용 — 캘린더 chip 에는 안 나오는 할일(todo)도 노출.
+ * - event/routine: shouldShowOnCalendar 로직 그대로
+ * - todo: start_date~deadline_date 범위 안 또는 단일 날짜 매칭이면 표시
+ */
+export function shouldShowOnDayTimeline(task: Task, date: Dayjs | string): boolean {
+  if (!task.is_active) return false;
+  if (task.status === 'cancelled') return false;
+  const target = dayjs(date).format('YYYY-MM-DD');
+
+  if (task.kind === 'todo') {
+    // 완료 기록이 있는 그날도 표시
+    if ((task.completions ?? []).some((c) => c.completed_on === target)) return true;
+    if (task.status === 'done' && task.completed_at) {
+      const doneDate = dayjs(task.completed_at).format('YYYY-MM-DD');
+      if (doneDate === target) return true;
+    }
+    const start = task.start_date;
+    const end = task.deadline_date ?? task.start_date;
+    if (!start && !end) return false;
+    if (start && end) return target >= start && target <= end;
+    if (start && !end) return target === start;
+    if (!start && end) return target === end;
+    return false;
+  }
+
+  // event 류는 기존 캘린더 규칙 재사용
+  return shouldShowOnCalendar(task, date);
+}
+
+/**
  * 캘린더 셀에서 그날의 task가 "완료됨" 상태인지.
  */
 export function isTaskCompletedOn(task: Task, date: Dayjs | string): boolean {

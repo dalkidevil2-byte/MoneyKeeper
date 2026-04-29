@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useTasks, useSaveTask } from '@/hooks/useTasks';
 import { useTaskClipboard } from '@/hooks/useTaskClipboard';
 import { useMembers } from '@/hooks/useAccounts';
-import { shouldShowOnCalendar, isTaskCompletedOn } from '@/lib/task-recurrence';
+import { shouldShowOnDayTimeline, isTaskCompletedOn } from '@/lib/task-recurrence';
 import { getHolidaysMap, shortHolidayName } from '@/lib/korean-holidays';
 import TaskFormSheet from '@/components/todo/TaskFormSheet';
 import type { Task } from '@/types';
@@ -108,7 +108,7 @@ function TodoDayPage() {
   const allTasks = useMemo(() => {
     const map = new Map<string, Task>();
     [...tasks, ...routines].forEach((t) => map.set(t.id, t));
-    return Array.from(map.values()).filter((t) => shouldShowOnCalendar(t, day));
+    return Array.from(map.values()).filter((t) => shouldShowOnDayTimeline(t, day));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, routines, date]);
 
