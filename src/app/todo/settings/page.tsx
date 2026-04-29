@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { Plus, Trash2, RefreshCw, ExternalLink, X, Settings as SettingsIcon } from 'lucide-react';
 import type { TodoNotionSource } from '@/types';
+import GoogleCalendarSection from '@/components/todo/GoogleCalendarSection';
 
 dayjs.locale('ko');
 
@@ -35,6 +36,7 @@ export default function TodoSettingsPage() {
       </div>
 
       <div className="px-5 space-y-5">
+        <GoogleCalendarSection />
         <NotificationSettingsSection />
         <TelegramSettingsSection />
 

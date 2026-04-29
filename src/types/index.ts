@@ -335,6 +335,9 @@ export interface Task {
   expense_transaction_id: string | null;
   /** 할일 자체의 예상 소요시간 (분) — 계획 단계에서 입력. 실제 합산(session_total_minutes)와 비교 */
   estimated_minutes?: number | null;
+  /** 구글 캘린더 동기화 — 매핑된 이벤트 ID */
+  google_event_id?: string | null;
+  google_synced_at?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

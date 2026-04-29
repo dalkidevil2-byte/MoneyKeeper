@@ -121,6 +121,27 @@ export async function PATCH(
 
     if (error) throw error;
 
+    // 구글 캘린더 자동 동기화 (event 만)
+    if (data && data.kind === 'event' && data.due_date) {
+      try {
+        const { pushTaskToGoogle } = await import('@/lib/google-calendar');
+        const gid = await pushTaskToGoogle(data.household_id, data as unknown as import('@/types').Task);
+        if (gid && gid !== data.google_event_id) {
+          await supabase
+            .from('tasks')
+            .update({ google_event_id: gid, google_synced_at: new Date().toISOString() })
+            .eq('id', id);
+        } else if (gid) {
+          await supabase
+            .from('tasks')
+            .update({ google_synced_at: new Date().toISOString() })
+            .eq('id', id);
+        }
+      } catch (e) {
+        console.warn('[gcal] patch task push 실패', e);
+      }
+    }
+
     return NextResponse.json({ task: data });
   } catch (error) {
     console.error('[PATCH /tasks/:id]', error);
@@ -139,12 +160,29 @@ export async function DELETE(
   const supabase = createServerSupabaseClient();
 
   try {
+    // 삭제 전에 google_event_id, household_id 조회
+    const { data: prev } = await supabase
+      .from('tasks')
+      .select('google_event_id, household_id, kind')
+      .eq('id', id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('tasks')
       .update({ status: 'cancelled', is_active: false })
       .eq('id', id);
 
     if (error) throw error;
+
+    // 구글 캘린더에서도 삭제
+    if (prev?.google_event_id && prev.household_id) {
+      try {
+        const { deleteTaskFromGoogle } = await import('@/lib/google-calendar');
+        await deleteTaskFromGoogle(prev.household_id as string, prev.google_event_id as string);
+      } catch (e) {
+        console.warn('[gcal] delete task 실패', e);
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

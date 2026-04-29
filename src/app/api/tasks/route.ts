@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import type { CreateTaskInput } from '@/types';
+import type { CreateTaskInput, Task } from '@/types';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -174,6 +174,22 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // 구글 캘린더 자동 동기화 (event 만, 실패해도 무시)
+    if (data && data.kind === 'event' && data.due_date) {
+      try {
+        const { pushTaskToGoogle } = await import('@/lib/google-calendar');
+        const gid = await pushTaskToGoogle(data.household_id, data as Task);
+        if (gid) {
+          await supabase
+            .from('tasks')
+            .update({ google_event_id: gid, google_synced_at: new Date().toISOString() })
+            .eq('id', data.id);
+        }
+      } catch (e) {
+        console.warn('[gcal] post task push 실패', e);
+      }
+    }
 
     return NextResponse.json({ task: data }, { status: 201 });
   } catch (error) {
