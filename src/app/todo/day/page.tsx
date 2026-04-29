@@ -422,7 +422,27 @@ function TodoDayPage() {
             <ChevronRight size={20} />
           </button>
         </div>
-        <div className="w-7" />
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => router.push(`/todo/calendar?date=${date}`)}
+            className="text-[10px] font-semibold text-gray-500 px-2 py-1 active:bg-gray-100 rounded"
+            aria-label="월간"
+            title="월간 보기"
+          >
+            월
+          </button>
+          <button
+            onClick={() => router.push(`/todo/week?date=${date}`)}
+            className="text-[10px] font-semibold text-gray-500 px-2 py-1 active:bg-gray-100 rounded"
+            aria-label="주간"
+            title="주간 보기"
+          >
+            주
+          </button>
+          <span className="text-[10px] font-semibold bg-amber-500 text-white px-2 py-1 rounded">
+            일
+          </span>
+        </div>
       </div>
       <div className="hidden md:block text-[10px] text-gray-400 px-4 py-1 border-b border-gray-100">
         💡 일정 클릭=선택 · 더블클릭=수정 · Ctrl+C/V · Delete

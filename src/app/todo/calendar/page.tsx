@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, CalendarRange, CalendarClock } from 'lucide-react';
+import Link from 'next/link';
 import { useTasks, useSaveTask } from '@/hooks/useTasks';
 import { useTaskClipboard } from '@/hooks/useTaskClipboard';
 import { useMembers } from '@/hooks/useAccounts';
@@ -497,8 +498,26 @@ export default function TodoCalendarPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-white pb-24">
-      <div className="px-4 pt-6 pb-2">
+      <div className="px-4 pt-6 pb-2 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">캘린더</h1>
+        {/* 뷰 토글 — 월/주/일 */}
+        <div className="inline-flex bg-white border border-gray-200 rounded-full p-0.5 shadow-sm">
+          <span className="px-3 py-1.5 text-xs font-semibold rounded-full bg-amber-500 text-white inline-flex items-center gap-1">
+            <CalendarDays size={13} /> 월
+          </span>
+          <Link
+            href={`/todo/week?date=${selected}`}
+            className="px-3 py-1.5 text-xs font-semibold rounded-full text-gray-500 active:bg-gray-100 inline-flex items-center gap-1"
+          >
+            <CalendarRange size={13} /> 주
+          </Link>
+          <Link
+            href={`/todo/day?date=${selected}`}
+            className="px-3 py-1.5 text-xs font-semibold rounded-full text-gray-500 active:bg-gray-100 inline-flex items-center gap-1"
+          >
+            <CalendarClock size={13} /> 일
+          </Link>
+        </div>
       </div>
 
       {/* 월 네비 */}
