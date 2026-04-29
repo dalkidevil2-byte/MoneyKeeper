@@ -12,6 +12,7 @@ import {
   PieChart,
   Coins,
   X,
+  Star,
 } from 'lucide-react';
 import {
   aggregateByTicker,
@@ -52,6 +53,7 @@ export default function PortfolioPage() {
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedHolding | null>(null);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // 필터
   const [ownerFilter, setOwnerFilter] = useState<string | null>(null);
@@ -87,6 +89,51 @@ export default function PortfolioPage() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // 즐겨찾기 로드
+  const loadFavorites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stocks/favorites');
+      if (!res.ok) return;
+      const j = await res.json();
+      setFavorites(new Set<string>(j.tickers ?? []));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
+
+  const toggleFavorite = useCallback(
+    async (ticker: string) => {
+      const isFav = favorites.has(ticker);
+      // 낙관적 업데이트
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (isFav) next.delete(ticker);
+        else next.add(ticker);
+        return next;
+      });
+      try {
+        if (isFav) {
+          await fetch(`/api/stocks/favorites?ticker=${encodeURIComponent(ticker)}`, {
+            method: 'DELETE',
+          });
+        } else {
+          await fetch('/api/stocks/favorites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker }),
+          });
+        }
+      } catch {
+        // 실패 시 롤백
+        loadFavorites();
+      }
+    },
+    [favorites, loadFavorites]
+  );
 
   // 라벨 lookup
   const accountById = useMemo(
@@ -213,8 +260,14 @@ export default function PortfolioPage() {
         const pct = a.invested > 0 ? (unrealized / a.invested) * 100 : 0;
         return { ...a, currentPrice: p, value, unrealized, pct };
       })
-      .sort((a, b) => b.value - a.value);
-  }, [aggregated, quotes]);
+      .sort((a, b) => {
+        // 즐겨찾기 우선 → 그다음 평가액 내림차순
+        const aFav = favorites.has(a.ticker) ? 1 : 0;
+        const bFav = favorites.has(b.ticker) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
+        return b.value - a.value;
+      });
+  }, [aggregated, quotes, favorites]);
 
   const hasFilter = ownerFilter || accountFilter;
 
@@ -438,8 +491,11 @@ export default function PortfolioPage() {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {sorted.map((h) => (
-                <li key={h.ticker}>
+              {sorted.map((h) => {
+                const isFav = favorites.has(h.ticker);
+                return (
+                <li key={h.ticker} className={isFav ? 'bg-amber-50/40' : ''}>
+                  <div className="relative">
                   <button
                     onClick={() =>
                       setSelected({
@@ -449,7 +505,7 @@ export default function PortfolioPage() {
                         changePct: quotes[h.ticker]?.regularMarketChangePercent,
                       })
                     }
-                    className="w-full text-left px-5 py-3 active:bg-gray-50"
+                    className="w-full text-left pl-12 pr-5 py-3 active:bg-gray-50"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -501,8 +557,28 @@ export default function PortfolioPage() {
                       </span>
                     </div>
                   </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(h.ticker);
+                    }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-lg active:bg-amber-100"
+                    aria-label={isFav ? '즐겨찾기 해제' : '즐겨찾기'}
+                    title={isFav ? '즐겨찾기 해제' : '즐겨찾기'}
+                  >
+                    <Star
+                      size={18}
+                      className={
+                        isFav
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-gray-300'
+                      }
+                    />
+                  </button>
+                  </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>
