@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -25,6 +25,20 @@ const DEFAULT_COLOR = '#94a3b8';
 const DOW_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function TodoWeekPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-sm text-gray-400">
+          불러오는 중…
+        </div>
+      }
+    >
+      <TodoWeekInner />
+    </Suspense>
+  );
+}
+
+function TodoWeekInner() {
   const sp = useSearchParams();
   const initialDate = sp.get('date') ?? dayjs().format('YYYY-MM-DD');
 
