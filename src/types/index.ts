@@ -337,6 +337,7 @@ export interface Task {
   estimated_minutes?: number | null;
   /** 구글 캘린더 동기화 — 매핑된 이벤트 ID */
   google_event_id?: string | null;
+  google_calendar_id?: string | null;
   google_synced_at?: string | null;
   is_active: boolean;
   created_at: string;

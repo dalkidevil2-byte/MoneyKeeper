@@ -271,7 +271,10 @@ export async function pushTaskToGoogle(
   const auth = await getAccessToken(householdId);
   if (!auth) return null;
 
-  const calId = encodeURIComponent(auth.sync.calendar_id || 'primary');
+  // 기존 매핑 있으면 그 캘린더에, 없으면 primary
+  const targetCalRaw =
+    task.google_calendar_id || auth.sync.calendar_id || 'primary';
+  const calId = encodeURIComponent(targetCalRaw);
   const headers = {
     Authorization: `Bearer ${auth.accessToken}`,
     'Content-Type': 'application/json',
@@ -285,8 +288,12 @@ export async function pushTaskToGoogle(
     );
     if (res.ok) return task.google_event_id;
     if (res.status === 404 || res.status === 410) {
-      // 삭제됐으면 새로 생성
-      return await createEvent(calId, headers, ev);
+      // 삭제됐으면 새로 생성 (primary 로 fallback)
+      return await createEvent(
+        encodeURIComponent(auth.sync.calendar_id || 'primary'),
+        headers,
+        ev,
+      );
     }
     const t = await res.text();
     console.warn('[gcal] update fail', res.status, t);
@@ -330,16 +337,33 @@ type GEvent = {
   updated?: string;
 };
 
+/** 모든 사용자 캘린더 목록 — primary 외에 보조/공유 캘린더 모두 */
+async function listCalendars(
+  accessToken: string,
+): Promise<{ id: string; summary: string; primary?: boolean; selected?: boolean }[]> {
+  const res = await fetch(`${CAL_API_BASE}/users/me/calendarList?minAccessRole=reader`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return [];
+  const j = await res.json();
+  return j.items ?? [];
+}
+
+type GEventWithCal = GEvent & { _calendarId: string };
+
 /**
- * 페이지네이션으로 시간 범위 내 모든 이벤트 페치.
- * 기본 5년 전 ~ 5년 후, 페이지당 250개, pageToken 으로 끝까지.
+ * 모든 캘린더의 이벤트를 시간 범위 내에서 페치.
+ * primary + 보조/공유 캘린더 전부.
+ * 기본 5년 전 ~ 5년 후, 캘린더당 페이지네이션.
  */
 export async function fetchEventsFromGoogle(
   householdId: string,
-): Promise<{ events: GEvent[]; sync: GCalSync } | null> {
+): Promise<{ events: GEventWithCal[]; sync: GCalSync } | null> {
   const auth = await getAccessToken(householdId);
   if (!auth) return null;
-  const calId = encodeURIComponent(auth.sync.calendar_id || 'primary');
+
+  const calendars = await listCalendars(auth.accessToken);
+  if (calendars.length === 0) return null;
 
   const now = new Date();
   const min = new Date(now);
@@ -347,40 +371,43 @@ export async function fetchEventsFromGoogle(
   const max = new Date(now);
   max.setFullYear(now.getFullYear() + 5);
 
-  const all: GEvent[] = [];
-  let pageToken: string | undefined;
-  let pages = 0;
-  const MAX_PAGES = 20; // 안전 한도 (250 * 20 = 5000건)
+  const all: GEventWithCal[] = [];
 
-  do {
-    const params = new URLSearchParams({
-      singleEvents: 'true',
-      showDeleted: 'true',
-      maxResults: '250',
-      orderBy: 'startTime',
-      timeMin: min.toISOString(),
-      timeMax: max.toISOString(),
-    });
-    if (pageToken) params.set('pageToken', pageToken);
+  for (const cal of calendars) {
+    const calId = encodeURIComponent(cal.id);
+    let pageToken: string | undefined;
+    let pages = 0;
+    const MAX_PAGES = 20;
 
-    const res = await fetch(`${CAL_API_BASE}/calendars/${calId}/events?${params}`, {
-      headers: { Authorization: `Bearer ${auth.accessToken}` },
-    });
-    if (!res.ok) {
-      const t = await res.text();
-      console.warn('[gcal] fetch fail', res.status, t);
-      return null;
-    }
-    const j = await res.json();
-    const items = (j.items ?? []) as GEvent[];
-    all.push(...items);
-    pageToken = j.nextPageToken;
-    pages++;
-    if (pages >= MAX_PAGES) {
-      console.warn('[gcal] page 한도 도달 — 일부 일정 누락 가능', all.length);
-      break;
-    }
-  } while (pageToken);
+    do {
+      const params = new URLSearchParams({
+        singleEvents: 'true',
+        showDeleted: 'true',
+        maxResults: '250',
+        orderBy: 'startTime',
+        timeMin: min.toISOString(),
+        timeMax: max.toISOString(),
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+
+      const res = await fetch(`${CAL_API_BASE}/calendars/${calId}/events?${params}`, {
+        headers: { Authorization: `Bearer ${auth.accessToken}` },
+      });
+      if (!res.ok) {
+        console.warn('[gcal] fetch fail', cal.summary, res.status);
+        break;
+      }
+      const j = await res.json();
+      const items = (j.items ?? []) as GEvent[];
+      for (const it of items) all.push({ ...it, _calendarId: cal.id });
+      pageToken = j.nextPageToken;
+      pages++;
+      if (pages >= MAX_PAGES) {
+        console.warn('[gcal] page 한도 도달', cal.summary, all.length);
+        break;
+      }
+    } while (pageToken);
+  }
 
   return { events: all, sync: auth.sync };
 }
@@ -434,18 +461,24 @@ export async function pullEventsToTasks(householdId: string): Promise<{
     const fields = eventToTaskFields(ev);
     if (!fields) continue;
 
+    const calId = (ev as GEventWithCal)._calendarId ?? null;
+
     if (matched) {
       // 우리 쪽이 더 최근이면 덮어쓰지 않음
       const ourUpdated = new Date(matched.updated_at).getTime();
       const theirUpdated = ev.updated ? new Date(ev.updated).getTime() : 0;
       if (theirUpdated <= ourUpdated) continue;
-      await supabase.from('tasks').update(fields).eq('id', matched.id);
+      await supabase
+        .from('tasks')
+        .update({ ...fields, google_calendar_id: calId })
+        .eq('id', matched.id);
       result.updated++;
     } else {
       await supabase.from('tasks').insert({
         household_id: householdId,
         kind: 'event',
         google_event_id: ev.id,
+        google_calendar_id: calId,
         google_synced_at: new Date().toISOString(),
         ...fields,
       });
@@ -506,10 +539,12 @@ function eventToTaskFields(ev: GEvent): Record<string, unknown> | null {
 export async function deleteTaskFromGoogle(
   householdId: string,
   googleEventId: string,
+  calendarIdHint?: string | null,
 ): Promise<boolean> {
   const auth = await getAccessToken(householdId);
   if (!auth) return false;
-  const calId = encodeURIComponent(auth.sync.calendar_id || 'primary');
+  const calRaw = calendarIdHint || auth.sync.calendar_id || 'primary';
+  const calId = encodeURIComponent(calRaw);
   const res = await fetch(
     `${CAL_API_BASE}/calendars/${calId}/events/${encodeURIComponent(googleEventId)}`,
     {
@@ -517,5 +552,17 @@ export async function deleteTaskFromGoogle(
       headers: { Authorization: `Bearer ${auth.accessToken}` },
     },
   );
-  return res.ok || res.status === 404 || res.status === 410;
+  if (res.ok || res.status === 404 || res.status === 410) return true;
+  // hint 가 틀렸을 수 있으니 primary 로 한 번 더 시도
+  if (calendarIdHint && calendarIdHint !== 'primary') {
+    const res2 = await fetch(
+      `${CAL_API_BASE}/calendars/primary/events/${encodeURIComponent(googleEventId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${auth.accessToken}` },
+      },
+    );
+    return res2.ok || res2.status === 404 || res2.status === 410;
+  }
+  return false;
 }

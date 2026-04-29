@@ -160,10 +160,10 @@ export async function DELETE(
   const supabase = createServerSupabaseClient();
 
   try {
-    // 삭제 전에 google_event_id, household_id 조회
+    // 삭제 전에 google_event_id, google_calendar_id, household_id 조회
     const { data: prev } = await supabase
       .from('tasks')
-      .select('google_event_id, household_id, kind')
+      .select('google_event_id, google_calendar_id, household_id, kind')
       .eq('id', id)
       .maybeSingle();
 
@@ -174,11 +174,15 @@ export async function DELETE(
 
     if (error) throw error;
 
-    // 구글 캘린더에서도 삭제
+    // 구글 캘린더에서도 삭제 (소속 캘린더 우선, fallback primary)
     if (prev?.google_event_id && prev.household_id) {
       try {
         const { deleteTaskFromGoogle } = await import('@/lib/google-calendar');
-        await deleteTaskFromGoogle(prev.household_id as string, prev.google_event_id as string);
+        await deleteTaskFromGoogle(
+          prev.household_id as string,
+          prev.google_event_id as string,
+          (prev.google_calendar_id as string | null) ?? null,
+        );
       } catch (e) {
         console.warn('[gcal] delete task 실패', e);
       }
