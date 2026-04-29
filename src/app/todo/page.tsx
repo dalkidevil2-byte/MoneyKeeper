@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
+import Link from 'next/link';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import TaskCard from '@/components/todo/TaskCard';
@@ -139,7 +140,17 @@ export default function TodoHomePage() {
             <div className="text-xs text-gray-500">{today}</div>
             <h1 className="text-2xl font-bold text-gray-900 mt-1">오늘의 할일</h1>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-1">
+            <Link
+              href="/todo/search"
+              className="p-2 rounded-full hover:bg-amber-100 text-gray-600"
+              aria-label="검색"
+              title="검색"
+            >
+              <Search size={18} />
+            </Link>
+            <NotificationBell />
+          </div>
         </div>
 
         {/* 자연어/음성 빠른 입력 */}
