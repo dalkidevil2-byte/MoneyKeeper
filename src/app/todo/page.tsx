@@ -6,6 +6,8 @@ import Link from 'next/link';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import TaskCard from '@/components/todo/TaskCard';
+import TaskTimer from '@/components/todo/TaskTimer';
+import FrequentTodoChips from '@/components/todo/FrequentTodoChips';
 import NotificationBell from '@/components/todo/NotificationBell';
 import QuickInputBar from '@/components/todo/QuickInputBar';
 import TaskFormSheet from '@/components/todo/TaskFormSheet';
@@ -260,10 +262,18 @@ export default function TodoHomePage() {
           )}
         </section>
 
+        {/* 자주 쓰는 할일 칩 (빠른 추가) */}
+        <FrequentTodoChips
+          todos={todoTasks}
+          memberId={memberFilter || undefined}
+          onCreated={refetch}
+        />
+
         {/* 할일 (todo) — 기한 임박순 */}
         <TodoSection
           todos={todoTasks}
           onClick={openEdit}
+          onTimerChange={refetch}
           onToggleComplete={async (t) => {
             if (t.status === 'done') {
               // 완료 취소 (오늘 날짜 기준)
@@ -343,10 +353,12 @@ function TodoSection({
   todos,
   onClick,
   onToggleComplete,
+  onTimerChange,
 }: {
   todos: Task[];
   onClick: (t: Task) => void;
   onToggleComplete: (t: Task) => Promise<void>;
+  onTimerChange?: () => void;
 }) {
   const today = dayjs().startOf('day');
 
@@ -402,25 +414,25 @@ function TodoSection({
       ) : (
         <div className="space-y-3">
           {groups.overdue.length > 0 && (
-            <TodoGroup label="🔴 지난 기한" tasks={groups.overdue} onClick={onClick} onToggleComplete={onToggleComplete} danger />
+            <TodoGroup label="🔴 지난 기한" tasks={groups.overdue} onClick={onClick} onToggleComplete={onToggleComplete} danger onTimerChange={onTimerChange} />
           )}
           {groups.today.length > 0 && (
-            <TodoGroup label="오늘 마감" tasks={groups.today} onClick={onClick} onToggleComplete={onToggleComplete} />
+            <TodoGroup label="오늘 마감" tasks={groups.today} onClick={onClick} onToggleComplete={onToggleComplete} onTimerChange={onTimerChange} />
           )}
           {groups.tomorrow.length > 0 && (
-            <TodoGroup label="내일 마감" tasks={groups.tomorrow} onClick={onClick} onToggleComplete={onToggleComplete} />
+            <TodoGroup label="내일 마감" tasks={groups.tomorrow} onClick={onClick} onToggleComplete={onToggleComplete} onTimerChange={onTimerChange} />
           )}
           {groups.week.length > 0 && (
-            <TodoGroup label="이번 주 안에" tasks={groups.week} onClick={onClick} onToggleComplete={onToggleComplete} />
+            <TodoGroup label="이번 주 안에" tasks={groups.week} onClick={onClick} onToggleComplete={onToggleComplete} onTimerChange={onTimerChange} />
           )}
           {groups.later.length > 0 && (
-            <TodoGroup label="이후" tasks={groups.later} onClick={onClick} onToggleComplete={onToggleComplete} />
+            <TodoGroup label="이후" tasks={groups.later} onClick={onClick} onToggleComplete={onToggleComplete} onTimerChange={onTimerChange} />
           )}
           {groups.none.length > 0 && (
-            <TodoGroup label="기한 없음" tasks={groups.none} onClick={onClick} onToggleComplete={onToggleComplete} muted />
+            <TodoGroup label="기한 없음" tasks={groups.none} onClick={onClick} onToggleComplete={onToggleComplete} muted onTimerChange={onTimerChange} />
           )}
           {done.length > 0 && (
-            <TodoGroup label="완료" tasks={done} onClick={onClick} onToggleComplete={onToggleComplete} muted />
+            <TodoGroup label="완료" tasks={done} onClick={onClick} onToggleComplete={onToggleComplete} muted onTimerChange={onTimerChange} />
           )}
         </div>
       )}
@@ -442,6 +454,7 @@ function TodoGroup({
   tasks,
   onClick,
   onToggleComplete,
+  onTimerChange,
   danger,
   muted,
 }: {
@@ -449,6 +462,7 @@ function TodoGroup({
   tasks: Task[];
   onClick: (t: Task) => void;
   onToggleComplete: (t: Task) => Promise<void>;
+  onTimerChange?: () => void;
   danger?: boolean;
   muted?: boolean;
 }) {
@@ -548,12 +562,17 @@ function TodoGroup({
                   )}
                 </div>
               </div>
-              {t.member && (
-                <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: t.member.color }}
-                />
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {!done && (
+                  <TaskTimer taskId={t.id} onChange={onTimerChange} size="sm" />
+                )}
+                {t.member && (
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: t.member.color }}
+                  />
+                )}
+              </div>
             </div>
           );
         })}
