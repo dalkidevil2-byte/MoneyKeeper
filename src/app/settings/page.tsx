@@ -751,8 +751,33 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* 고정지출 관리 */}
+        {/* 고정지출 관리 — 전용 페이지로 이동 */}
         <section>
+          <Link
+            href="/budget/fixed-expenses"
+            className="block bg-white rounded-2xl border border-gray-100 p-4 hover:bg-gray-50 active:bg-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <RepeatIcon size={18} className="text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">고정지출 관리</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {ftLoading
+                      ? '로딩 중…'
+                      : `${fixedTemplates.length}건 등록됨 · 매월 자동 알림`}
+                  </p>
+                </div>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </div>
+          </Link>
+        </section>
+
+        {/* 고정지출 관리 (legacy 인라인 — 숨김 처리, 추후 삭제 가능) */}
+        <section className="hidden">
           <div className="flex items-center justify-between mb-2 px-1">
             <h2 className="font-semibold text-gray-800 flex items-center gap-2">
               <RepeatIcon size={16} className="text-indigo-600" /> 고정지출 항목
