@@ -63,7 +63,20 @@ export async function GET(req: NextRequest) {
 
     for (const task of allTasks) {
       if (task.type === 'one_time') {
-        if (task.status === 'done') continue;
+        // 완료된 일회성: 오늘 날짜에 완료된 거면 취소선으로 노출
+        const completedAt = task.completed_at
+          ? task.completed_at.slice(0, 10)
+          : null;
+        if (task.status === 'done') {
+          if (completedAt === todayKey || task.due_date === todayKey) {
+            today.push({
+              task,
+              occurrence_date: todayKey,
+              completed_today: true,
+            });
+          }
+          continue;
+        }
         // snoozed는 snoozed_to가 오늘이면 표시
         const effectiveDate = task.status === 'snoozed' ? task.snoozed_to : task.due_date;
         if (effectiveDate === todayKey) {
