@@ -331,8 +331,8 @@ type GEvent = {
 };
 
 /**
- * 마지막 동기화 시점 이후 변경된 이벤트만 페치 (incremental).
- * 처음 호출이면 1년치 가져옴.
+ * 페이지네이션으로 시간 범위 내 모든 이벤트 페치.
+ * 기본 5년 전 ~ 5년 후, 페이지당 250개, pageToken 으로 끝까지.
  */
 export async function fetchEventsFromGoogle(
   householdId: string,
@@ -341,32 +341,48 @@ export async function fetchEventsFromGoogle(
   if (!auth) return null;
   const calId = encodeURIComponent(auth.sync.calendar_id || 'primary');
 
-  const params = new URLSearchParams({
-    singleEvents: 'true', // 반복 일정을 인스턴스로 펼침
-    showDeleted: 'true',
-    maxResults: '500',
-    orderBy: 'startTime',
-  });
-  // updatedMin 은 incremental — singleEvents=true 면 orderBy 와 충돌해서 제외
-  // 대신 timeMin 으로 1년 전 ~ 1년 후만
   const now = new Date();
   const min = new Date(now);
-  min.setFullYear(now.getFullYear() - 1);
+  min.setFullYear(now.getFullYear() - 5);
   const max = new Date(now);
-  max.setFullYear(now.getFullYear() + 1);
-  params.set('timeMin', min.toISOString());
-  params.set('timeMax', max.toISOString());
+  max.setFullYear(now.getFullYear() + 5);
 
-  const res = await fetch(`${CAL_API_BASE}/calendars/${calId}/events?${params}`, {
-    headers: { Authorization: `Bearer ${auth.accessToken}` },
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    console.warn('[gcal] fetch fail', res.status, t);
-    return null;
-  }
-  const j = await res.json();
-  return { events: (j.items ?? []) as GEvent[], sync: auth.sync };
+  const all: GEvent[] = [];
+  let pageToken: string | undefined;
+  let pages = 0;
+  const MAX_PAGES = 20; // 안전 한도 (250 * 20 = 5000건)
+
+  do {
+    const params = new URLSearchParams({
+      singleEvents: 'true',
+      showDeleted: 'true',
+      maxResults: '250',
+      orderBy: 'startTime',
+      timeMin: min.toISOString(),
+      timeMax: max.toISOString(),
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const res = await fetch(`${CAL_API_BASE}/calendars/${calId}/events?${params}`, {
+      headers: { Authorization: `Bearer ${auth.accessToken}` },
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      console.warn('[gcal] fetch fail', res.status, t);
+      return null;
+    }
+    const j = await res.json();
+    const items = (j.items ?? []) as GEvent[];
+    all.push(...items);
+    pageToken = j.nextPageToken;
+    pages++;
+    if (pages >= MAX_PAGES) {
+      console.warn('[gcal] page 한도 도달 — 일부 일정 누락 가능', all.length);
+      break;
+    }
+  } while (pageToken);
+
+  return { events: all, sync: auth.sync };
 }
 
 /**
