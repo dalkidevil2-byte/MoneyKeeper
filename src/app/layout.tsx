@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import AppLauncher from "@/components/AppLauncher";
 
 const notoSansKR = Noto_Sans_KR({
   variable: "--font-noto-sans-kr",
@@ -42,6 +43,7 @@ export default function RootLayout({
       <body className="min-h-full bg-gray-50 font-sans antialiased">
         <div className="max-w-lg mx-auto min-h-screen">
           {children}
+          <AppLauncher />
           <BottomNav />
         </div>
       </body>
