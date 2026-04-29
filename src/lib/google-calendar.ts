@@ -24,6 +24,7 @@ export type GCalSync = {
 
 export const GCAL_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'openid',
 ];
@@ -344,9 +345,15 @@ async function listCalendars(
   const res = await fetch(`${CAL_API_BASE}/users/me/calendarList?minAccessRole=reader`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    // 권한 부족 등의 이유로 실패하면 primary 라도 동작하도록
+    console.warn('[gcal] listCalendars 실패', res.status);
+    return [{ id: 'primary', summary: 'Primary' }];
+  }
   const j = await res.json();
-  return j.items ?? [];
+  const items = (j.items ?? []) as Array<{ id: string; summary: string }>;
+  if (items.length === 0) return [{ id: 'primary', summary: 'Primary' }];
+  return items;
 }
 
 type GEventWithCal = GEvent & { _calendarId: string };
