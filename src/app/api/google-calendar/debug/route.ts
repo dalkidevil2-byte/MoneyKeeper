@@ -12,6 +12,11 @@ export async function GET() {
   const supabase = createServerSupabaseClient();
   const debug: Record<string, unknown> = {};
 
+  // 0. 현재 코드가 요청할 scope 들 (재연결 시 보낼 것)
+  const { GCAL_SCOPES, buildAuthUrl } = await import('@/lib/google-calendar');
+  debug.code_scopes = GCAL_SCOPES;
+  debug.auth_url_sample = buildAuthUrl(HOUSEHOLD_ID);
+
   // 1. 연결 상태
   const { data: sync } = await supabase
     .from('google_calendar_sync')
