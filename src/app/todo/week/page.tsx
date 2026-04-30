@@ -151,8 +151,35 @@ function TodoWeekInner() {
         </button>
       </div>
 
-      {/* 7일 큰 카드 */}
-      <div className="px-3 space-y-2">
+      {/* 7일 큰 카드 — 좌우 스와이프로 주 변경 */}
+      <div
+        className="px-3 space-y-2"
+        onTouchStart={(e) => {
+          if (e.touches.length !== 1) return;
+          const t = e.touches[0];
+          (e.currentTarget as HTMLDivElement & { _swipeStart?: { x: number; y: number; t: number } })._swipeStart = {
+            x: t.clientX,
+            y: t.clientY,
+            t: Date.now(),
+          };
+        }}
+        onTouchEnd={(e) => {
+          const el = e.currentTarget as HTMLDivElement & {
+            _swipeStart?: { x: number; y: number; t: number };
+          };
+          const start = el._swipeStart;
+          if (!start) return;
+          el._swipeStart = undefined;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - start.x;
+          const dy = t.clientY - start.y;
+          const dt = Date.now() - start.t;
+          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
+            if (dx < 0) setAnchor((a) => a.add(1, 'week'));
+            else setAnchor((a) => a.subtract(1, 'week'));
+          }
+        }}
+      >
         {days.map(({ date, tasks: list }) => {
           const key = date.format('YYYY-MM-DD');
           const dow = date.day();

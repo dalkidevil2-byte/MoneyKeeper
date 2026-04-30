@@ -338,7 +338,24 @@ type GEvent = {
   updated?: string;
 };
 
-/** 모든 사용자 캘린더 목록 — primary 외에 보조/공유 캘린더 모두 */
+/**
+ * 공휴일/생일 등 자동 구독 캘린더는 동기화 대상에서 제외.
+ * Google 의 공식 holidays 캘린더: holiday@group.v.calendar.google.com
+ * 생일 캘린더: addressbook#contacts@group.v.calendar.google.com
+ */
+function shouldSkipCalendar(cal: { id: string; summary?: string }): boolean {
+  const id = (cal.id ?? '').toLowerCase();
+  const summary = (cal.summary ?? '').toLowerCase();
+  if (id.includes('holiday@group.v.calendar.google.com')) return true;
+  if (id.includes('addressbook#contacts@group')) return true; // 생일
+  if (id === 'en.usa#holiday@group.v.calendar.google.com') return true;
+  // summary 기반 (안전망)
+  if (/공휴일|휴일|holiday/i.test(summary)) return true;
+  if (/생일|birthday/i.test(summary)) return true;
+  return false;
+}
+
+/** 모든 사용자 캘린더 목록 — primary 외에 보조/공유 캘린더 모두 (공휴일 제외) */
 async function listCalendars(
   accessToken: string,
 ): Promise<{ id: string; summary: string; primary?: boolean; selected?: boolean }[]> {
@@ -346,14 +363,14 @@ async function listCalendars(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
-    // 권한 부족 등의 이유로 실패하면 primary 라도 동작하도록
     console.warn('[gcal] listCalendars 실패', res.status);
     return [{ id: 'primary', summary: 'Primary' }];
   }
   const j = await res.json();
-  const items = (j.items ?? []) as Array<{ id: string; summary: string }>;
-  if (items.length === 0) return [{ id: 'primary', summary: 'Primary' }];
-  return items;
+  const all = (j.items ?? []) as Array<{ id: string; summary: string }>;
+  const filtered = all.filter((c) => !shouldSkipCalendar(c));
+  if (filtered.length === 0) return [{ id: 'primary', summary: 'Primary' }];
+  return filtered;
 }
 
 type GEventWithCal = GEvent & { _calendarId: string };

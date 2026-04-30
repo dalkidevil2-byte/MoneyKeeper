@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Link as LinkIcon, X, CheckCircle2, Palette, Copy } from 'lucide-react';
+import { RefreshCw, Link as LinkIcon, X, CheckCircle2, Palette, Copy, Cake } from 'lucide-react';
 import dayjs from 'dayjs';
 
 type Status =
@@ -151,7 +151,7 @@ export default function GoogleCalendarSection() {
             </div>
 
             {/* 보조 도구 */}
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="grid grid-cols-3 gap-2 mt-2">
               <button
                 onClick={async () => {
                   if (!confirm('이미 동기화된 모든 일정을 다시 push 합니다.\n(색상/제목/시간 갱신용 — 시간이 좀 걸립니다)'))
@@ -170,6 +170,24 @@ export default function GoogleCalendarSection() {
                 className="py-2 rounded-xl border border-amber-200 text-amber-700 text-xs font-semibold inline-flex items-center justify-center gap-1 active:bg-amber-50 disabled:opacity-50"
               >
                 <Palette size={12} /> 색상 재반영
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('이미 import 된 공휴일/생일 캘린더 일정을\n우리 앱에서 비활성화할까요?\n(구글 캘린더 측은 건드리지 않음)')) return;
+                  setBusy(true);
+                  setSyncResult(null);
+                  try {
+                    const res = await fetch('/api/google-calendar/cleanup-holidays', { method: 'POST' });
+                    const j = await res.json();
+                    setSyncResult(`공휴일/생일 ${j.removed}건 비활성화`);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                disabled={busy}
+                className="py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-semibold inline-flex items-center justify-center gap-1 active:bg-gray-50 disabled:opacity-50"
+              >
+                <Cake size={12} /> 공휴일 정리
               </button>
               <button
                 onClick={async () => {

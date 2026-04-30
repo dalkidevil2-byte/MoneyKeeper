@@ -615,7 +615,40 @@ export default function TodoCalendarPage() {
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
+        <div
+          className="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden"
+          onTouchStart={(e) => {
+            if (e.touches.length !== 1) return;
+            const t = e.touches[0];
+            (e.currentTarget as HTMLDivElement & { _swipeStart?: { x: number; y: number; t: number } })._swipeStart = {
+              x: t.clientX,
+              y: t.clientY,
+              t: Date.now(),
+            };
+          }}
+          onTouchEnd={(e) => {
+            const el = e.currentTarget as HTMLDivElement & {
+              _swipeStart?: { x: number; y: number; t: number };
+            };
+            const start = el._swipeStart;
+            if (!start) return;
+            el._swipeStart = undefined;
+            // 칩 드래그가 진행중이면 무시
+            if (chipDrag) return;
+            const t = e.changedTouches[0];
+            const dx = t.clientX - start.x;
+            const dy = t.clientY - start.y;
+            const dt = Date.now() - start.t;
+            // 가로 우세 + 충분한 거리 + 빠른 제스처 (= 스와이프)
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
+              if (dx < 0) {
+                setMonth((m) => m.add(1, 'month'));
+              } else {
+                setMonth((m) => m.subtract(1, 'month'));
+              }
+            }
+          }}
+        >
           {cells.map((cell, idx) => {
             const dow = idx % 7;
             const lastCol = dow === 6;
