@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Plus, ChevronRight, Sparkles, Search } from 'lucide-react';
+import { ChevronLeft, Plus, ChevronRight, Sparkles, Search, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import type { ArchiveCollection } from '@/types';
 import { ARCHIVE_TEMPLATES, BLANK_SCHEMA } from '@/lib/archive-templates';
 
@@ -13,6 +13,30 @@ export default function ArchivePage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
+  const [reorderMode, setReorderMode] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const moveCollection = async (idx: number, dir: -1 | 1) => {
+    if (busy) return;
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= collections.length) return;
+    const next = collections.slice();
+    [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+    setCollections(next);
+    setBusy(true);
+    try {
+      await fetch('/api/archive/collections/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          household_id: HOUSEHOLD_ID,
+          ids: next.map((c) => c.id),
+        }),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!search.trim()) return collections;
@@ -45,12 +69,27 @@ export default function ArchivePage() {
             <ChevronLeft size={22} className="text-gray-700" />
           </Link>
           <h1 className="text-lg font-bold text-gray-900 flex-1">📦 아카이브</h1>
-          <button
-            onClick={() => setCreating(true)}
-            className="text-sm text-violet-600 font-semibold inline-flex items-center gap-1 mr-12"
-          >
-            <Plus size={16} /> 새 컬렉션
-          </button>
+          <div className="flex items-center gap-1 mr-12">
+            {collections.length > 1 && (
+              <button
+                onClick={() => setReorderMode((v) => !v)}
+                className={`text-sm font-semibold inline-flex items-center gap-0.5 px-2 py-1 rounded-lg ${
+                  reorderMode ? 'bg-amber-500 text-white' : 'text-amber-600'
+                }`}
+                title="컬렉션 순서"
+              >
+                <ArrowUpDown size={14} /> {reorderMode ? '완료' : '순서'}
+              </button>
+            )}
+            {!reorderMode && (
+              <button
+                onClick={() => setCreating(true)}
+                className="text-sm text-violet-600 font-semibold inline-flex items-center gap-1"
+              >
+                <Plus size={16} /> 새 컬렉션
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -90,13 +129,10 @@ export default function ArchivePage() {
             </button>
           </div>
         ) : (
-          filtered.map((c) => (
-            <Link
-              key={c.id}
-              href={`/archive/${c.id}`}
-              className="block bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50"
-            >
-              <div className="flex items-center gap-3">
+          filtered.map((c) => {
+            const realIdx = collections.findIndex((x) => x.id === c.id);
+            const cardInner = (
+              <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div
                   className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
                   style={{ backgroundColor: `${c.color}22` }}
@@ -112,10 +148,47 @@ export default function ArchivePage() {
                     {c.description && ` · ${c.description}`}
                   </div>
                 </div>
-                <ChevronRight size={18} className="text-gray-300 shrink-0" />
               </div>
-            </Link>
-          ))
+            );
+            // 검색 중이면 reorder 비활성
+            const showReorder = reorderMode && !search.trim();
+            if (showReorder) {
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center bg-white rounded-2xl border border-amber-200 px-3 py-2.5 gap-2"
+                >
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button
+                      onClick={() => moveCollection(realIdx, -1)}
+                      disabled={realIdx === 0 || busy}
+                      className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button
+                      onClick={() => moveCollection(realIdx, 1)}
+                      disabled={realIdx === collections.length - 1 || busy}
+                      className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                  </div>
+                  {cardInner}
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={c.id}
+                href={`/archive/${c.id}`}
+                className="flex items-center bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 gap-2"
+              >
+                {cardInner}
+                <ChevronRight size={18} className="text-gray-300 shrink-0" />
+              </Link>
+            );
+          })
         )}
 
         {/* AI 생성 안내 */}
