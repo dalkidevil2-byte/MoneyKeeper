@@ -45,21 +45,48 @@ function extractJSON(raw: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    const base64 = formData.get('base64') as string | null;
-    const mimeType = (formData.get('mimeType') as string) || 'image/jpeg';
-    const householdId = (formData.get('household_id') as string) || DEFAULT_HOUSEHOLD_ID;
+    const contentType = req.headers.get('content-type') ?? '';
 
     let imageUrl: string;
-    if (base64) {
-      imageUrl = `data:${mimeType};base64,${base64}`;
-    } else if (file) {
-      const buf = await file.arrayBuffer();
-      const b64 = Buffer.from(buf).toString('base64');
-      imageUrl = `data:${file.type};base64,${b64}`;
+    let householdId = DEFAULT_HOUSEHOLD_ID;
+
+    if (contentType.includes('application/json')) {
+      // JSON: { imageUrl, household_id }
+      const body = await req.json();
+      if (!body.imageUrl) {
+        return NextResponse.json({ error: 'imageUrl 필요' }, { status: 400 });
+      }
+      // 외부 URL 인 경우 다운로드해서 base64 변환 (OpenAI 가 직접 fetch 못 하는 경우 대비)
+      try {
+        const r = await fetch(body.imageUrl);
+        if (r.ok) {
+          const ab = await r.arrayBuffer();
+          const b64 = Buffer.from(ab).toString('base64');
+          const mt = r.headers.get('content-type') ?? 'image/jpeg';
+          imageUrl = `data:${mt};base64,${b64}`;
+        } else {
+          imageUrl = body.imageUrl;
+        }
+      } catch {
+        imageUrl = body.imageUrl;
+      }
+      if (body.household_id) householdId = body.household_id;
     } else {
-      return NextResponse.json({ error: '이미지가 없습니다.' }, { status: 400 });
+      const formData = await req.formData();
+      const file = formData.get('file') as File | null;
+      const base64 = formData.get('base64') as string | null;
+      const mimeType = (formData.get('mimeType') as string) || 'image/jpeg';
+      householdId = (formData.get('household_id') as string) || DEFAULT_HOUSEHOLD_ID;
+
+      if (base64) {
+        imageUrl = `data:${mimeType};base64,${base64}`;
+      } else if (file) {
+        const buf = await file.arrayBuffer();
+        const b64 = Buffer.from(buf).toString('base64');
+        imageUrl = `data:${file.type};base64,${b64}`;
+      } else {
+        return NextResponse.json({ error: '이미지가 없습니다.' }, { status: 400 });
+      }
     }
 
     // ─── 동적 카테고리: 기본 + custom_categories 머지 ─────────

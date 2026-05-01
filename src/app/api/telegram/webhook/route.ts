@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { runAssistant, type ChatHistoryItem } from '@/lib/assistant-chat';
+import dayjs from 'dayjs';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 const HISTORY_TURNS = 10; // 최근 10턴 (= user + assistant 페어 5쌍)
@@ -23,10 +24,19 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const message = body?.message ?? body?.edited_message;
-    if (!message?.text || !message?.chat?.id) {
-      return NextResponse.json({ ok: true, ignored: 'no text' });
+    if (!message?.chat?.id) {
+      return NextResponse.json({ ok: true, ignored: 'no chat' });
     }
     const chatId = String(message.chat.id);
+
+    // 사진 → OCR 영수증 처리
+    if (message.photo && Array.isArray(message.photo) && message.photo.length > 0) {
+      return await handleReceiptPhoto(chatId, message);
+    }
+
+    if (!message.text) {
+      return NextResponse.json({ ok: true, ignored: 'no text' });
+    }
     const userText: string = message.text;
 
     // /start 명령어
@@ -111,6 +121,137 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error('[tg webhook]', e);
     // 텔레그램은 200 외 응답이면 재전송하므로 항상 200 으로
+    return NextResponse.json({ ok: false, error: String(e) });
+  }
+}
+
+// ─────────────────────────────────────────
+// 영수증 사진 처리
+// ─────────────────────────────────────────
+async function handleReceiptPhoto(
+  chatId: string,
+  message: {
+    photo: Array<{ file_id: string; width: number; height: number }>;
+    caption?: string;
+  },
+) {
+  const supabase = createServerSupabaseClient();
+
+  // 멤버 식별
+  const { data: member } = await supabase
+    .from('members')
+    .select('household_id, id, name')
+    .eq('telegram_chat_id', chatId)
+    .eq('is_active', true)
+    .maybeSingle();
+  const householdId = (member?.household_id as string) ?? DEFAULT_HOUSEHOLD_ID;
+
+  const { data: tg } = await supabase
+    .from('telegram_settings')
+    .select('bot_token, enabled')
+    .eq('household_id', householdId)
+    .maybeSingle();
+  if (!tg?.bot_token || tg.enabled === false) {
+    return NextResponse.json({ ok: true, ignored: 'tg disabled' });
+  }
+  if (!member) {
+    await sendTelegramMessage(
+      tg.bot_token,
+      chatId,
+      `등록되지 않은 사용자에요. 설정에서 chat_id (${chatId})를 멤버에 등록해주세요.`,
+    );
+    return NextResponse.json({ ok: true, ignored: 'unknown chat_id' });
+  }
+
+  // 가장 큰 사이즈 사진
+  const photo = message.photo[message.photo.length - 1];
+  await sendTelegramMessage(
+    tg.bot_token,
+    chatId,
+    '📸 영수증 분석 중… 잠시만요',
+  );
+
+  try {
+    // 1) Telegram getFile
+    const fileRes = await fetch(
+      `https://api.telegram.org/bot${tg.bot_token}/getFile?file_id=${photo.file_id}`,
+    );
+    const fileJson = await fileRes.json();
+    const filePath = fileJson?.result?.file_path;
+    if (!filePath) throw new Error('파일 경로 못 받음');
+    const imageUrl = `https://api.telegram.org/file/bot${tg.bot_token}/${filePath}`;
+
+    // 2) OCR 호출 — 같은 origin 의 OCR endpoint 재사용
+    const origin = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://m-keeper-zgo7-git-main-dalkidevil2-6147s-projects.vercel.app';
+    const ocrRes = await fetch(`${origin}/api/transactions/ocr?secret=${process.env.CRON_SECRET ?? ''}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageUrl,
+        household_id: householdId,
+      }),
+    });
+
+    if (!ocrRes.ok) {
+      const txt = await ocrRes.text();
+      throw new Error(`OCR ${ocrRes.status}: ${txt.slice(0, 100)}`);
+    }
+    const ocrJson = await ocrRes.json();
+    const items = (ocrJson.items ?? []) as Array<{
+      name: string;
+      amount: number;
+      category_main?: string;
+      category_sub?: string;
+    }>;
+    const storeName = ocrJson.store_name ?? '';
+    const date = ocrJson.date || dayjs().format('YYYY-MM-DD');
+    const total = ocrJson.total ?? items.reduce((s, i) => s + (i.amount ?? 0), 0);
+
+    if (items.length === 0) {
+      await sendTelegramMessage(
+        tg.bot_token,
+        chatId,
+        '⚠️ 영수증을 못 읽었어요. 더 선명한 사진으로 다시 보내주세요.',
+      );
+      return NextResponse.json({ ok: true, items: 0 });
+    }
+
+    // 3) draft 거래로 저장
+    let inserted = 0;
+    for (const it of items) {
+      const { error } = await supabase.from('transactions').insert({
+        household_id: householdId,
+        member_id: member.id,
+        amount: Math.abs(it.amount),
+        type: it.amount < 0 ? 'income' : 'expense',
+        category_main: it.category_main ?? '',
+        category_sub: it.category_sub ?? '',
+        store_name: storeName,
+        memo: `📲 텔레그램 (${it.name})`,
+        date,
+        status: 'draft',
+      });
+      if (!error) inserted++;
+    }
+
+    // 4) 답변
+    const reply = `✅ 영수증 분석 완료
+🏪 ${storeName || '미확인'}
+📅 ${date}
+🧾 ${items.length}건 · 총 ${total.toLocaleString('ko-KR')}원
+
+💾 ${inserted}건 임시 저장 (draft)
+앱 → 가계부 → '미확인' 거래에서 확인 후 확정해주세요.`;
+    await sendTelegramMessage(tg.bot_token, chatId, reply);
+
+    return NextResponse.json({ ok: true, inserted });
+  } catch (e) {
+    console.error('[receipt-photo]', e);
+    await sendTelegramMessage(
+      tg.bot_token,
+      chatId,
+      `⚠️ 영수증 처리 중 오류: ${e instanceof Error ? e.message : '알 수 없음'}`,
+    );
     return NextResponse.json({ ok: false, error: String(e) });
   }
 }
