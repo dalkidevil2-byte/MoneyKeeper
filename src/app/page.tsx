@@ -33,6 +33,23 @@ export default function HubPage() {
 
       {/* 앱 카드들 */}
       <div className="px-5 space-y-3">
+        {/* AI 어시스턴트 카드 */}
+        <Link
+          href="/assistant"
+          className="block bg-gradient-to-br from-violet-50 to-indigo-50 rounded-2xl p-5 shadow-sm border border-violet-100 active:scale-[0.98] transition-transform"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0">
+              <Sparkles size={28} className="text-violet-600" strokeWidth={2} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">AI 어시스턴트</h2>
+              <p className="text-sm text-gray-500 mt-0.5">자연어 질문 · 명령 · 인사이트</p>
+            </div>
+            <ChevronRight size={20} className="text-gray-300" />
+          </div>
+        </Link>
+
         {/* 할일 카드 */}
         <Link
           href="/todo"
@@ -104,22 +121,6 @@ export default function HubPage() {
           </div>
         </Link>
 
-        {/* AI 어시스턴트 카드 */}
-        <Link
-          href="/assistant"
-          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0">
-              <Sparkles size={28} className="text-violet-600" strokeWidth={2} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-bold text-gray-900">AI 어시스턴트</h2>
-              <p className="text-sm text-gray-500 mt-0.5">자연어 질문 · 명령 · 인사이트</p>
-            </div>
-            <ChevronRight size={20} className="text-gray-300" />
-          </div>
-        </Link>
       </div>
     </div>
   );
