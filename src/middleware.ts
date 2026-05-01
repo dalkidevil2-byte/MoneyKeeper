@@ -16,7 +16,8 @@ export function middleware(req: NextRequest) {
     (pathname === '/api/todo/telegram/dispatch' ||
       pathname === '/api/todo/telegram/debug' ||
       pathname === '/api/google-calendar/auto-sync' ||
-      pathname === '/api/telegram/webhook')
+      pathname === '/api/telegram/webhook' ||
+      pathname === '/api/daily-tracks/reminders/dispatch')
   ) {
     const provided =
       req.headers.get('x-cron-secret') ?? searchParams.get('secret');

@@ -15,7 +15,7 @@ export async function PATCH(
       'member_id', 'target_member_ids',
       'target_count', 'period_unit',
       'start_date', 'end_date',
-      'weekdays', 'until_count',
+      'weekdays', 'until_count', 'reminder_time',
       'is_active', 'position',
     ] as const;
     const update: Record<string, unknown> = {};

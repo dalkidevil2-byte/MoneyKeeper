@@ -221,6 +221,9 @@ function TrackFormSheet({
   const [untilCount, setUntilCount] = useState<number | ''>(
     initial?.until_count ?? '',
   );
+  const [reminderTime, setReminderTime] = useState<string>(
+    initial?.reminder_time ?? '',
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -250,6 +253,7 @@ function TrackFormSheet({
         start_date: startDate || null,
         end_date: endDate || null,
         until_count: untilCount === '' ? null : untilCount,
+        reminder_time: reminderTime || null,
       };
       const res = isEdit
         ? await fetch(`/api/daily-tracks/${initial.id}`, {
@@ -382,6 +386,33 @@ function TrackFormSheet({
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
               비워두면 무기한. 기간 지나면 자동 비활성화.
+            </div>
+          </div>
+
+          {/* 알림 시간 (선택) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              ⏰ 알림 시간 (선택)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={reminderTime}
+                onChange={(e) => setReminderTime(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              />
+              {reminderTime && (
+                <button
+                  type="button"
+                  onClick={() => setReminderTime('')}
+                  className="text-xs text-gray-400 hover:text-rose-500"
+                >
+                  지우기
+                </button>
+              )}
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              이 시간까지 체크 안 했으면 텔레그램으로 부드럽게 알려드려요.
             </div>
           </div>
 

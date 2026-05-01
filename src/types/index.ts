@@ -476,6 +476,7 @@ export interface DailyTrack {
   end_date: string | null;
   weekdays: number[] | null;    // 활성 요일 (0=일, 6=토). null/빈 배열이면 매일
   until_count: number | null;   // 총 N회 완료까지만 (도달 시 자동 비활성)
+  reminder_time: string | null; // 알림 시간 HH:MM (체크 안 됐으면 텔레그램 알림)
   is_active: boolean;
   position: number;
   created_at: string;
@@ -501,6 +502,7 @@ export interface CreateDailyTrackInput {
   end_date?: string | null;
   weekdays?: number[] | null;
   until_count?: number | null;
+  reminder_time?: string | null;
 }
 
 export const DAILY_TRACK_PERIOD_LABELS: Record<DailyTrackPeriod, string> = {

@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
           ? body.weekdays
           : null,
       until_count: body.until_count ?? null,
+      reminder_time: body.reminder_time ?? null,
       is_active: true,
     };
     const { data, error } = await supabase
