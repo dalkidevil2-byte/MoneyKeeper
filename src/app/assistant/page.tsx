@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Send, Sparkles, Loader2, Mic, MicOff } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Loader2, Mic, MicOff, Paperclip, X as CloseIcon } from 'lucide-react';
 import MessageContent from '@/components/assistant/MessageContent';
 
-type Msg = { role: 'user' | 'assistant'; content: string };
+type Msg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
 const SUGGESTIONS = [
   '오늘 일정 알려줘',
@@ -21,8 +21,45 @@ export default function AssistantPage() {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [autoSendOnFinish, setAutoSendOnFinish] = useState(true);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedPreview, setAttachedPreview] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<unknown>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 클립보드에서 이미지 paste
+  useEffect(() => {
+    const handler = (e: ClipboardEvent) => {
+      if (busy) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of items) {
+        if (it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) {
+            e.preventDefault();
+            attachFile(f);
+            break;
+          }
+        }
+      }
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy]);
+
+  const attachFile = (file: File) => {
+    setAttachedFile(file);
+    if (attachedPreview) URL.revokeObjectURL(attachedPreview);
+    setAttachedPreview(URL.createObjectURL(file));
+  };
+  const clearAttachment = () => {
+    if (attachedPreview) URL.revokeObjectURL(attachedPreview);
+    setAttachedFile(null);
+    setAttachedPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   useEffect(() => {
     return () => {
@@ -85,21 +122,40 @@ export default function AssistantPage() {
   };
 
   const send = async (text: string) => {
-    if (!text.trim() || busy) return;
-    const userMsg: Msg = { role: 'user', content: text };
+    if ((!text.trim() && !attachedFile) || busy) return;
+    const file = attachedFile;
+    const previewUrl = attachedPreview;
+    const userMsg: Msg = {
+      role: 'user',
+      content: text || (file ? '(이미지 첨부)' : ''),
+      imageUrl: previewUrl ?? undefined,
+    };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
+    setAttachedFile(null);
+    setAttachedPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setBusy(true);
     try {
-      const res = await fetch('/api/assistant/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          history: messages.map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+      let res: Response;
+      const historyPayload = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      if (file) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('message', text);
+        fd.append('history', JSON.stringify(historyPayload));
+        res = await fetch('/api/assistant/chat', { method: 'POST', body: fd });
+      } else {
+        res = await fetch('/api/assistant/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, history: historyPayload }),
+        });
+      }
       const j = await res.json();
       const reply = j.content ?? '답변을 생성하지 못했어요.';
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
@@ -172,14 +228,24 @@ export default function AssistantPage() {
                       : 'bg-white border border-gray-100 text-gray-800 rounded-bl-sm shadow-sm'
                   }`}
                 >
-                  <MessageContent
-                    text={m.content}
-                    linkClassName={
-                      m.role === 'user'
-                        ? 'underline underline-offset-2 break-all text-violet-100 hover:text-white'
-                        : 'underline underline-offset-2 break-all text-violet-600 hover:text-violet-700'
-                    }
-                  />
+                  {m.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={m.imageUrl}
+                      alt="첨부"
+                      className="rounded-xl max-h-64 w-auto mb-2 object-contain"
+                    />
+                  )}
+                  {m.content && (
+                    <MessageContent
+                      text={m.content}
+                      linkClassName={
+                        m.role === 'user'
+                          ? 'underline underline-offset-2 break-all text-violet-100 hover:text-white'
+                          : 'underline underline-offset-2 break-all text-violet-600 hover:text-violet-700'
+                      }
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -202,6 +268,36 @@ export default function AssistantPage() {
               🎙 듣는 중… 말해주세요
             </div>
           )}
+          {attachedPreview && (
+            <div className="flex items-center gap-2 mb-2 bg-violet-50 rounded-xl p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachedPreview}
+                alt="첨부 미리보기"
+                className="w-12 h-12 rounded-lg object-cover"
+              />
+              <div className="flex-1 text-[11px] text-violet-700 truncate">
+                📎 {attachedFile?.name ?? '이미지'} — 보내면 AI 가 분석해요
+              </div>
+              <button
+                onClick={clearAttachment}
+                className="p-1 rounded-full hover:bg-violet-100 text-violet-500"
+                aria-label="첨부 제거"
+              >
+                <CloseIcon size={14} />
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) attachFile(f);
+            }}
+            className="hidden"
+          />
           <div className="flex items-end gap-2">
             <textarea
               value={input}
@@ -212,11 +308,26 @@ export default function AssistantPage() {
                   send(input);
                 }
               }}
-              placeholder={listening ? '말해보세요...' : '입력 또는 🎤 음성'}
+              placeholder={
+                listening
+                  ? '말해보세요...'
+                  : attachedFile
+                    ? '이 이미지에 대해 물어보세요 (생략 가능)'
+                    : '입력 / 🎤 음성 / 📎 이미지'
+              }
               rows={1}
               disabled={busy}
               className="flex-1 resize-none rounded-2xl bg-gray-100 px-4 py-2.5 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-300 max-h-32"
             />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+              className="w-10 h-10 rounded-full bg-gray-100 text-gray-600 active:bg-gray-200 inline-flex items-center justify-center disabled:opacity-30"
+              aria-label="이미지 첨부"
+              title="이미지 첨부 (Ctrl+V 도 가능)"
+            >
+              <Paperclip size={16} />
+            </button>
             <button
               onClick={toggleVoice}
               disabled={busy}
@@ -232,7 +343,7 @@ export default function AssistantPage() {
             </button>
             <button
               onClick={() => send(input)}
-              disabled={busy || !input.trim()}
+              disabled={busy || (!input.trim() && !attachedFile)}
               className="w-10 h-10 rounded-full bg-violet-600 text-white inline-flex items-center justify-center disabled:opacity-30"
               aria-label="전송"
             >

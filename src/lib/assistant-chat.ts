@@ -21,6 +21,7 @@ export async function runAssistant(
   householdId: string,
   userMessage: string,
   history: ChatHistoryItem[],
+  imageUrl?: string,
 ): Promise<{ content: string; tool_calls: Array<{ name: string; args: unknown }> }> {
   const today = dayjs().format('YYYY년 M월 D일 (ddd)');
   const systemPrompt = `당신은 사용자의 일정/할일/시간/가계부를 돕는 AI 어시스턴트입니다.
@@ -78,12 +79,28 @@ F) **get_stock_recommendations** — 종목별 저장된 추천 메모 조회:
      • [2026-03-20] 🟢 매수추천 — 35000원 분할매수"
    - 너무 많으면 최신 5~6건만, "더 보려면 X 메모 전체 보여줘" 안내
 
-G) 그 외는 데이터 조회/분석 도구 사용.`;
+G) 이미지가 첨부됐을 때 — 자동 분류:
+   - 증권사 체결확인/거래내역 화면 → 종목/수량/단가/수수료/세금 추출해서
+     "📷 인식: 종목 X 매수 N주 @ P원 — /stocks/transactions 에서 검토 후 등록"
+     형태로 안내. **자동 등록은 하지 말 것** (사용자가 검토해야 함).
+   - 영수증 → 가맹점/금액/카테고리 추출해서 create_transaction 호출 (status: 'draft' 권장).
+   - 리딩방/카톡/텔레그램 캡쳐 (종목명·매수/매도 메시지) → 텍스트 추출해서
+     save_stock_recommendation 호출.
+   - 일반 사진/문서 → 사용자 질문에 맞춰 답변.
+
+H) 그 외는 데이터 조회/분석 도구 사용.`;
+
+  const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] | string = imageUrl
+    ? [
+        { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
+        { type: 'text', text: userMessage || '이 이미지를 분석해줘' },
+      ]
+    : userMessage;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     ...(history as OpenAI.Chat.Completions.ChatCompletionMessageParam[]),
-    { role: 'user', content: userMessage },
+    { role: 'user', content: userContent },
   ];
 
   const toolCalls: Array<{ name: string; args: unknown }> = [];
@@ -91,7 +108,8 @@ G) 그 외는 데이터 조회/분석 도구 사용.`;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      // 이미지 첨부된 첫 라운드는 gpt-4o(vision 정확도) 사용, 이후 라운드는 mini
+      model: imageUrl && round === 0 ? 'gpt-4o' : 'gpt-4o-mini',
       messages,
       tools: ASSISTANT_TOOLS,
       tool_choice: 'auto',
