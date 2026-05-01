@@ -8,6 +8,7 @@ import HoldingsCompare from '@/components/stock/HoldingsCompare';
 import OwnerPnLSummary from '@/components/stock/OwnerPnLSummary';
 import TradeHistoryCompact from '@/components/stock/TradeHistoryCompact';
 import TickerFixModal from '@/components/stock/TickerFixModal';
+import MemoAnalyticsPanel from '@/components/stock/MemoAnalyticsPanel';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -97,6 +98,13 @@ export default function StockMemosPage() {
   const [saving, setSaving] = useState(false);
   const [fixingTicker, setFixingTicker] = useState<{ ticker: string; name?: string | null } | null>(null);
 
+  // 필터
+  const [ownerFilter, setOwnerFilter] = useState<string>(''); // '' = 전체
+  const [statusFilter, setStatusFilter] = useState<'all' | 'held' | 'sold' | 'memo_only'>('all');
+  const [recoFilter, setRecoFilter] = useState<'all' | 'buy' | 'sell' | 'watch' | 'hold'>('all');
+  const [showAnalytics, setShowAnalytics] = useState(true);
+  const [sortBy, setSortBy] = useState<'default' | 'updated' | 'value' | 'invested' | 'pl'>('default');
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -136,38 +144,6 @@ export default function StockMemosPage() {
         blocks: parseBlocks(m.content ?? ''),
       }));
 
-      // 정렬:
-      // 1) 보유 종목 (평가액 큰 순)
-      // 2) 거래 이력은 있지만 미보유 (최근 거래일 순)
-      // 3) 거래 없음 (메모 업데이트 순)
-      const tier = (m: EnrichedMemo): number => {
-        if ((m.holdings?.length ?? 0) > 0) return 0;
-        if (m.has_history) return 1;
-        return 2;
-      };
-      enriched.sort((a, b) => {
-        const ta = tier(a);
-        const tb = tier(b);
-        if (ta !== tb) return ta - tb;
-        if (ta === 0) {
-          const aValue = (a.holdings ?? []).reduce(
-            (s, h) => s + h.qty * (a.current_price ?? h.avgPrice),
-            0,
-          );
-          const bValue = (b.holdings ?? []).reduce(
-            (s, h) => s + h.qty * (b.current_price ?? h.avgPrice),
-            0,
-          );
-          if (aValue !== bValue) return bValue - aValue;
-        }
-        if (ta === 1) {
-          const aLast = a.trades?.[0]?.date ?? '';
-          const bLast = b.trades?.[0]?.date ?? '';
-          if (aLast !== bLast) return bLast.localeCompare(aLast);
-        }
-        return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
-      });
-
       setMemos(enriched);
     } finally {
       setLoading(false);
@@ -178,16 +154,135 @@ export default function StockMemosPage() {
     load();
   }, [load]);
 
+  // 메모에 등장한 모든 owner 목록
+  const ownerList = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of memos) {
+      for (const h of m.holdings ?? []) map.set(h.owner_id, h.owner_name);
+      for (const r of m.realized ?? []) map.set(r.owner_id, r.owner_name);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [memos]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return memos;
-    const q = search.toLowerCase();
-    return memos.filter(
-      (m) =>
-        m.ticker.toLowerCase().includes(q) ||
-        (m.name ?? '').toLowerCase().includes(q) ||
-        m.content.toLowerCase().includes(q),
+    let list = memos;
+
+    // 검색
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (m) =>
+          m.ticker.toLowerCase().includes(q) ||
+          (m.name ?? '').toLowerCase().includes(q) ||
+          m.content.toLowerCase().includes(q),
+      );
+    }
+
+    // 보유자 필터
+    if (ownerFilter) {
+      list = list.filter((m) => {
+        const inHoldings = (m.holdings ?? []).some((h) => h.owner_id === ownerFilter);
+        const inRealized = (m.realized ?? []).some((r) => r.owner_id === ownerFilter);
+        return inHoldings || inRealized;
+      });
+    }
+
+    // 상태 필터
+    if (statusFilter !== 'all') {
+      list = list.filter((m) => {
+        const held = (m.holdings?.length ?? 0) > 0;
+        const traded = !held && m.has_history;
+        if (statusFilter === 'held') return held;
+        if (statusFilter === 'sold') return traded;
+        if (statusFilter === 'memo_only') return !held && !m.has_history;
+        return true;
+      });
+    }
+
+    // 추천 상태 필터 — 최신 블록의 tag 기준
+    if (recoFilter !== 'all') {
+      const matches: Record<'buy' | 'sell' | 'watch' | 'hold', RegExp> = {
+        buy: /매수/,
+        sell: /매도/,
+        watch: /관심|주목/,
+        hold: /유지|홀드/,
+      };
+      const re = matches[recoFilter];
+      list = list.filter((m) => re.test(m.blocks?.[0]?.tag ?? ''));
+    }
+
+    return list;
+  }, [memos, search, ownerFilter, statusFilter, recoFilter]);
+
+  // 보유자 필터가 켜져있으면 분석 패널/표시도 해당 owner 만 합산하도록 메모 데이터 가공
+  const filteredForStats = useMemo(() => {
+    if (!ownerFilter) return filtered;
+    return filtered.map((m) => ({
+      ...m,
+      holdings: (m.holdings ?? []).filter((h) => h.owner_id === ownerFilter),
+      realized: (m.realized ?? []).filter((r) => r.owner_id === ownerFilter),
+      trades: (m.trades ?? []).filter((t) => t.owner_id === ownerFilter),
+    }));
+  }, [filtered, ownerFilter]);
+
+  // 헬퍼들
+  const valueOf = (m: EnrichedMemo): number =>
+    (m.holdings ?? []).reduce(
+      (s, h) => s + h.qty * (m.current_price ?? h.avgPrice),
+      0,
     );
-  }, [memos, search]);
+  const investedOf = (m: EnrichedMemo): number =>
+    (m.holdings ?? []).reduce((s, h) => s + h.invested, 0);
+  const totalPLOf = (m: EnrichedMemo): number => {
+    const realized = (m.realized ?? []).reduce((s, r) => s + r.total_pl, 0);
+    let unrealized = 0;
+    if (m.current_price != null) {
+      for (const h of m.holdings ?? []) {
+        unrealized += h.qty * m.current_price - h.invested;
+      }
+    }
+    return realized + unrealized;
+  };
+
+  const tier = (m: EnrichedMemo): number => {
+    if ((m.holdings?.length ?? 0) > 0) return 0;
+    if (m.has_history) return 1;
+    return 2;
+  };
+
+  const sorted = useMemo(() => {
+    const arr = filteredForStats.slice();
+    if (sortBy === 'updated') {
+      arr.sort((a, b) =>
+        (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
+      );
+    } else if (sortBy === 'value') {
+      arr.sort((a, b) => valueOf(b) - valueOf(a));
+    } else if (sortBy === 'invested') {
+      arr.sort((a, b) => investedOf(b) - investedOf(a));
+    } else if (sortBy === 'pl') {
+      arr.sort((a, b) => totalPLOf(b) - totalPLOf(a));
+    } else {
+      // default: 보유 → 매도 → 메모만, 그 안에서 평가액 / 최근 거래 / updated_at
+      arr.sort((a, b) => {
+        const ta = tier(a);
+        const tb = tier(b);
+        if (ta !== tb) return ta - tb;
+        if (ta === 0) {
+          const av = valueOf(a);
+          const bv = valueOf(b);
+          if (av !== bv) return bv - av;
+        }
+        if (ta === 1) {
+          const aLast = a.trades?.[0]?.date ?? '';
+          const bLast = b.trades?.[0]?.date ?? '';
+          if (aLast !== bLast) return bLast.localeCompare(aLast);
+        }
+        return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+      });
+    }
+    return arr;
+  }, [filteredForStats, sortBy]);
 
   const startEdit = (m: EnrichedMemo) => {
     setEditingTicker(m.ticker);
@@ -268,9 +363,141 @@ export default function StockMemosPage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-3">
+        {/* 분석 패널 */}
+        {!loading && memos.length > 0 && showAnalytics && (
+          <MemoAnalyticsPanel memos={filteredForStats} />
+        )}
+
+        {/* 필터 / 정렬 */}
+        {!loading && memos.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-3 space-y-2">
+            {/* 보유자 필터 */}
+            {ownerList.length > 0 && (
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+                <span className="text-[10px] font-bold text-gray-400 shrink-0 mr-1">
+                  보유자
+                </span>
+                <button
+                  onClick={() => setOwnerFilter('')}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    !ownerFilter
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  전체
+                </button>
+                {ownerList.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => setOwnerFilter(o.id)}
+                    className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                      ownerFilter === o.id
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {o.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 상태 필터 */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+              <span className="text-[10px] font-bold text-gray-400 shrink-0 mr-1">
+                상태
+              </span>
+              {([
+                { v: 'all', label: '전체' },
+                { v: 'held', label: '보유 중' },
+                { v: 'sold', label: '매도 완료' },
+                { v: 'memo_only', label: '메모만' },
+              ] as const).map((s) => (
+                <button
+                  key={s.v}
+                  onClick={() => setStatusFilter(s.v)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    statusFilter === s.v
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 최근 추천 톤 필터 */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+              <span className="text-[10px] font-bold text-gray-400 shrink-0 mr-1">
+                최근 추천
+              </span>
+              {([
+                { v: 'all', label: '전체' },
+                { v: 'buy', label: '🟢 매수추천' },
+                { v: 'sell', label: '🔴 매도추천' },
+                { v: 'watch', label: '👀 관심' },
+                { v: 'hold', label: '⚪ 유지' },
+              ] as const).map((s) => (
+                <button
+                  key={s.v}
+                  onClick={() => setRecoFilter(s.v)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    recoFilter === s.v
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 정렬 */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+              <span className="text-[10px] font-bold text-gray-400 shrink-0 mr-1">
+                정렬
+              </span>
+              {([
+                { v: 'default', label: '기본 (보유 우선)' },
+                { v: 'updated', label: '최근 메모' },
+                { v: 'value', label: '평가액' },
+                { v: 'invested', label: '투자액' },
+                { v: 'pl', label: '손익' },
+              ] as const).map((s) => (
+                <button
+                  key={s.v}
+                  onClick={() => setSortBy(s.v)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    sortBy === s.v
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 토글 */}
+            <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+              <span className="text-[10px] text-gray-400">
+                {sorted.length}/{memos.length}건 표시
+              </span>
+              <button
+                onClick={() => setShowAnalytics((v) => !v)}
+                className="text-[10px] text-violet-600 font-semibold"
+              >
+                {showAnalytics ? '분석 패널 숨기기' : '분석 패널 보이기'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="text-center text-sm text-gray-400 py-12">불러오는 중…</div>
-        ) : filtered.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="text-center py-16 px-4">
             <div className="text-4xl mb-3">📌</div>
             <p className="text-sm text-gray-500 leading-relaxed">
@@ -288,7 +515,7 @@ export default function StockMemosPage() {
             </Link>
           </div>
         ) : (
-          filtered.map((m) => (
+          sorted.map((m) => (
             <div
               key={m.ticker}
               className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
