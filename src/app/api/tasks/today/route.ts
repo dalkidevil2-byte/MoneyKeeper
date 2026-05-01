@@ -63,12 +63,10 @@ export async function GET(req: NextRequest) {
 
     for (const task of allTasks) {
       if (task.type === 'one_time') {
-        // 완료된 일회성: 오늘 날짜에 완료된 거면 취소선으로 노출
-        const completedAt = task.completed_at
-          ? task.completed_at.slice(0, 10)
-          : null;
+        // 완료된 일회성: due_date 가 오늘인 것만 (취소선 노출)
+        // bulk-complete-past 등으로 일괄 완료한 옛 일정은 노출하지 않음
         if (task.status === 'done') {
-          if (completedAt === todayKey || task.due_date === todayKey) {
+          if (task.due_date === todayKey) {
             today.push({
               task,
               occurrence_date: todayKey,
