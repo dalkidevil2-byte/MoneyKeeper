@@ -30,13 +30,11 @@ function extractJSON(raw: string): string {
 
 /**
  * POST /api/archive/collections/[id]/ai-fill
- * 이미지(영수증/책 표지/와인 라벨/드라마 포스터 등) → 컬렉션 schema 에 맞춰
- * data 객체 파싱. **DB 저장 안 함** — 사용자가 검토 후 저장.
+ * body: { text: string }
+ * 사용자가 자유롭게 적은 텍스트를 컬렉션 schema 에 맞춰 data 객체로 파싱.
+ * **DB 저장 안 함** — 사용자가 검토 후 저장.
  *
- * multipart/form-data: file (이미지)
- * 또는 JSON: { imageUrl }
- *
- * 응답: { data: { key1: value1, ... }, missing: string[] }
+ * 응답: { data: { key1: value1, ... }, filled: string[], missing: string[] }
  */
 export async function POST(
   req: NextRequest,
@@ -45,31 +43,12 @@ export async function POST(
   const { id } = await params;
   const supabase = createServerSupabaseClient();
   try {
-    const contentType = req.headers.get('content-type') ?? '';
-    let imageUrl = '';
-
-    if (contentType.includes('multipart/form-data')) {
-      const fd = await req.formData();
-      const file = fd.get('file') as File | null;
-      const b64 = fd.get('base64') as string | null;
-      const mt = (fd.get('mimeType') as string) || 'image/jpeg';
-      if (b64) {
-        imageUrl = `data:${mt};base64,${b64}`;
-      } else if (file) {
-        const buf = await file.arrayBuffer();
-        const enc = Buffer.from(buf).toString('base64');
-        imageUrl = `data:${file.type || 'image/jpeg'};base64,${enc}`;
-      }
-    } else {
-      const body = await req.json();
-      if (body.imageUrl) imageUrl = body.imageUrl as string;
+    const body = await req.json();
+    const text: string = body.text ?? '';
+    if (!text.trim()) {
+      return NextResponse.json({ error: '텍스트를 입력해주세요.' }, { status: 400 });
     }
 
-    if (!imageUrl) {
-      return NextResponse.json({ error: '이미지가 없습니다.' }, { status: 400 });
-    }
-
-    // 컬렉션 + schema 가져오기
     const { data: col } = await supabase
       .from('archive_collections')
       .select('name, description, schema')
@@ -78,7 +57,6 @@ export async function POST(
     if (!col) return NextResponse.json({ error: '컬렉션 없음' }, { status: 404 });
     const schema = (col.schema ?? []) as ArchiveProperty[];
 
-    // schema 를 LLM 이 이해하기 쉬운 가이드로 변환
     const schemaGuide = schema
       .map((p) => {
         let guide = `  - ${p.key} (${p.type}): "${p.label}"`;
@@ -90,7 +68,7 @@ export async function POST(
       })
       .join('\n');
 
-    const systemPrompt = `당신은 이미지를 보고 사용자의 데이터베이스 항목 양식에 맞게 정보를 추출하는 OCR 도우미입니다.
+    const systemPrompt = `당신은 사용자가 자유롭게 적은 텍스트를 데이터베이스 항목 양식에 맞춰 자동으로 분류·입력하는 도우미입니다.
 컬렉션: "${col.name}"${col.description ? ` (${col.description})` : ''}
 
 다음 schema 의 key 들을 채워야 합니다:
@@ -98,35 +76,31 @@ ${schemaGuide}
 
 규칙:
 - 응답은 JSON 만 (마크다운 코드블록 X). 형식: {"data": {key1: value1, ...}}
-- 이미지에서 명확히 읽을 수 있는 값만 채움. 추측·환각 금지.
+- 텍스트에서 명확히 알 수 있는 값만 채움. 추측·환각 금지.
 - 모르는 필드는 빈 문자열 "" 또는 생략.
-- date 타입은 YYYY-MM-DD 형식.
+- date 타입은 YYYY-MM-DD 형식. "어제/오늘/3월 5일" 같은 자연어는 적절히 변환.
 - number / currency 타입은 숫자만 (쉼표/원/$ 제거).
 - select 타입은 반드시 옵션 중 하나만. 매칭 안 되면 빈 값.
 - multiselect 는 옵션 중 해당하는 것들 배열.
-- rating 은 1~5 정수. 이미지에 평점/별점 보이지 않으면 비워둠.
+- rating 은 1~5 정수. "별 4개", "★★★", "9/10" 같은 표현 적절히 변환.
 - checkbox 는 true/false.
 - url 은 http(s):// 시작.
-- longtext 는 여러 줄 가능.
+- longtext 는 여러 줄 가능. 메모/감상/요약 등.
+- 첫 속성(보통 제목)은 가능한 한 채움. 텍스트의 핵심을 요약.
 
 지원 타입: text, longtext, number, currency, date, url, select, multiselect, rating, checkbox`;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      max_tokens: 1500,
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
-            {
-              type: 'text',
-              text: '이 이미지에서 정보를 추출해서 JSON 으로 응답해.',
-            },
-          ],
+          content: text.trim(),
         },
       ],
+      temperature: 0.3,
     });
 
     const raw = response.choices[0]?.message?.content ?? '{}';
@@ -142,7 +116,6 @@ ${schemaGuide}
     }
 
     const filledData = parsed.data ?? {};
-    // schema 에 없는 키 제거 + 타입 정리
     const cleanData: Record<string, unknown> = {};
     for (const p of schema) {
       const v = filledData[p.key];

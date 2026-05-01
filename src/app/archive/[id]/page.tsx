@@ -15,7 +15,6 @@ import {
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
-  Camera,
   X as XIcon,
 } from 'lucide-react';
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
@@ -40,9 +39,10 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     data: Record<string, unknown>;
     filled: string[];
     missing: string[];
-    previewUrl: string;
+    sourceText: string;
   } | null>(null);
-  const aiFillInputRef = useRef<HTMLInputElement>(null);
+  const [aiTextModalOpen, setAiTextModalOpen] = useState(false);
+  const [aiText, setAiText] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -85,17 +85,16 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     });
   }, [entries, search]);
 
-  // 사진으로 새 항목 채우기
-  const aiFillFromImage = async (file: File) => {
+  // 텍스트로 새 항목 자동 채우기
+  const aiFillFromText = async () => {
+    if (!aiText.trim() || aiFillBusy) return;
     setAiFillBusy(true);
     setAiFillError(null);
-    const previewUrl = URL.createObjectURL(file);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
       const res = await fetch(`/api/archive/collections/${id}/ai-fill`, {
         method: 'POST',
-        body: fd,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: aiText.trim() }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? '실패');
@@ -103,11 +102,12 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
         data: j.data ?? {},
         filled: j.filled ?? [],
         missing: j.missing ?? [],
-        previewUrl,
+        sourceText: aiText.trim(),
       });
+      setAiTextModalOpen(false);
+      setAiText('');
     } catch (e) {
       setAiFillError(e instanceof Error ? e.message : '실패');
-      URL.revokeObjectURL(previewUrl);
     } finally {
       setAiFillBusy(false);
     }
@@ -189,15 +189,19 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             <Plus size={16} /> 새 항목
           </button>
           <button
-            onClick={() => aiFillInputRef.current?.click()}
+            onClick={() => {
+              setAiText('');
+              setAiFillError(null);
+              setAiTextModalOpen(true);
+            }}
             disabled={aiFillBusy}
             className="px-3 py-3 rounded-2xl bg-white border border-violet-200 text-violet-600 text-sm font-semibold inline-flex items-center gap-1 active:bg-violet-50 disabled:opacity-50"
-            title="사진으로 추가 — AI 가 OCR 로 채워줘요"
+            title="텍스트로 추가 — AI 가 분석해서 자동 채워줘요"
           >
             {aiFillBusy ? (
               <><Loader2 size={14} className="animate-spin" /> 분석 중</>
             ) : (
-              <><Camera size={14} /> 사진</>
+              <><Sparkles size={14} /> AI 추가</>
             )}
           </button>
           {entries.length > 1 && (
@@ -215,17 +219,6 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             </button>
           )}
         </div>
-        <input
-          ref={aiFillInputRef}
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) aiFillFromImage(f);
-            if (aiFillInputRef.current) aiFillInputRef.current.value = '';
-          }}
-          className="hidden"
-        />
         {aiFillError && (
           <div className="text-[11px] text-rose-500 px-1 mt-1">{aiFillError}</div>
         )}
@@ -368,21 +361,15 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
           prefillBanner={
             <div className="bg-violet-50 border border-violet-200 rounded-2xl p-3 space-y-2">
               <div className="flex items-start gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={aiFillResult.previewUrl}
-                  alt="원본 이미지"
-                  className="w-16 h-16 rounded-lg object-cover shrink-0"
-                />
-                <div className="flex-1 text-[11px] text-violet-800">
+                <div className="flex-1 text-[11px] text-violet-800 min-w-0">
                   <div className="font-bold mb-1 inline-flex items-center gap-1">
-                    <Sparkles size={11} /> AI 가 사진에서 추출했어요
+                    <Sparkles size={11} /> AI 가 자동으로 채웠어요
                   </div>
                   <div>
                     채움: {aiFillResult.filled.length}개
                     {aiFillResult.missing.length > 0 && (
                       <>
-                        {' · '}못 읽음:{' '}
+                        {' · '}비어있음:{' '}
                         <span className="text-violet-500">
                           {aiFillResult.missing.join(', ')}
                         </span>
@@ -392,12 +379,15 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                   <div className="text-violet-500 mt-0.5">
                     검토 후 저장하세요. 부정확하면 직접 수정해도 됩니다.
                   </div>
+                  <details className="mt-1 text-violet-500">
+                    <summary className="cursor-pointer">원본 텍스트</summary>
+                    <p className="mt-1 px-2 py-1.5 bg-white rounded text-violet-900 whitespace-pre-wrap leading-relaxed text-[11px] max-h-32 overflow-y-auto">
+                      {aiFillResult.sourceText}
+                    </p>
+                  </details>
                 </div>
                 <button
-                  onClick={() => {
-                    URL.revokeObjectURL(aiFillResult.previewUrl);
-                    setAiFillResult(null);
-                  }}
+                  onClick={() => setAiFillResult(null)}
                   className="p-1 text-violet-500 hover:bg-violet-100 rounded shrink-0"
                   aria-label="닫기"
                 >
@@ -406,16 +396,83 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               </div>
             </div>
           }
-          onClose={() => {
-            URL.revokeObjectURL(aiFillResult.previewUrl);
-            setAiFillResult(null);
-          }}
+          onClose={() => setAiFillResult(null)}
           onSaved={() => {
-            URL.revokeObjectURL(aiFillResult.previewUrl);
             setAiFillResult(null);
             load();
           }}
         />
+      )}
+
+      {/* AI 텍스트 입력 모달 */}
+      {aiTextModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => !aiFillBusy && setAiTextModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <h3 className="text-base font-bold text-gray-900 inline-flex items-center gap-1.5">
+                <Sparkles size={16} className="text-violet-600" /> AI 자동 입력
+              </h3>
+              <button
+                onClick={() => !aiFillBusy && setAiTextModalOpen(false)}
+                disabled={aiFillBusy}
+                className="p-1 rounded text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <div className="px-5 pb-4 space-y-2 overflow-y-auto">
+              <div className="text-xs text-gray-500 leading-relaxed">
+                자유롭게 적어주세요. AI 가 컬렉션 속성에 맞춰 자동으로 분류해서 채워줍니다.
+                예: <span className="text-violet-700">와인 라벨/뉴스/리뷰/메모/대화</span> 어떤 형식이든 OK.
+              </div>
+              <div className="text-[10px] text-gray-400">
+                속성: {schema.map((p) => p.label).join(' · ')}
+              </div>
+              <textarea
+                value={aiText}
+                onChange={(e) => setAiText(e.target.value)}
+                placeholder='예) "어제 본 영화 인터스텔라. 별 5개. 크리스토퍼 놀란 감독, SF 장르. 엄마랑 같이 봤음. 너무 감동적이었다."'
+                rows={8}
+                autoFocus
+                disabled={aiFillBusy}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-violet-400 focus:outline-none resize-y bg-white"
+              />
+              {aiFillError && (
+                <div className="text-[11px] text-rose-500 px-1">{aiFillError}</div>
+              )}
+            </div>
+            <div className="px-5 pt-2 pb-6 border-t border-gray-100 flex gap-2">
+              <button
+                onClick={() => !aiFillBusy && setAiTextModalOpen(false)}
+                disabled={aiFillBusy}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={aiFillFromText}
+                disabled={!aiText.trim() || aiFillBusy}
+                className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-1 disabled:opacity-50"
+              >
+                {aiFillBusy ? (
+                  <><Loader2 size={14} className="animate-spin" /> 분석 중…</>
+                ) : (
+                  <><Sparkles size={14} /> AI 분석</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 컬렉션 설정 시트 */}
