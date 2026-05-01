@@ -28,7 +28,7 @@ export default function GoalFormSheet({ open, onClose, onSaved, initial }: Props
   const [memo, setMemo] = useState('');
   const [memberId, setMemberId] = useState<string | ''>('');
   const [freqCount, setFreqCount] = useState<number>(2);
-  const [freqPeriod, setFreqPeriod] = useState<'week' | 'month'>('week');
+  const [freqPeriod, setFreqPeriod] = useState<'day' | 'week' | 'month'>('week');
   const [targetValue, setTargetValue] = useState<number>(100);
   const [unit, setUnit] = useState('');
   const [startDate, setStartDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
@@ -177,9 +177,10 @@ export default function GoalFormSheet({ open, onClose, onSaved, initial }: Props
               <div className="flex items-center gap-2">
                 <select
                   value={freqPeriod}
-                  onChange={(e) => setFreqPeriod(e.target.value as 'week' | 'month')}
+                  onChange={(e) => setFreqPeriod(e.target.value as 'day' | 'week' | 'month')}
                   className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 >
+                  <option value="day">매일</option>
                   <option value="week">매주</option>
                   <option value="month">매월</option>
                 </select>

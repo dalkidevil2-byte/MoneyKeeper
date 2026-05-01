@@ -149,7 +149,7 @@ function GoalCard({
 
   const subtitle = (() => {
     if (goal.type === 'frequency') {
-      return `${goal.freq_period === 'week' ? '주' : '월'} ${goal.freq_count}회`;
+      return `${goal.freq_period === 'day' ? '일' : goal.freq_period === 'week' ? '주' : '월'} ${goal.freq_count}회`;
     }
     if (goal.type === 'quantitative') {
       return `${current}/${target}${goal.unit ? ' ' + goal.unit : ''}`;
@@ -222,7 +222,7 @@ function GoalCard({
           <div className="flex items-baseline justify-between text-xs">
             <span className="text-gray-500">
               {goal.type === 'frequency'
-                ? `이번 ${goal.freq_period === 'week' ? '주' : '달'} ${current}/${target}회`
+                ? `${goal.freq_period === 'day' ? '오늘' : goal.freq_period === 'week' ? '이번 주' : '이번 달'} ${current}/${target}회`
                 : `${current}/${target}${goal.unit ? ' ' + goal.unit : ''}`}
             </span>
             <span className={`font-bold ${rate >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>

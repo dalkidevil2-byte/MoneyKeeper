@@ -152,10 +152,20 @@ export async function POST(req: NextRequest) {
 // ─────────────────────────────────────────
 function computeCurrentValue(g: any, events: { occurred_on: string; delta: number }[]): number {
   if (g.type === 'frequency') {
-    // 현재 주기(week/month) 안의 이벤트만 합산
-    const period = g.freq_period as 'week' | 'month';
-    const start = period === 'week' ? dayjs().startOf('week') : dayjs().startOf('month');
-    const end = period === 'week' ? dayjs().endOf('week') : dayjs().endOf('month');
+    // 현재 주기(day/week/month) 안의 이벤트만 합산
+    const period = g.freq_period as 'day' | 'week' | 'month';
+    const start =
+      period === 'day'
+        ? dayjs().startOf('day')
+        : period === 'week'
+          ? dayjs().startOf('week')
+          : dayjs().startOf('month');
+    const end =
+      period === 'day'
+        ? dayjs().endOf('day')
+        : period === 'week'
+          ? dayjs().endOf('week')
+          : dayjs().endOf('month');
     return events
       .filter((e) => {
         const d = dayjs(e.occurred_on);

@@ -530,7 +530,7 @@ export interface Goal {
   member_id: string | null;
   target_member_ids: string[];
   freq_count: number | null;
-  freq_period: 'week' | 'month' | null;
+  freq_period: 'day' | 'week' | 'month' | null;
   target_value: number | null;
   unit: string;
   start_date: string | null;
@@ -577,7 +577,7 @@ export interface CreateGoalInput {
   member_id?: string | null;
   target_member_ids?: string[];
   freq_count?: number | null;
-  freq_period?: 'week' | 'month' | null;
+  freq_period?: 'day' | 'week' | 'month' | null;
   target_value?: number | null;
   unit?: string;
   start_date?: string | null;
