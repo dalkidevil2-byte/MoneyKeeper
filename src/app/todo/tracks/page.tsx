@@ -224,6 +224,14 @@ function TrackFormSheet({
   const [reminderTime, setReminderTime] = useState<string>(
     initial?.reminder_time ?? '',
   );
+  const [goalId, setGoalId] = useState<string>(initial?.goal_id ?? '');
+  const [goals, setGoals] = useState<Array<{ id: string; title: string; emoji?: string }>>([]);
+  useEffect(() => {
+    fetch(`/api/goals?household_id=${HOUSEHOLD_ID}`)
+      .then((r) => r.json())
+      .then((d) => setGoals(d.goals ?? []))
+      .catch(() => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -254,6 +262,7 @@ function TrackFormSheet({
         end_date: endDate || null,
         until_count: untilCount === '' ? null : untilCount,
         reminder_time: reminderTime || null,
+        goal_id: goalId || null,
       };
       const res = isEdit
         ? await fetch(`/api/daily-tracks/${initial.id}`, {
@@ -386,6 +395,28 @@ function TrackFormSheet({
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
               비워두면 무기한. 기간 지나면 자동 비활성화.
+            </div>
+          </div>
+
+          {/* 목표 연결 (선택) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              🎯 목표 연결 (선택)
+            </label>
+            <select
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+            >
+              <option value="">연결 안 함</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.emoji ?? '🎯'} {g.title}
+                </option>
+              ))}
+            </select>
+            <div className="text-[11px] text-gray-400 mt-1">
+              연결하면 체크할 때마다 목표 진행이 자동 +1 됩니다.
             </div>
           </div>
 

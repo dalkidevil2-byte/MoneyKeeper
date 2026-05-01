@@ -19,14 +19,14 @@ export async function POST(
 
     const { data: track } = await supabase
       .from('daily_tracks')
-      .select('household_id, member_id')
+      .select('household_id, member_id, goal_id')
       .eq('id', id)
       .maybeSingle();
     if (!track) {
       return NextResponse.json({ error: '트랙을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const { data, error } = await supabase
+    const { data: log, error } = await supabase
       .from('daily_track_logs')
       .insert({
         track_id: id,
@@ -37,7 +37,24 @@ export async function POST(
       .select('*')
       .single();
     if (error) throw error;
-    return NextResponse.json({ log: data });
+
+    // 목표 연결돼있으면 자동 +1 (UNIQUE 제약 으로 중복 방지)
+    if (track.goal_id) {
+      try {
+        await supabase.from('goal_progress_events').insert({
+          goal_id: track.goal_id,
+          household_id: track.household_id ?? DEFAULT_HOUSEHOLD_ID,
+          occurred_on: doneOn,
+          delta: 1,
+          source: 'daily_track_check',
+          daily_track_log_id: log.id,
+        });
+      } catch (e) {
+        console.warn('[track check] goal progress insert 실패', e);
+      }
+    }
+
+    return NextResponse.json({ log });
   } catch (e: any) {
     console.error('[POST track check]', e);
     return NextResponse.json({ error: e?.message ?? '실패' }, { status: 500 });
