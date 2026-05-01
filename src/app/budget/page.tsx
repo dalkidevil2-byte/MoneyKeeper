@@ -170,7 +170,7 @@ export default function HomePage() {
               <h1 className="text-2xl font-bold mt-0.5 truncate">우리집 가계부 💰</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 mr-12">
             <button onClick={() => setInboxOpen(true)} className="relative p-2 bg-white/15 rounded-xl">
               <Inbox size={18} className="text-white" />
               {inboxCount > 0 && (
