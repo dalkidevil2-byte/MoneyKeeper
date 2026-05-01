@@ -82,6 +82,8 @@ function TodoDayPage() {
 
   // 직전 드래그가 실제 이동이었는지 — 직후 click 이벤트 무시용
   const justDraggedRef = useRef(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
 
   // 종일 → 시간대 드래그 변환
   const allDayDragRef = useRef<{
@@ -740,11 +742,45 @@ function TodoDayPage() {
                 >
                   <div className="w-6 h-0.5 rounded bg-white/70" />
                 </div>
-                {/* 본문 — 드래그=이동, 클릭=선택, 더블클릭=편집 */}
+                {/* 본문 — 드래그=이동, 클릭=선택, 더블클릭/롱프레스=편집 */}
                 <div
-                  onPointerDown={(e) => startDrag(e, p, 'move')}
+                  onPointerDown={(e) => {
+                    longPressFiredRef.current = false;
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = setTimeout(() => {
+                      longPressFiredRef.current = true;
+                      // 진동 피드백 (지원 시)
+                      try { (navigator as { vibrate?: (n: number) => void }).vibrate?.(15); } catch {/* ignore */}
+                      openEdit(p.task);
+                    }, 500);
+                    startDrag(e, p, 'move');
+                  }}
+                  onPointerUp={() => {
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                    }
+                  }}
+                  onPointerMove={() => {
+                    // 움직이면 long-press 취소 (drag 우선)
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    // 우클릭 / 일부 모바일 long-press
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (longPressTimerRef.current) {
+                      clearTimeout(longPressTimerRef.current);
+                      longPressTimerRef.current = null;
+                    }
+                    openEdit(p.task);
+                  }}
                   onClick={(e) => {
                     if (justDraggedRef.current) return;
+                    if (longPressFiredRef.current) return;
                     e.stopPropagation();
                     select(p.task);
                   }}

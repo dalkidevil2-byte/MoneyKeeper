@@ -74,18 +74,53 @@ export default function TaskTimer({
 
   const stopActive = useCallback(async (a: Active | null) => {
     if (!a) return;
+    const startedDay = dayjs(a.startedAt).format('YYYY-MM-DD');
+    const today = dayjs().format('YYYY-MM-DD');
     const nowTime = dayjs().format('HH:mm:ss');
     try {
-      await fetch(`/api/tasks/${a.taskId}/sessions`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: a.sessionId, end_time: nowTime }),
-      });
+      if (startedDay === today) {
+        // 같은 날 — 정상 종료
+        await fetch(`/api/tasks/${a.taskId}/sessions`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: a.sessionId, end_time: nowTime }),
+        });
+      } else {
+        // 자정을 넘김 — 시작일은 23:59:59 로 마감하고 오늘은 새 세션 추가
+        await fetch(`/api/tasks/${a.taskId}/sessions`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: a.sessionId, end_time: '23:59:59' }),
+        });
+        // 중간 날짜들 (시작일+1 ~ 오늘-1) 은 종일 세션 추가
+        let cursor = dayjs(a.startedAt).add(1, 'day').format('YYYY-MM-DD');
+        while (cursor < today) {
+          await fetch(`/api/tasks/${a.taskId}/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_date: cursor,
+              start_time: '00:00:00',
+              end_time: '23:59:59',
+            }),
+          });
+          cursor = dayjs(cursor).add(1, 'day').format('YYYY-MM-DD');
+        }
+        // 오늘 00:00:00 ~ 현재 까지 새 세션
+        await fetch(`/api/tasks/${a.taskId}/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_date: today,
+            start_time: '00:00:00',
+            end_time: nowTime,
+          }),
+        });
+      }
     } catch {
       /* network 오류는 무시 — UI 는 멈춤 */
     }
     localStorage.removeItem(KEY);
-    // storage 이벤트는 같은 탭에는 안 발생 → 수동 set
     setActive(null);
   }, []);
 
