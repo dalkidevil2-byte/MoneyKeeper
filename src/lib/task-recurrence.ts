@@ -160,8 +160,8 @@ export function shouldShowOnCalendar(task: Task, date: Dayjs | string): boolean 
   const completions = task.completions ?? [];
 
   if (task.type === 'one_time') {
-    // 완료 기록이 그날에 있으면 표시
-    if (completions.some((c) => c.completed_on === target)) return true;
+    // 단일 일정은 due_date~end_date 범위로만 판단 (완료 기록 사용 X)
+    // → 옛 일정이 완료 시점 기준으로 다른 날에 떠오르는 버그 방지
     if (task.status === 'snoozed' && task.snoozed_to) {
       return task.snoozed_to === target;
     }

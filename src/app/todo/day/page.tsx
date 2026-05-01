@@ -83,6 +83,19 @@ function TodoDayPage() {
   // 직전 드래그가 실제 이동이었는지 — 직후 click 이벤트 무시용
   const justDraggedRef = useRef(false);
 
+  // 종일 → 시간대 드래그 변환
+  const allDayDragRef = useRef<{
+    task: Task;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    ghostHour: number | null;
+  } | null>(null);
+  const [allDayGhost, setAllDayGhost] = useState<{
+    hour: number;
+    minute: number;
+  } | null>(null);
+
   // 드래그 상태 — resize(top/bottom) 또는 move(블록 이동)
   const [drag, setDrag] = useState<{
     taskId: string;
@@ -376,6 +389,70 @@ function TodoDayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag]);
 
+  // 종일 → 시간대 드래그 변환: 글로벌 pointermove/up
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      const drg = allDayDragRef.current;
+      if (!drg) return;
+      const dx = e.clientX - drg.startX;
+      const dy = e.clientY - drg.startY;
+      // 4px 이상 움직였을 때 드래그로 판정
+      if (!drg.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      drg.moved = true;
+      // scroll 영역 안인지 + 시간 계산
+      const sc = scrollRef.current;
+      if (!sc) return;
+      const rect = sc.getBoundingClientRect();
+      const inGrid =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+      if (inGrid) {
+        const yInGrid = e.clientY - rect.top + sc.scrollTop;
+        const totalMin = (yInGrid / HOUR_HEIGHT) * 60;
+        const snapped = Math.max(0, Math.min(24 * 60 - 30, Math.round(totalMin / 30) * 30));
+        const hour = Math.floor(snapped / 60);
+        const minute = snapped % 60;
+        drg.ghostHour = hour;
+        setAllDayGhost({ hour, minute });
+      } else {
+        drg.ghostHour = null;
+        setAllDayGhost(null);
+      }
+    };
+    const handleUp = async () => {
+      const drg = allDayDragRef.current;
+      allDayDragRef.current = null;
+      const ghost = allDayGhost;
+      setAllDayGhost(null);
+      if (!drg || !drg.moved || drg.ghostHour == null || !ghost) return;
+      // 종일 → 1시간 짜리 시간 일정으로 변환
+      const startMin = ghost.hour * 60 + ghost.minute;
+      const endMin = Math.min(24 * 60, startMin + 60);
+      try {
+        await update(drg.task.id, {
+          is_fixed: true,
+          due_time: minToTimeStr(startMin),
+          end_time: minToTimeStr(endMin),
+        });
+        refetch();
+      } catch (err) {
+        console.error('[allday drag]', err);
+        alert('변환 실패');
+      }
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDayGhost]);
+
   // 현재 시각 표시 (오늘일 때만)
   const [now, setNow] = useState(dayjs());
   useEffect(() => {
@@ -451,7 +528,9 @@ function TodoDayPage() {
       {/* 종일 영역 */}
       {allDayTasks.length > 0 ? (
         <div className="px-3 py-2 border-b border-gray-100 bg-amber-50/50">
-          <div className="text-[10px] text-gray-500 mb-1 font-semibold">종일</div>
+          <div className="text-[10px] text-gray-500 mb-1 font-semibold">
+            종일 <span className="text-gray-400 font-normal ml-1">· 드래그하여 시간대로 이동</span>
+          </div>
           <div className="flex flex-col gap-1">
             {allDayTasks.map((t) => {
               const completed = isTaskCompletedOn(t, date);
@@ -459,10 +538,25 @@ function TodoDayPage() {
               return (
                 <button
                   key={t.id}
-                  onClick={() => select(t)}
+                  onClick={() => {
+                    if (allDayDragRef.current?.moved) return; // 드래그 직후 클릭 무시
+                    select(t);
+                  }}
                   onDoubleClick={() => openEdit(t)}
-                  className={`text-xs text-white text-left px-2 py-1 rounded truncate ${completed ? 'opacity-50 line-through' : ''} ${isSel ? 'ring-2 ring-blue-400' : ''}`}
-                  style={{ backgroundColor: getTaskColor(t) }}
+                  onPointerDown={(e) => {
+                    // 좌클릭/터치 만 처리
+                    if (e.button !== 0 && e.button !== undefined) return;
+                    allDayDragRef.current = {
+                      task: t,
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      moved: false,
+                      ghostHour: null,
+                    };
+                    setAllDayGhost(null);
+                  }}
+                  className={`text-xs text-white text-left px-2 py-1 rounded truncate touch-none ${completed ? 'opacity-50 line-through' : ''} ${isSel ? 'ring-2 ring-blue-400' : ''}`}
+                  style={{ backgroundColor: getTaskColor(t), cursor: 'grab' }}
                 >
                   {t.title}
                 </button>
