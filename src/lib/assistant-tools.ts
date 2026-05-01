@@ -236,17 +236,17 @@ export const ASSISTANT_TOOLS = [
     function: {
       name: 'save_stock_recommendation',
       description:
-        '주식 추천/리딩방 메시지를 종목별로 파싱해서 stock_memos 에 날짜와 함께 누적 저장. 메시지 안에 여러 종목이 섞여 있으면 entries 배열로 분리. 종목명만 알고 ticker 모르면 ticker 비워도 됨 (서버가 KRX 매칭).',
+        '주식 관련 메시지(리딩방 추천/뉴스/리포트/이슈/내 분석 메모 등)를 종목별로 분리해서 stock_memos 에 날짜와 함께 누적 저장. **실제 매매가 아닌 정보 보관용**. 한 메시지에 여러 종목 있으면 entries 배열로 분리. ticker 모르면 비워도 됨 (서버가 KRX 매칭).',
       parameters: {
         type: 'object',
         properties: {
           date: {
             type: 'string',
-            description: 'YYYY-MM-DD. 메시지의 발신 날짜. 없으면 오늘.',
+            description: 'YYYY-MM-DD. 메시지의 발신/작성 날짜. 없으면 오늘.',
           },
           source: {
             type: 'string',
-            description: '출처 — 텔레그램 / 카카오톡 / 리딩방 이름 등 (선택)',
+            description: '출처 — 리딩방 이름 / 뉴스 / 리포트 등 (선택)',
           },
           entries: {
             type: 'array',
@@ -265,11 +265,11 @@ export const ASSISTANT_TOOLS = [
                 action: {
                   type: 'string',
                   enum: ['buy', 'sell', 'watch', 'hold', 'other'],
-                  description: '매수/매도/관심/유지/기타',
+                  description: '메시지의 톤 — 매수추천/매도추천/관심/유지/기타. 실제 거래가 아니라 시각적 태그용.',
                 },
                 content: {
                   type: 'string',
-                  description: '해당 종목에 대한 원문 (예: "55000~56000원 비중 10% 매수")',
+                  description: '해당 종목에 대한 원문 그대로. 가공·요약하지 말고 종목 관련 부분만 발췌.',
                 },
               },
               required: ['ticker_name', 'content'],
@@ -857,8 +857,8 @@ export async function executeTool(
             .maybeSingle();
 
           const actionLabel: Record<string, string> = {
-            buy: '🟢 매수',
-            sell: '🔴 매도',
+            buy: '🟢 매수추천',
+            sell: '🔴 매도추천',
             watch: '👀 관심',
             hold: '⚪ 유지',
             other: '📝',
