@@ -173,7 +173,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
 // ─────────────────────────────────────────
 function EntryFormSheet({
   collectionId,
-  schema,
+  schema: initialSchema,
   color,
   entry,
   onClose,
@@ -186,11 +186,44 @@ function EntryFormSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [schema, setSchema] = useState<ArchiveProperty[]>(initialSchema);
   const [data, setData] = useState<Record<string, unknown>>(
     (entry?.data as Record<string, unknown>) ?? {},
   );
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [newType, setNewType] = useState<ArchiveProperty['type']>('text');
   void color;
+
+  const addProperty = async () => {
+    if (!newLabel.trim()) return;
+    // key 자동 생성 (한글이면 field_N)
+    const baseKey = newLabel
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w가-힣]/g, '_')
+      .replace(/[가-힣]/g, '');
+    const key = baseKey || `field_${schema.length + 1}`;
+    const exists = schema.some((p) => p.key === key);
+    const finalKey = exists ? `${key}_${schema.length + 1}` : key;
+    const newProp: ArchiveProperty = {
+      key: finalKey,
+      label: newLabel.trim(),
+      type: newType,
+    };
+    const updatedSchema = [...schema, newProp];
+    // 컬렉션 스키마 즉시 업데이트
+    await fetch(`/api/archive/collections/${collectionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schema: updatedSchema }),
+    });
+    setSchema(updatedSchema);
+    setNewLabel('');
+    setNewType('text');
+    setAdding(false);
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -253,6 +286,58 @@ function EntryFormSheet({
               />
             </div>
           ))}
+
+          {/* 속성 추가 */}
+          {adding ? (
+            <div className="bg-violet-50 border border-violet-200 rounded-2xl p-3 space-y-2">
+              <div className="text-xs font-semibold text-violet-700">새 속성 추가</div>
+              <input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="속성 이름 (예: 시청 날짜, 함께 본 사람)"
+                autoFocus
+                className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white"
+              />
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value as ArchiveProperty['type'])}
+                className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white"
+              >
+                <option value="text">짧은 텍스트</option>
+                <option value="longtext">긴 텍스트</option>
+                <option value="number">숫자</option>
+                <option value="currency">금액</option>
+                <option value="date">날짜</option>
+                <option value="url">URL</option>
+                <option value="select">단일 선택</option>
+                <option value="multiselect">복수 선택</option>
+                <option value="rating">별점</option>
+                <option value="checkbox">체크박스</option>
+              </select>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAdding(false)}
+                  className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={addProperty}
+                  disabled={!newLabel.trim()}
+                  className="flex-1 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  추가
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-gray-500 text-sm font-semibold inline-flex items-center justify-center gap-1 active:bg-gray-50"
+            >
+              <Plus size={14} /> 속성 추가
+            </button>
+          )}
 
           <div className="flex gap-2 pt-2">
             {entry && (

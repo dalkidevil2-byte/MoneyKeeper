@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Wallet, TrendingUp, ChevronRight, ListTodo } from 'lucide-react';
+import { Wallet, TrendingUp, ChevronRight, ListTodo, Archive, Sparkles } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import BudgetSummary from '@/components/home/BudgetSummary';
@@ -85,6 +85,40 @@ export default function HubPage() {
             <ChevronRight size={20} className="text-gray-300" />
           </div>
           <StockSummary />
+        </Link>
+
+        {/* 아카이브 카드 */}
+        <Link
+          href="/archive"
+          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
+              <Archive size={28} className="text-slate-700" strokeWidth={2} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">아카이브</h2>
+              <p className="text-sm text-gray-500 mt-0.5">일기 · 레시피 · 독서 · 자유 컬렉션</p>
+            </div>
+            <ChevronRight size={20} className="text-gray-300" />
+          </div>
+        </Link>
+
+        {/* AI 어시스턴트 카드 */}
+        <Link
+          href="/assistant"
+          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0">
+              <Sparkles size={28} className="text-violet-600" strokeWidth={2} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">AI 어시스턴트</h2>
+              <p className="text-sm text-gray-500 mt-0.5">자연어 질문 · 명령 · 인사이트</p>
+            </div>
+            <ChevronRight size={20} className="text-gray-300" />
+          </div>
         </Link>
       </div>
     </div>

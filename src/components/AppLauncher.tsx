@@ -10,7 +10,6 @@ import {
   ListTodo,
   Wallet,
   TrendingUp,
-  FlaskConical,
   ChevronRight,
   Sparkles,
   Archive,
@@ -62,17 +61,9 @@ const SECTIONS: Section[] = [
     href: '/stocks',
     icon: TrendingUp,
     label: '주식',
-    desc: '포트폴리오 · 거래 · 차트',
+    desc: '포트폴리오 · 거래 · 모의투자',
     bg: 'bg-emerald-100',
     iconColor: 'text-emerald-600',
-  },
-  {
-    href: '/stocks/paper',
-    icon: FlaskConical,
-    label: '모의투자',
-    desc: 'Paper trading',
-    bg: 'bg-purple-100',
-    iconColor: 'text-purple-600',
   },
   {
     href: '/archive',
@@ -146,14 +137,7 @@ export default function AppLauncher() {
             <div className="px-4 pb-6 space-y-2 overflow-y-auto">
               {SECTIONS.map(({ href, icon: Icon, label, desc, bg, iconColor }) => {
                 const isCurrent =
-                  href === '/'
-                    ? pathname === '/'
-                    : href === '/stocks/paper'
-                      ? pathname.startsWith('/stocks/paper')
-                      : href === '/stocks'
-                        ? pathname.startsWith('/stocks') &&
-                          !pathname.startsWith('/stocks/paper')
-                        : pathname.startsWith(href);
+                  href === '/' ? pathname === '/' : pathname.startsWith(href);
                 return (
                   <Link
                     key={href}
