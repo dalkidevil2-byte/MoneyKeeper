@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Plus, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronLeft, Plus, ChevronRight, Sparkles, Search } from 'lucide-react';
 import type { ArchiveCollection } from '@/types';
 import { ARCHIVE_TEMPLATES, BLANK_SCHEMA } from '@/lib/archive-templates';
 
@@ -12,6 +12,17 @@ export default function ArchivePage() {
   const [collections, setCollections] = useState<ArchiveCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return collections;
+    const q = search.toLowerCase();
+    return collections.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.description ?? '').toLowerCase().includes(q),
+    );
+  }, [collections, search]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -44,8 +55,25 @@ export default function ArchivePage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-3">
+        {/* 검색 */}
+        {!loading && collections.length > 0 && (
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="컬렉션 이름/설명 검색"
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-100 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-violet-200"
+            />
+          </div>
+        )}
+
         {loading ? (
           <div className="text-center text-sm text-gray-400 py-12">불러오는 중…</div>
+        ) : filtered.length === 0 && search ? (
+          <div className="text-center text-sm text-gray-400 py-12">
+            "{search}" 와 일치하는 컬렉션 없음
+          </div>
         ) : collections.length === 0 ? (
           <div className="text-center py-12 px-4">
             <div className="text-4xl mb-3">📦</div>
@@ -62,7 +90,7 @@ export default function ArchivePage() {
             </button>
           </div>
         ) : (
-          collections.map((c) => (
+          filtered.map((c) => (
             <Link
               key={c.id}
               href={`/archive/${c.id}`}

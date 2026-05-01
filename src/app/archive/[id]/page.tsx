@@ -1,9 +1,21 @@
 'use client';
 
-import { use, useEffect, useState, useCallback } from 'react';
+import { use, useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Plus, Settings as SettingsIcon, Trash2, ExternalLink, Sparkles, Loader2 } from 'lucide-react';
+import {
+  ChevronLeft,
+  Plus,
+  Settings as SettingsIcon,
+  Trash2,
+  ExternalLink,
+  Sparkles,
+  Loader2,
+  Search,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
 
@@ -17,6 +29,9 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [loading, setLoading] = useState(true);
   const [editingEntry, setEditingEntry] = useState<ArchiveEntry | 'new' | null>(null);
   const [editingSchema, setEditingSchema] = useState(false);
+  const [search, setSearch] = useState('');
+  const [reorderMode, setReorderMode] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -39,6 +54,44 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     if (!confirm('이 컬렉션을 삭제할까요?\n(항목들도 함께 사라집니다)')) return;
     await fetch(`/api/archive/collections/${id}`, { method: 'DELETE' });
     router.push('/archive');
+  };
+
+  // 검색 필터링 (모든 data 값 + 제목 대상으로 부분 일치)
+  const filteredEntries = useMemo(() => {
+    if (!search.trim()) return entries;
+    const q = search.toLowerCase();
+    return entries.filter((e) => {
+      const data = (e.data ?? {}) as Record<string, unknown>;
+      for (const v of Object.values(data)) {
+        if (v == null) continue;
+        if (Array.isArray(v)) {
+          if (v.some((x) => String(x).toLowerCase().includes(q))) return true;
+        } else if (String(v).toLowerCase().includes(q)) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [entries, search]);
+
+  // 한 칸 이동 — 검색 중에는 비활성
+  const moveEntry = async (idx: number, dir: -1 | 1) => {
+    if (busy) return;
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= entries.length) return;
+    const next = entries.slice();
+    [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+    setEntries(next);
+    setBusy(true);
+    try {
+      await fetch(`/api/archive/collections/${id}/entries/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: next.map((e) => e.id) }),
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loading || !collection) {
@@ -74,36 +127,65 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 pt-4 pb-2">
-        {/* 새 항목 추가 버튼 */}
-        <button
-          onClick={() => setEditingEntry('new')}
-          className="w-full py-3 rounded-2xl bg-violet-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-700"
-        >
-          <Plus size={16} /> 새 항목
-        </button>
+      <div className="max-w-lg mx-auto px-4 pt-4 pb-2 space-y-2">
+        {/* 검색 */}
+        {entries.length > 0 && (
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="제목/메모/태그 안에서 검색"
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-100 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-violet-200"
+            />
+          </div>
+        )}
+
+        {/* 새 항목 + 순서 변경 */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setEditingEntry('new')}
+            className="flex-1 py-3 rounded-2xl bg-violet-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-700"
+          >
+            <Plus size={16} /> 새 항목
+          </button>
+          {entries.length > 1 && (
+            <button
+              onClick={() => setReorderMode((v) => !v)}
+              className={`px-3 py-3 rounded-2xl text-sm font-semibold inline-flex items-center gap-1 ${
+                reorderMode
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 active:bg-gray-50'
+              }`}
+              title="순서 이동"
+            >
+              <ArrowUpDown size={14} />
+              {reorderMode ? '완료' : '순서'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 space-y-2 pt-3">
-        {entries.length === 0 ? (
+        {filteredEntries.length === 0 ? (
           <div className="text-center text-sm text-gray-400 py-12">
-            아직 항목이 없어요. 첫 항목을 추가해보세요.
+            {search ? '검색 결과 없음' : '아직 항목이 없어요. 첫 항목을 추가해보세요.'}
           </div>
         ) : (
-          entries.map((e) => {
+          filteredEntries.map((e, idx) => {
             const data = (e.data ?? {}) as Record<string, unknown>;
             const titleProp = schema[0];
             const titleValue = titleProp ? data[titleProp.key] : null;
-            return (
-              <button
-                key={e.id}
-                onClick={() => setEditingEntry(e)}
-                className="w-full text-left bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50"
-              >
+            // 검색 중에는 reorder 비활성 (인덱스가 다름)
+            const showReorder = reorderMode && !search.trim();
+            // entries (전체) 에서의 실제 인덱스
+            const realIdx = entries.findIndex((x) => x.id === e.id);
+
+            const card = (
+              <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-gray-900 truncate">
                   {String(titleValue ?? '(제목 없음)')}
                 </div>
-                {/* 나머지 속성 미리보기 */}
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-500 mt-1">
                   {schema.slice(1).map((p) => {
                     const val = data[p.key];
@@ -131,6 +213,43 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                     );
                   })}
                 </div>
+              </div>
+            );
+
+            if (showReorder) {
+              return (
+                <div
+                  key={e.id}
+                  className="flex items-center bg-white rounded-2xl border border-amber-200 px-3 py-2.5 gap-2"
+                >
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button
+                      onClick={() => moveEntry(realIdx, -1)}
+                      disabled={realIdx === 0 || busy}
+                      className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button
+                      onClick={() => moveEntry(realIdx, 1)}
+                      disabled={realIdx === entries.length - 1 || busy}
+                      className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                  </div>
+                  {card}
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={e.id}
+                onClick={() => setEditingEntry(e)}
+                className="w-full text-left bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 flex items-center gap-2"
+              >
+                {card}
               </button>
             );
           })

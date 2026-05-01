@@ -16,6 +16,8 @@ import {
   Repeat,
   Target,
   CheckCircle2,
+  Archive,
+  Plus,
 } from 'lucide-react';
 
 type Tab = {
@@ -59,6 +61,9 @@ const TODO_TABS: Tab[] = [
   { href: '/todo/settings', icon: Settings,     label: '설정' },
 ];
 
+void Archive;
+void Plus;
+
 // 루틴(기념일/연례 일정) 페이지는 설정 안 진입 링크로만 노출됨.
 void Repeat;
 
@@ -66,8 +71,10 @@ void Repeat;
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // 허브 페이지에서는 바텀 네비 숨김
+  // 허브, 아카이브, 어시스턴트는 바텀 네비 숨김 (하위 섹션 없음)
   if (pathname === '/') return null;
+  if (pathname.startsWith('/archive')) return null;
+  if (pathname.startsWith('/assistant')) return null;
 
   // 섹션 판별: paper > stock > todo > budget 순서로 먼저 매칭
   const isPaperSection = pathname.startsWith('/stocks/paper');

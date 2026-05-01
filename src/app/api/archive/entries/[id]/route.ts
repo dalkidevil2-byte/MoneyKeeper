@@ -19,6 +19,9 @@ export async function PATCH(
     if (Object.prototype.hasOwnProperty.call(body, 'member_id')) {
       update.member_id = body.member_id;
     }
+    if (Object.prototype.hasOwnProperty.call(body, 'position')) {
+      update.position = body.position;
+    }
     const { data, error } = await supabase
       .from('archive_entries')
       .update(update)

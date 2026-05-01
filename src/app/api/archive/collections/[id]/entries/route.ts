@@ -18,6 +18,8 @@ export async function GET(
       .from('archive_entries')
       .select('*')
       .eq('collection_id', id)
+      // position 우선 (사용자 지정 순서) → 같은 position 안에서 최신순
+      .order('position', { ascending: true })
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
