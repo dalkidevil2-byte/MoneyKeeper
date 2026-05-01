@@ -247,11 +247,11 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             const realIdx = entries.findIndex((x) => x.id === e.id);
 
             const card = (
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-gray-900 truncate">
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="text-base font-bold text-gray-900 leading-tight">
                   {String(titleValue ?? '(제목 없음)')}
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-500 mt-1">
+                <div className="space-y-1 text-[12px] text-gray-600">
                   {schema.slice(1).map((p) => {
                     const val = data[p.key];
                     if (val == null || val === '') return null;
@@ -259,22 +259,43 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                     if (!display) return null;
                     if (p.type === 'url') {
                       return (
-                        <a
-                          key={p.key}
-                          href={String(val)}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(ev) => ev.stopPropagation()}
-                          className="text-violet-600 inline-flex items-center gap-0.5 hover:underline"
-                        >
-                          🔗 링크 <ExternalLink size={10} />
-                        </a>
+                        <div key={p.key} className="flex items-baseline gap-1.5">
+                          <span className="text-gray-400 shrink-0">{p.label}</span>
+                          <a
+                            href={String(val)}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(ev) => ev.stopPropagation()}
+                            className="text-violet-600 inline-flex items-center gap-0.5 hover:underline truncate"
+                          >
+                            🔗 링크 <ExternalLink size={10} />
+                          </a>
+                        </div>
+                      );
+                    }
+                    if (p.type === 'longtext') {
+                      return (
+                        <div key={p.key} className="space-y-0.5">
+                          <span className="text-[11px] text-gray-400">{p.label}</span>
+                          <p
+                            className="text-gray-700 leading-relaxed whitespace-pre-wrap"
+                            style={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {String(val)}
+                          </p>
+                        </div>
                       );
                     }
                     return (
-                      <span key={p.key}>
-                        <span className="text-gray-400">{p.label}:</span> {display}
-                      </span>
+                      <div key={p.key} className="flex items-baseline gap-1.5">
+                        <span className="text-gray-400 shrink-0">{p.label}</span>
+                        <span className="text-gray-700 truncate">{display}</span>
+                      </div>
                     );
                   })}
                 </div>
@@ -439,6 +460,10 @@ function EntryFormSheet({
   const [data, setData] = useState<Record<string, unknown>>(
     (entry?.data as Record<string, unknown>) ?? prefillData ?? {},
   );
+  // 기존 항목은 보기 모드로 시작, 새 항목/AI prefill 은 편집 모드
+  const [mode, setMode] = useState<'view' | 'edit'>(
+    entry && !prefillData ? 'view' : 'edit',
+  );
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [aiMode, setAiMode] = useState(false);
@@ -524,14 +549,17 @@ function EntryFormSheet({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data }),
         });
+        // 기존 항목 수정 후에는 view 모드로 복귀 + 부모 새로고침
+        setMode('view');
+        onSaved();
       } else {
         await fetch(`/api/archive/collections/${collectionId}/entries`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data }),
         });
+        onSaved();
       }
-      onSaved();
     } finally {
       setBusy(false);
     }
@@ -558,28 +586,89 @@ function EntryFormSheet({
         </div>
         <div className="flex items-center justify-between px-5 py-3">
           <h3 className="text-base font-bold text-gray-900">
-            {entry ? '항목 수정' : '새 항목'}
+            {mode === 'view' ? '항목' : entry ? '항목 수정' : '새 항목'}
           </h3>
+          {mode === 'view' && (
+            <button
+              onClick={() => setMode('edit')}
+              className="text-sm font-semibold text-violet-600 inline-flex items-center gap-1"
+            >
+              ✏️ 수정
+            </button>
+          )}
         </div>
 
         <div className="overflow-y-auto px-5 pb-6 space-y-4">
           {prefillBanner}
-          {schema.map((p) => (
-            <div key={p.key}>
-              <label className="text-xs text-gray-500 mb-1 block">
-                {p.label}
-                {p.required && <span className="text-rose-500 ml-1">*</span>}
-              </label>
-              <PropertyInput
-                prop={p}
-                value={data[p.key]}
-                onChange={(v) => setData({ ...data, [p.key]: v })}
-              />
-            </div>
-          ))}
 
-          {/* 속성 추가 */}
-          {adding ? (
+          {mode === 'view' ? (
+            // ─── 보기 모드 ─────────────────────────
+            <div className="space-y-4">
+              {/* 제목 (첫 속성) 크게 */}
+              {schema[0] && (
+                <div>
+                  <div className="text-[11px] text-gray-400 mb-1">{schema[0].label}</div>
+                  <div className="text-xl font-bold text-gray-900 leading-snug">
+                    {String(data[schema[0].key] ?? '(제목 없음)')}
+                  </div>
+                </div>
+              )}
+
+              {/* 나머지 속성 */}
+              {schema.slice(1).map((p) => {
+                const val = data[p.key];
+                const display = formatPropertyDisplay(p, val);
+                if (!display && p.type !== 'longtext') {
+                  return (
+                    <div key={p.key}>
+                      <div className="text-[11px] text-gray-400 mb-1">{p.label}</div>
+                      <div className="text-sm text-gray-300">—</div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={p.key}>
+                    <div className="text-[11px] text-gray-400 mb-1">{p.label}</div>
+                    {p.type === 'url' && val ? (
+                      <a
+                        href={String(val)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-violet-600 hover:underline inline-flex items-center gap-1 break-all"
+                      >
+                        {String(val)} <ExternalLink size={12} className="shrink-0" />
+                      </a>
+                    ) : p.type === 'longtext' ? (
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                        {(val as string) || <span className="text-gray-300">—</span>}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                        {display}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            schema.map((p) => (
+              <div key={p.key}>
+                <label className="text-xs text-gray-500 mb-1 block">
+                  {p.label}
+                  {p.required && <span className="text-rose-500 ml-1">*</span>}
+                </label>
+                <PropertyInput
+                  prop={p}
+                  value={data[p.key]}
+                  onChange={(v) => setData({ ...data, [p.key]: v })}
+                />
+              </div>
+            ))
+          )}
+
+          {/* 속성 추가 — 편집 모드일 때만 */}
+          {mode === 'edit' && adding ? (
             <div className="bg-violet-50 border border-violet-200 rounded-2xl p-3 space-y-2">
               {/* 모드 토글 */}
               <div className="flex gap-1 p-0.5 bg-white rounded-lg">
@@ -687,39 +776,74 @@ function EntryFormSheet({
                 </>
               )}
             </div>
-          ) : (
+          ) : mode === 'edit' ? (
             <button
               onClick={() => setAdding(true)}
               className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-gray-500 text-sm font-semibold inline-flex items-center justify-center gap-1 active:bg-gray-50"
             >
               <Plus size={14} /> 속성 추가 / AI 편집
             </button>
-          )}
+          ) : null}
 
-          <div className="flex gap-2 pt-2">
-            {entry && (
+          {/* 액션 버튼 */}
+          {mode === 'view' ? (
+            <div className="flex gap-2 pt-2">
+              {entry && (
+                <button
+                  onClick={remove}
+                  disabled={busy}
+                  className="px-3 py-2.5 rounded-xl border border-rose-200 text-rose-500 text-sm font-semibold disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
               <button
-                onClick={remove}
-                disabled={busy}
-                className="px-3 py-2.5 rounded-xl border border-rose-200 text-rose-500 text-sm font-semibold disabled:opacity-50"
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm"
               >
-                <Trash2 size={14} />
+                닫기
               </button>
-            )}
-            <button
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm"
-            >
-              취소
-            </button>
-            <button
-              onClick={submit}
-              disabled={busy}
-              className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50"
-            >
-              저장
-            </button>
-          </div>
+              <button
+                onClick={() => setMode('edit')}
+                className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-1"
+              >
+                ✏️ 수정
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2 pt-2">
+              {entry && (
+                <button
+                  onClick={remove}
+                  disabled={busy}
+                  className="px-3 py-2.5 rounded-xl border border-rose-200 text-rose-500 text-sm font-semibold disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  // 기존 항목 편집 중 취소면 view 로 복귀, 신규면 시트 닫기
+                  if (entry) {
+                    setData((entry.data as Record<string, unknown>) ?? {});
+                    setMode('view');
+                  } else {
+                    onClose();
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm"
+              >
+                취소
+              </button>
+              <button
+                onClick={submit}
+                disabled={busy}
+                className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                저장
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
