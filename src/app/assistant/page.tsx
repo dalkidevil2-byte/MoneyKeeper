@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Send, Sparkles, Loader2, Mic, MicOff } from 'lucide-react';
+import MessageContent from '@/components/assistant/MessageContent';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -171,7 +172,14 @@ export default function AssistantPage() {
                       : 'bg-white border border-gray-100 text-gray-800 rounded-bl-sm shadow-sm'
                   }`}
                 >
-                  {m.content}
+                  <MessageContent
+                    text={m.content}
+                    linkClassName={
+                      m.role === 'user'
+                        ? 'underline underline-offset-2 break-all text-violet-100 hover:text-white'
+                        : 'underline underline-offset-2 break-all text-violet-600 hover:text-violet-700'
+                    }
+                  />
                 </div>
               </div>
             ))}
