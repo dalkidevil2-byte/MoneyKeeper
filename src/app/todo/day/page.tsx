@@ -130,12 +130,28 @@ function TodoDayPage() {
 
   // 그 날의 todo 세션 (별도 fetch)
   const [sessions, setSessions] = useState<Array<Record<string, unknown>>>([]);
+  // 활동 세션 (별도 fetch)
+  const [activitySessions, setActivitySessions] = useState<
+    Array<{
+      id: string;
+      start_at: string;
+      end_at: string | null;
+      duration_minutes: number | null;
+      session_date: string;
+      activity?: { id: string; name: string; emoji?: string; color?: string };
+    }>
+  >([]);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/tasks/sessions?from=${date}&to=${date}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) setSessions(d.sessions ?? []);
+      });
+    fetch(`/api/activities/sessions?from=${date}&to=${date}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setActivitySessions(d.sessions ?? []);
       });
     return () => {
       cancelled = true;
@@ -145,6 +161,9 @@ function TodoDayPage() {
     fetch(`/api/tasks/sessions?from=${date}&to=${date}`)
       .then((r) => r.json())
       .then((d) => setSessions(d.sessions ?? []));
+    fetch(`/api/activities/sessions?from=${date}&to=${date}`)
+      .then((r) => r.json())
+      .then((d) => setActivitySessions(d.sessions ?? []));
   }, [date]);
 
   // 스크롤 ref — 진입 시 6시로
@@ -629,6 +648,44 @@ function TodoDayPage() {
             </div>
           )}
 
+          {/* 활동 세션 — 시간 라벨 우측 narrow column (task 영역과 분리) */}
+          {activitySessions.map((s) => {
+            if (!s.activity || !s.start_at) return null;
+            const startDate = new Date(s.start_at);
+            const endDate = s.end_at ? new Date(s.end_at) : new Date();
+            const startMin = startDate.getHours() * 60 + startDate.getMinutes();
+            let endMin = endDate.getHours() * 60 + endDate.getMinutes();
+            if (s.end_at && endMin <= startMin) endMin = startMin + 5;
+            const isRunning = !s.end_at;
+            const heightPx = Math.max(
+              ((endMin - startMin) / 60) * HOUR_HEIGHT - 2,
+              16,
+            );
+            return (
+              <div
+                key={`act-${s.id}`}
+                className={`absolute rounded text-white text-[10px] leading-tight overflow-hidden shadow-sm border border-white/30 ${
+                  isRunning ? 'animate-pulse' : ''
+                }`}
+                style={{
+                  top: (startMin / 60) * HOUR_HEIGHT + 1,
+                  height: heightPx,
+                  left: 50,
+                  width: 36,
+                  backgroundColor: s.activity.color ?? '#6366f1',
+                  zIndex: 5,
+                }}
+                title={`${s.activity.emoji ?? ''} ${s.activity.name} · ${s.duration_minutes ?? '진행중'}분`}
+              >
+                {heightPx >= 30 && (
+                  <div className="px-1 py-0.5 truncate">
+                    {s.activity.emoji ?? ''} {s.activity.name}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
           {/* 시간 task 블록 */}
           {positioned.map((p) => {
             const completed = isTaskCompletedOn(p.task, date);
@@ -665,8 +722,8 @@ function TodoDayPage() {
                 style={{
                   top: top + 1,
                   height: Math.max(height - 2, 18),
-                  left: `calc(${leftPct}% + 50px)`,
-                  width: `calc(${widthPct}% - 52px)`,
+                  left: `calc(${leftPct}% + 90px)`,
+                  width: `calc(${widthPct}% - 92px)`,
                   backgroundColor: getTaskColor(p.task),
                   touchAction: 'none',
                 }}
