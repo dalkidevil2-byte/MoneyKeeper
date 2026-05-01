@@ -492,21 +492,62 @@ export async function pullEventsToTasks(householdId: string): Promise<{
       const ourUpdated = new Date(matched.updated_at).getTime();
       const theirUpdated = ev.updated ? new Date(ev.updated).getTime() : 0;
       if (theirUpdated <= ourUpdated) continue;
+      // ⚠️ status / is_active 는 의도적으로 update 에서 제외
+      // 사용자가 done/cancelled 한 걸 sync 가 pending 으로 되돌리는 버그 방지
       await supabase
         .from('tasks')
         .update({ ...fields, google_calendar_id: calId })
         .eq('id', matched.id);
       result.updated++;
     } else {
-      await supabase.from('tasks').insert({
-        household_id: householdId,
-        kind: 'event',
-        google_event_id: ev.id,
-        google_calendar_id: calId,
-        google_synced_at: new Date().toISOString(),
-        ...fields,
-      });
-      result.created++;
+      // ⚡ 중복 방지: 같은 내용 (제목 + 시작일 + 시작시간) 의 task 가 이미 있으면
+      // 새로 insert 하지 않고 기존 task 에 google_event_id 만 매핑.
+      // 이건 노션 sync 등 다른 경로로 들어온 같은 일정과의 충돌 방지.
+      const f = fields as {
+        title: string;
+        due_date: string;
+        due_time: string | null;
+        end_date: string;
+      };
+      let q = supabase
+        .from('tasks')
+        .select('id')
+        .eq('household_id', householdId)
+        .eq('kind', 'event')
+        .eq('is_active', true)
+        .eq('title', f.title)
+        .eq('due_date', f.due_date)
+        .is('google_event_id', null);
+      // due_time 정확히 매칭 (null vs 값)
+      if (f.due_time) q = q.eq('due_time', f.due_time);
+      else q = q.is('due_time', null);
+
+      const { data: candidates } = await q.limit(1);
+      const existing = candidates?.[0];
+
+      if (existing) {
+        // 기존 task 에 google 매핑만 추가 (status/is_active 등 사용자 데이터 유지)
+        await supabase
+          .from('tasks')
+          .update({
+            google_event_id: ev.id,
+            google_calendar_id: calId,
+            google_synced_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        result.updated++;
+      } else {
+        await supabase.from('tasks').insert({
+          household_id: householdId,
+          kind: 'event',
+          google_event_id: ev.id,
+          google_calendar_id: calId,
+          status: 'pending',
+          is_active: true,
+          ...fields,
+        });
+        result.created++;
+      }
     }
   }
 
@@ -518,6 +559,10 @@ export async function pullEventsToTasks(householdId: string): Promise<{
   return result;
 }
 
+/**
+ * 공통 컨텐츠 필드 (제목/날짜/시간/메모) — insert/update 양쪽 다 적용.
+ * status, is_active 는 insert 시에만 (update 시 사용자가 done/cancelled 한 걸 덮지 않음).
+ */
 function eventToTaskFields(ev: GEvent): Record<string, unknown> | null {
   if (!ev.start || !ev.summary) return null;
   const isAllDay = !!ev.start.date;
@@ -528,7 +573,6 @@ function eventToTaskFields(ev: GEvent): Record<string, unknown> | null {
 
   if (isAllDay) {
     due_date = ev.start.date!;
-    // 구글 종일 end.date 는 exclusive → -1일
     if (ev.end?.date) {
       const d = new Date(ev.end.date);
       d.setDate(d.getDate() - 1);
@@ -554,8 +598,6 @@ function eventToTaskFields(ev: GEvent): Record<string, unknown> | null {
     end_date,
     due_time,
     end_time,
-    status: 'pending',
-    is_active: true,
     google_synced_at: new Date().toISOString(),
   };
 }

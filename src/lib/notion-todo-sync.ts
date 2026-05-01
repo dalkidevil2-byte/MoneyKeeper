@@ -100,27 +100,57 @@ export async function syncNotionSource(
     };
   };
 
-  // INSERT
+  // INSERT — 단, 같은 내용 (제목 + 시작일 + 시작시간) 의 task 가 이미 있으면
+  // (예: 구글 sync 가 먼저 같은 일정을 가져왔을 때) 새로 만들지 않고 기존 task 에
+  // notion source_external_id 만 매핑한다.
   let inserted = 0;
-  if (toInsertRows.length > 0) {
-    const insertData = toInsertRows.map((r) => ({
-      household_id: source.household_id,
-      type: 'one_time' as const,
-      memo: '',
-      priority: 'normal' as const,
-      recurrence: null,
-      status: 'pending' as const,
-      is_active: true,
-      source: 'notion' as const,
-      source_external_id: r.external_id,
-      ...buildPayload(r),
-    }));
-    const { error: insErr, count } = await supabase
+  let linked = 0;
+  for (const r of toInsertRows) {
+    const payload = buildPayload(r);
+    // 기존 매칭 task 검색 — source_external_id 가 비어있는 것 (= 다른 sync 가 만든 거)
+    let q = supabase
       .from('tasks')
-      .insert(insertData, { count: 'exact' });
-    if (insErr) throw insErr;
-    inserted = count ?? insertData.length;
+      .select('id')
+      .eq('household_id', source.household_id)
+      .eq('kind', 'event')
+      .eq('is_active', true)
+      .eq('title', payload.title)
+      .eq('due_date', payload.due_date as string)
+      .is('source_external_id', null);
+    if (payload.due_time) q = q.eq('due_time', payload.due_time as string);
+    else q = q.is('due_time', null);
+
+    const { data: cand } = await q.limit(1);
+    const existing = cand?.[0];
+
+    if (existing) {
+      await supabase
+        .from('tasks')
+        .update({
+          source: 'notion',
+          source_external_id: r.external_id,
+          notion_last_edited_time: r.last_edited_time,
+        })
+        .eq('id', existing.id);
+      linked++;
+    } else {
+      const { error: insErr } = await supabase.from('tasks').insert({
+        household_id: source.household_id,
+        type: 'one_time' as const,
+        memo: '',
+        priority: 'normal' as const,
+        recurrence: null,
+        status: 'pending' as const,
+        is_active: true,
+        source: 'notion' as const,
+        source_external_id: r.external_id,
+        ...payload,
+      });
+      if (insErr) throw insErr;
+      inserted++;
+    }
   }
+  void linked;
 
   // UPDATE — 한 행씩 (Supabase bulk update by id 가 PostgREST 로 직접 안 됨)
   let updated = 0;
