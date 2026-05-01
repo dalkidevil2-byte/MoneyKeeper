@@ -228,7 +228,30 @@ export default function TodoHomePage() {
         {/* 지난 */}
         {overdueList.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold text-rose-500 mb-2">🔴 지난</h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-bold text-rose-500">🔴 지난 ({overdueList.length})</h2>
+              <button
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      `지나간 일정 ${overdueList.length}건을 모두 완료 처리할까요?\n(루틴/할일은 제외)`,
+                    )
+                  )
+                    return;
+                  const res = await fetch('/api/tasks/bulk-complete-past', {
+                    method: 'POST',
+                  });
+                  if (res.ok) {
+                    const j = await res.json();
+                    alert(`${j.updated}건 완료 처리`);
+                    refetch();
+                  }
+                }}
+                className="text-[11px] text-rose-500 font-semibold px-2 py-1 rounded-lg active:bg-rose-50 border border-rose-200"
+              >
+                ✓ 전체 완료
+              </button>
+            </div>
             <div className="space-y-2">
               {overdueList.map((item) => (
                 <TaskCard
