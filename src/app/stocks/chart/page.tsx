@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, RefreshCw, Search } from 'lucide-react';
+import StockMemoPanel from '@/components/stock/StockMemoPanel';
 import {
   Line,
   LineChart as ReLineChart,
@@ -342,6 +343,9 @@ export default function ChartPage() {
             </ResponsiveContainer>
           )}
         </div>
+
+        {/* 종목 메모 (선택된 ticker 만) */}
+        {ticker && <StockMemoPanel ticker={ticker} />}
       </div>
     </div>
   );

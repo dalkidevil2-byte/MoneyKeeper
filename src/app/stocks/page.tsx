@@ -9,6 +9,7 @@ import {
   Settings,
   Receipt,
   FlaskConical,
+  StickyNote,
 } from 'lucide-react';
 
 /**
@@ -39,6 +40,13 @@ export default function StocksHomePage() {
       color: 'sky',
     },
     {
+      href: '/stocks/memos',
+      icon: StickyNote,
+      title: '종목 메모',
+      desc: '리딩방 · 뉴스 · 분석 메모',
+      color: 'rose',
+    },
+    {
       href: '/stocks/paper',
       icon: FlaskConical,
       title: '모의투자',
@@ -51,6 +59,7 @@ export default function StocksHomePage() {
     emerald: 'bg-emerald-100 text-emerald-600',
     amber:   'bg-amber-100   text-amber-600',
     sky:     'bg-sky-100     text-sky-600',
+    rose:    'bg-rose-100    text-rose-600',
     violet:  'bg-violet-100  text-violet-600',
   };
 
