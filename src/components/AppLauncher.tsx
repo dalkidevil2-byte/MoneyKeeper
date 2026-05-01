@@ -12,6 +12,7 @@ import {
   TrendingUp,
   FlaskConical,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 
 type Section = {
@@ -31,6 +32,14 @@ const SECTIONS: Section[] = [
     desc: '전체 홈',
     bg: 'bg-gray-100',
     iconColor: 'text-gray-700',
+  },
+  {
+    href: '/assistant',
+    icon: Sparkles,
+    label: 'AI 어시스턴트',
+    desc: '자연어 질문 · 인사이트',
+    bg: 'bg-violet-100',
+    iconColor: 'text-violet-600',
   },
   {
     href: '/todo',
