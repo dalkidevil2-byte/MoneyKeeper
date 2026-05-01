@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useState, useCallback } from 'react';
+import { use, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -15,6 +15,8 @@ import {
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
+  Camera,
+  X as XIcon,
 } from 'lucide-react';
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
@@ -32,6 +34,15 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [search, setSearch] = useState('');
   const [reorderMode, setReorderMode] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [aiFillBusy, setAiFillBusy] = useState(false);
+  const [aiFillError, setAiFillError] = useState<string | null>(null);
+  const [aiFillResult, setAiFillResult] = useState<{
+    data: Record<string, unknown>;
+    filled: string[];
+    missing: string[];
+    previewUrl: string;
+  } | null>(null);
+  const aiFillInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -73,6 +84,34 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
       return false;
     });
   }, [entries, search]);
+
+  // 사진으로 새 항목 채우기
+  const aiFillFromImage = async (file: File) => {
+    setAiFillBusy(true);
+    setAiFillError(null);
+    const previewUrl = URL.createObjectURL(file);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/archive/collections/${id}/ai-fill`, {
+        method: 'POST',
+        body: fd,
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? '실패');
+      setAiFillResult({
+        data: j.data ?? {},
+        filled: j.filled ?? [],
+        missing: j.missing ?? [],
+        previewUrl,
+      });
+    } catch (e) {
+      setAiFillError(e instanceof Error ? e.message : '실패');
+      URL.revokeObjectURL(previewUrl);
+    } finally {
+      setAiFillBusy(false);
+    }
+  };
 
   // 한 칸 이동 — 검색 중에는 비활성
   const moveEntry = async (idx: number, dir: -1 | 1) => {
@@ -141,13 +180,25 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
           </div>
         )}
 
-        {/* 새 항목 + 순서 변경 */}
+        {/* 새 항목 + 사진 추가 + 순서 변경 */}
         <div className="flex gap-2">
           <button
             onClick={() => setEditingEntry('new')}
             className="flex-1 py-3 rounded-2xl bg-violet-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-700"
           >
             <Plus size={16} /> 새 항목
+          </button>
+          <button
+            onClick={() => aiFillInputRef.current?.click()}
+            disabled={aiFillBusy}
+            className="px-3 py-3 rounded-2xl bg-white border border-violet-200 text-violet-600 text-sm font-semibold inline-flex items-center gap-1 active:bg-violet-50 disabled:opacity-50"
+            title="사진으로 추가 — AI 가 OCR 로 채워줘요"
+          >
+            {aiFillBusy ? (
+              <><Loader2 size={14} className="animate-spin" /> 분석 중</>
+            ) : (
+              <><Camera size={14} /> 사진</>
+            )}
           </button>
           {entries.length > 1 && (
             <button
@@ -164,6 +215,20 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             </button>
           )}
         </div>
+        <input
+          ref={aiFillInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) aiFillFromImage(f);
+            if (aiFillInputRef.current) aiFillInputRef.current.value = '';
+          }}
+          className="hidden"
+        />
+        {aiFillError && (
+          <div className="text-[11px] text-rose-500 px-1 mt-1">{aiFillError}</div>
+        )}
       </div>
 
       <div className="max-w-lg mx-auto px-4 space-y-2 pt-3">
@@ -271,6 +336,67 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
         />
       )}
 
+      {/* 사진 OCR 결과로 채워진 새 항목 시트 */}
+      {aiFillResult && (
+        <EntryFormSheet
+          collectionId={id}
+          schema={schema}
+          color={collection.color}
+          entry={null}
+          prefillData={aiFillResult.data}
+          prefillBanner={
+            <div className="bg-violet-50 border border-violet-200 rounded-2xl p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={aiFillResult.previewUrl}
+                  alt="원본 이미지"
+                  className="w-16 h-16 rounded-lg object-cover shrink-0"
+                />
+                <div className="flex-1 text-[11px] text-violet-800">
+                  <div className="font-bold mb-1 inline-flex items-center gap-1">
+                    <Sparkles size={11} /> AI 가 사진에서 추출했어요
+                  </div>
+                  <div>
+                    채움: {aiFillResult.filled.length}개
+                    {aiFillResult.missing.length > 0 && (
+                      <>
+                        {' · '}못 읽음:{' '}
+                        <span className="text-violet-500">
+                          {aiFillResult.missing.join(', ')}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-violet-500 mt-0.5">
+                    검토 후 저장하세요. 부정확하면 직접 수정해도 됩니다.
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    URL.revokeObjectURL(aiFillResult.previewUrl);
+                    setAiFillResult(null);
+                  }}
+                  className="p-1 text-violet-500 hover:bg-violet-100 rounded shrink-0"
+                  aria-label="닫기"
+                >
+                  <XIcon size={14} />
+                </button>
+              </div>
+            </div>
+          }
+          onClose={() => {
+            URL.revokeObjectURL(aiFillResult.previewUrl);
+            setAiFillResult(null);
+          }}
+          onSaved={() => {
+            URL.revokeObjectURL(aiFillResult.previewUrl);
+            setAiFillResult(null);
+            load();
+          }}
+        />
+      )}
+
       {/* 컬렉션 설정 시트 */}
       {editingSchema && (
         <CollectionSettingsSheet
@@ -295,6 +421,8 @@ function EntryFormSheet({
   schema: initialSchema,
   color,
   entry,
+  prefillData,
+  prefillBanner,
   onClose,
   onSaved,
 }: {
@@ -302,12 +430,14 @@ function EntryFormSheet({
   schema: ArchiveProperty[];
   color: string;
   entry: ArchiveEntry | null;
+  prefillData?: Record<string, unknown>;
+  prefillBanner?: React.ReactNode;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [schema, setSchema] = useState<ArchiveProperty[]>(initialSchema);
   const [data, setData] = useState<Record<string, unknown>>(
-    (entry?.data as Record<string, unknown>) ?? {},
+    (entry?.data as Record<string, unknown>) ?? prefillData ?? {},
   );
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -433,6 +563,7 @@ function EntryFormSheet({
         </div>
 
         <div className="overflow-y-auto px-5 pb-6 space-y-4">
+          {prefillBanner}
           {schema.map((p) => (
             <div key={p.key}>
               <label className="text-xs text-gray-500 mb-1 block">
