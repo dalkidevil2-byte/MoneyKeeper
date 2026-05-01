@@ -504,8 +504,8 @@ export default function TodoCalendarPage() {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-white pb-24">
       <div className="px-4 pt-6 pb-2 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">캘린더</h1>
-        {/* 뷰 토글 — 월/주/일 */}
-        <div className="inline-flex bg-white border border-gray-200 rounded-full p-0.5 shadow-sm">
+        {/* 뷰 토글 — 월/주/일 (우상단 AppLauncher 와 겹침 방지로 우측 여백) */}
+        <div className="inline-flex bg-white border border-gray-200 rounded-full p-0.5 shadow-sm mr-12">
           <span className="px-3 py-1.5 text-xs font-semibold rounded-full bg-amber-500 text-white inline-flex items-center gap-1">
             <CalendarDays size={13} /> 월
           </span>

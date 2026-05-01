@@ -107,7 +107,7 @@ function TodoWeekInner() {
       {/* 헤더 */}
       <div className="px-4 pt-6 pb-2 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">주간</h1>
-        <div className="inline-flex bg-white border border-gray-200 rounded-full p-0.5 shadow-sm">
+        <div className="inline-flex bg-white border border-gray-200 rounded-full p-0.5 shadow-sm mr-12">
           <Link
             href={`/todo/calendar?date=${anchor.format('YYYY-MM-DD')}`}
             className="px-3 py-1.5 text-xs font-semibold rounded-full text-gray-500 active:bg-gray-100 inline-flex items-center gap-1"

@@ -519,7 +519,7 @@ function TodoDayPage() {
             <ChevronRight size={20} />
           </button>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 mr-12">
           <button
             onClick={() => router.push(`/todo/calendar?date=${date}`)}
             className="text-[10px] font-semibold text-gray-500 px-2 py-1 active:bg-gray-100 rounded"
