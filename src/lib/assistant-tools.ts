@@ -388,11 +388,28 @@ export async function executeTool(
 
       case 'get_stock_portfolio': {
         const { computeHoldings, aggregateByTicker, computeRealizedPL } = await import('./stock-holdings');
-        const { data: txs } = await supabase
-          .from('stock_transactions')
-          .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
-          .eq('household_id', householdId)
-          .order('date', { ascending: true });
+        // household → owners → accounts → transactions
+        const { data: owners } = await supabase
+          .from('stock_owners')
+          .select('id')
+          .eq('household_id', householdId);
+        const ownerIds = (owners ?? []).map((o) => o.id as string);
+        let txs: unknown[] = [];
+        if (ownerIds.length > 0) {
+          const { data: accs } = await supabase
+            .from('stock_accounts')
+            .select('id')
+            .in('owner_id', ownerIds);
+          const accIds = (accs ?? []).map((a) => a.id as string);
+          if (accIds.length > 0) {
+            const { data } = await supabase
+              .from('stock_transactions')
+              .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+              .in('account_id', accIds)
+              .order('date', { ascending: true });
+            txs = data ?? [];
+          }
+        }
         if (!txs || txs.length === 0) {
           return { ok: true, data: { message: '주식 거래 내역이 없습니다.' } };
         }
@@ -464,10 +481,26 @@ export async function executeTool(
 
       case 'analyze_stock_trades': {
         const { analyzeTrades } = await import('./stock-analysis');
-        const { data: txs } = await supabase
-          .from('stock_transactions')
-          .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+        const { data: owners } = await supabase
+          .from('stock_owners')
+          .select('id')
           .eq('household_id', householdId);
+        const ownerIds = (owners ?? []).map((o) => o.id as string);
+        let txs: unknown[] = [];
+        if (ownerIds.length > 0) {
+          const { data: accs } = await supabase
+            .from('stock_accounts')
+            .select('id')
+            .in('owner_id', ownerIds);
+          const accIds = (accs ?? []).map((a) => a.id as string);
+          if (accIds.length > 0) {
+            const { data } = await supabase
+              .from('stock_transactions')
+              .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+              .in('account_id', accIds);
+            txs = data ?? [];
+          }
+        }
         if (!txs || txs.length === 0) {
           return { ok: true, data: { message: '거래 내역이 없습니다.' } };
         }
@@ -484,10 +517,26 @@ export async function executeTool(
         } else {
           // 보유 상위 3개
           const { computeHoldings, aggregateByTicker } = await import('./stock-holdings');
-          const { data: txs } = await supabase
-            .from('stock_transactions')
-            .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+          const { data: owners } = await supabase
+            .from('stock_owners')
+            .select('id')
             .eq('household_id', householdId);
+          const ownerIds = (owners ?? []).map((o) => o.id as string);
+          let txs: unknown[] = [];
+          if (ownerIds.length > 0) {
+            const { data: accs } = await supabase
+              .from('stock_accounts')
+              .select('id')
+              .in('owner_id', ownerIds);
+            const accIds = (accs ?? []).map((a) => a.id as string);
+            if (accIds.length > 0) {
+              const { data } = await supabase
+                .from('stock_transactions')
+                .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+                .in('account_id', accIds);
+              txs = data ?? [];
+            }
+          }
           const holdings = computeHoldings((txs ?? []) as never);
           const agg = aggregateByTicker(holdings);
           tickers = agg.slice(0, 3).map((a) => a.ticker);
