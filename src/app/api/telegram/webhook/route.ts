@@ -4,8 +4,10 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { runAssistant, type ChatHistoryItem } from '@/lib/assistant-chat';
 import dayjs from 'dayjs';
+import OpenAI from 'openai';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const HISTORY_TURNS = 10; // 최근 10턴 (= user + assistant 페어 5쌍)
 
 /**
@@ -34,10 +36,20 @@ export async function POST(req: NextRequest) {
       return await handleReceiptPhoto(chatId, message);
     }
 
-    if (!message.text) {
+    // 음성 메시지 → STT 후 텍스트 흐름으로 위임
+    let userText: string = message.text ?? '';
+    if (!userText && (message.voice || message.audio)) {
+      const transcribed = await handleVoiceMessage(chatId, message);
+      if (transcribed) {
+        userText = transcribed;
+      } else {
+        return NextResponse.json({ ok: true, ignored: 'voice transcribe fail' });
+      }
+    }
+
+    if (!userText) {
       return NextResponse.json({ ok: true, ignored: 'no text' });
     }
-    const userText: string = message.text;
 
     // /start 명령어
     if (userText.startsWith('/start')) {
@@ -122,6 +134,73 @@ export async function POST(req: NextRequest) {
     console.error('[tg webhook]', e);
     // 텔레그램은 200 외 응답이면 재전송하므로 항상 200 으로
     return NextResponse.json({ ok: false, error: String(e) });
+  }
+}
+
+// ─────────────────────────────────────────
+// 음성 메시지 처리 — Whisper STT
+// 변환 결과 텍스트만 반환. 그 후 호출 측에서 일반 텍스트 흐름 진행.
+// ─────────────────────────────────────────
+async function handleVoiceMessage(
+  chatId: string,
+  message: {
+    voice?: { file_id: string; duration?: number; mime_type?: string };
+    audio?: { file_id: string; duration?: number; mime_type?: string };
+  },
+): Promise<string | null> {
+  const supabase = createServerSupabaseClient();
+  const { data: tg } = await supabase
+    .from('telegram_settings')
+    .select('bot_token')
+    .eq('household_id', DEFAULT_HOUSEHOLD_ID)
+    .maybeSingle();
+  if (!tg?.bot_token) return null;
+
+  const fileObj = message.voice ?? message.audio;
+  if (!fileObj?.file_id) return null;
+
+  try {
+    // 1) Telegram getFile
+    const fileRes = await fetch(
+      `https://api.telegram.org/bot${tg.bot_token}/getFile?file_id=${fileObj.file_id}`,
+    );
+    const fileJson = await fileRes.json();
+    const filePath = fileJson?.result?.file_path;
+    if (!filePath) return null;
+
+    const audioRes = await fetch(
+      `https://api.telegram.org/file/bot${tg.bot_token}/${filePath}`,
+    );
+    if (!audioRes.ok) return null;
+    const arrayBuf = await audioRes.arrayBuffer();
+    // Telegram voice = OGG/Opus, audio = MP3 등. 파일 확장자 추출
+    const ext = filePath.split('.').pop() ?? 'ogg';
+    const mimeType =
+      fileObj.mime_type ?? (ext === 'ogg' ? 'audio/ogg' : `audio/${ext}`);
+
+    // 2) Whisper API
+    const blob = new Blob([arrayBuf], { type: mimeType });
+    const file = new File([blob], `voice.${ext}`, { type: mimeType });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: 'whisper-1',
+      language: 'ko',
+    });
+    const text = transcription.text?.trim() ?? '';
+    if (!text) return null;
+
+    // 3) 사용자에게 인식 결과 즉시 알려주기
+    await sendTelegramMessage(tg.bot_token, chatId, `🎙 "${text}"`);
+    return text;
+  } catch (e) {
+    console.error('[voice STT]', e);
+    await sendTelegramMessage(
+      tg.bot_token,
+      chatId,
+      `⚠️ 음성 인식 실패: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
   }
 }
 
