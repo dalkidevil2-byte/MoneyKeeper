@@ -922,13 +922,17 @@ export async function executeTool(
         const limit = (args.limit as number) ?? 10;
 
         let ticker = tickerArg?.trim() || '';
+        let resolvedName = nameArg ?? '';
         if (!ticker && nameArg) {
           const { data: matches } = await supabase
             .from('stock_krx_stocks')
             .select('ticker, name')
             .ilike('name', `%${nameArg.trim()}%`)
             .limit(1);
-          if (matches && matches.length > 0) ticker = matches[0].ticker as string;
+          if (matches && matches.length > 0) {
+            ticker = matches[0].ticker as string;
+            resolvedName = matches[0].name as string;
+          }
         }
 
         let q = supabase
@@ -941,7 +945,60 @@ export async function executeTool(
 
         const { data, error } = await q;
         if (error) return { ok: false, error: error.message };
-        return { ok: true, data: { memos: data ?? [] } };
+
+        // content 를 날짜별 블록으로 분리 (--- 구분자 또는 [YYYY-MM-DD] prefix 기준)
+        type Block = { date: string | null; tag: string | null; source: string | null; body: string };
+        const parseBlocks = (content: string): Block[] => {
+          const sections = content.split(/\n\s*---\s*\n/);
+          const blocks: Block[] = [];
+          for (const sec of sections) {
+            const trimmed = sec.trim();
+            if (!trimmed) continue;
+            // 헤더 패턴: [YYYY-MM-DD] (선택적 emoji+텍스트) (선택적 · source)
+            const m = trimmed.match(/^\[(\d{4}-\d{2}-\d{2})\]\s*(.*?)\n([\s\S]*)$/);
+            if (m) {
+              const [, date, header, body] = m;
+              const sourceMatch = header.match(/·\s*(.+)$/);
+              const tag = header.replace(/·\s*.+$/, '').trim() || null;
+              blocks.push({
+                date,
+                tag,
+                source: sourceMatch ? sourceMatch[1].trim() : null,
+                body: body.trim(),
+              });
+            } else {
+              blocks.push({ date: null, tag: null, source: null, body: trimmed });
+            }
+          }
+          return blocks;
+        };
+
+        // KRX 이름 매핑 (여러 ticker 한번에 조회)
+        const tickers = (data ?? []).map((m) => m.ticker as string);
+        const nameMap: Record<string, string> = {};
+        if (tickers.length > 0) {
+          const { data: krx } = await supabase
+            .from('stock_krx_stocks')
+            .select('ticker, name')
+            .in('ticker', tickers);
+          for (const r of krx ?? []) nameMap[r.ticker as string] = r.name as string;
+        }
+
+        const memos = (data ?? []).map((m) => ({
+          ticker: m.ticker,
+          name: nameMap[m.ticker as string] ?? null,
+          updated_at: m.updated_at,
+          blocks: parseBlocks((m.content as string) ?? ''),
+        }));
+
+        return {
+          ok: true,
+          data: {
+            query: { ticker, name: resolvedName },
+            count: memos.length,
+            memos,
+          },
+        };
       }
 
       case 'get_time_breakdown': {
