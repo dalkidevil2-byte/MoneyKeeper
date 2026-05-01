@@ -129,6 +129,35 @@ function CreateCollectionSheet({
   onCreated: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [aiIntent, setAiIntent] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState('');
+
+  const aiCreate = async () => {
+    if (!aiIntent.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError('');
+    try {
+      const res = await fetch('/api/archive/ai-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          household_id: HOUSEHOLD_ID,
+          intent: aiIntent.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setAiError(json.error ?? 'AI 생성 실패');
+        return;
+      }
+      onCreated();
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const create = async (
     overrides: Partial<{
@@ -177,10 +206,38 @@ function CreateCollectionSheet({
 
         <div className="overflow-y-auto px-4 pb-6 space-y-2">
           <p className="text-xs text-gray-500 px-1 mb-2">
-            템플릿으로 빠르게 시작하거나, 빈 컬렉션부터 직접 만드세요.
+            AI 로 만들거나, 템플릿 / 빈 컬렉션부터 시작하세요.
           </p>
 
+          {/* AI 로 만들기 */}
+          <div className="rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-100 p-3 space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <Sparkles size={15} className="text-violet-600" />
+              <span className="text-sm font-bold text-violet-900">AI 로 만들기</span>
+            </div>
+            <textarea
+              value={aiIntent}
+              onChange={(e) => setAiIntent(e.target.value)}
+              placeholder='예) "여행 기록 컬렉션 만들어줘", "와인 노트 만들어줘"'
+              rows={2}
+              className="w-full text-sm px-3 py-2 rounded-xl bg-white border border-violet-100 focus:outline-none focus:border-violet-300 resize-none placeholder-gray-400"
+              disabled={aiBusy || busy}
+            />
+            {aiError && (
+              <p className="text-[11px] text-red-500 px-1">{aiError}</p>
+            )}
+            <button
+              onClick={aiCreate}
+              disabled={!aiIntent.trim() || aiBusy || busy}
+              className="w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1.5"
+            >
+              <Sparkles size={14} />
+              {aiBusy ? 'AI 가 생성 중…' : 'AI 추천 받기'}
+            </button>
+          </div>
+
           {/* 빈 컬렉션 */}
+          <div className="text-xs text-gray-400 font-semibold px-1 pt-3">직접 만들기</div>
           <button
             onClick={() =>
               create({ name: '새 컬렉션', emoji: '📦', schema: BLANK_SCHEMA })
