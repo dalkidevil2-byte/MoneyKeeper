@@ -56,7 +56,22 @@ D) **create_archive_collection** — 사용자가 "X 컬렉션/페이지/목록 
    날짜는 'date', 금액은 'currency', 등급은 'rating' (1~5), 분류는 'select' + options.
    key 는 영문 snake_case, label 은 한글.
 
-E) 그 외는 데이터 조회/분석 도구 사용.`;
+E) **save_stock_recommendation** — 주식 추천/리딩방/매매 메시지 자동 저장:
+   - 트리거: "매수", "매도", "비중 N%", "신규편입", "정리", "리딩방", "<무임승차>" 같은 단어 + 종목명/코드 패턴
+   - 예시 입력:
+     "1. SNT에너지(100840) 55000~56000원 비중 10% 매수
+      2. LS마린솔루션 37000~38000원 5~7% 신규매수
+      3. 만도 정리하고 포스코DX 신규로 담아봅니다"
+   - → entries 배열로 분리: 종목당 하나, ticker_name + content + action(buy/sell/watch/hold)
+   - 메시지에 포함된 괄호 안 6자리 숫자(예: 100840)는 ticker 코드. 없으면 ticker 비워둠 (서버가 KRX 매칭).
+   - "정리" / "매도" → action: sell, "신규" / "매수" → buy, "관심" / "주목" → watch
+   - 저장 후 "✅ N개 종목 메모 저장: 종목A(매수), 종목B(매도)..." 형태로 짧게 응답
+   - 매칭 실패한 종목이 있으면 "⚠️ X 종목은 KRX 매칭 안됨" 으로 알림
+
+F) **get_stock_recommendations** — 종목별 저장된 추천 메모 조회:
+   - "SNT에너지 메모", "최근 받은 추천", "포스코DX 어떻게 했었지?" 같은 질문
+
+G) 그 외는 데이터 조회/분석 도구 사용.`;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },

@@ -234,6 +234,71 @@ export const ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'save_stock_recommendation',
+      description:
+        '주식 추천/리딩방 메시지를 종목별로 파싱해서 stock_memos 에 날짜와 함께 누적 저장. 메시지 안에 여러 종목이 섞여 있으면 entries 배열로 분리. 종목명만 알고 ticker 모르면 ticker 비워도 됨 (서버가 KRX 매칭).',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: {
+            type: 'string',
+            description: 'YYYY-MM-DD. 메시지의 발신 날짜. 없으면 오늘.',
+          },
+          source: {
+            type: 'string',
+            description: '출처 — 텔레그램 / 카카오톡 / 리딩방 이름 등 (선택)',
+          },
+          entries: {
+            type: 'array',
+            description: '종목별 항목 배열',
+            items: {
+              type: 'object',
+              properties: {
+                ticker_name: {
+                  type: 'string',
+                  description: '한국명 또는 영문명 (예: SNT에너지, 만도, 포스코DX, AAPL)',
+                },
+                ticker: {
+                  type: 'string',
+                  description: '6자리 코드 또는 .KS/.KQ 티커 (알면 적기, 모르면 생략)',
+                },
+                action: {
+                  type: 'string',
+                  enum: ['buy', 'sell', 'watch', 'hold', 'other'],
+                  description: '매수/매도/관심/유지/기타',
+                },
+                content: {
+                  type: 'string',
+                  description: '해당 종목에 대한 원문 (예: "55000~56000원 비중 10% 매수")',
+                },
+              },
+              required: ['ticker_name', 'content'],
+            },
+          },
+        },
+        required: ['entries'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_stock_recommendations',
+      description:
+        '특정 종목 또는 전체의 저장된 추천/리딩방 메모 조회. 사용자가 "X 종목 메모 보여줘", "최근에 받은 추천" 같은 질문할 때 사용.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ticker_name: { type: 'string', description: '종목명 (선택)' },
+          ticker: { type: 'string', description: '티커 코드 (선택)' },
+          limit: { type: 'integer', description: '최대 개수 (기본 10)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_time_breakdown',
       description:
         '특정 기간의 카테고리별/멤버별 시간 누적 — 어디에 시간 많이 썼는지.',
@@ -719,6 +784,164 @@ export async function executeTool(
           news.push({ ticker: q.ticker, name: q.name, items });
         }
         return { ok: true, data: { news } };
+      }
+
+      case 'save_stock_recommendation': {
+        const date = (args.date as string) || dayjs().format('YYYY-MM-DD');
+        const source = (args.source as string) || '';
+        const entries = (args.entries as Array<{
+          ticker_name: string;
+          ticker?: string;
+          action?: string;
+          content: string;
+        }>) ?? [];
+
+        if (entries.length === 0) {
+          return { ok: false, error: '저장할 종목이 없습니다.' };
+        }
+
+        type ResolvedEntry = {
+          ticker_name: string;
+          resolved_ticker: string | null;
+          resolved_code: string | null;
+          action: string;
+          content: string;
+          status: 'saved' | 'not_found' | 'error';
+          error?: string;
+        };
+        const results: ResolvedEntry[] = [];
+
+        for (const e of entries) {
+          let ticker = e.ticker?.trim() || '';
+          let code: string | null = null;
+          let resolvedName = e.ticker_name;
+
+          // ticker 미지정이거나 한글일 때 → KRX 매칭
+          if (!ticker || /[가-힣]/.test(ticker)) {
+            const q = e.ticker_name.trim();
+            const isCode = /^\d+$/.test(q);
+            const { data: matches } = await supabase
+              .from('stock_krx_stocks')
+              .select('code, ticker, name, market')
+              .or(isCode ? `code.like.${q}%` : `name.ilike.%${q}%`)
+              .limit(5);
+            if (matches && matches.length > 0) {
+              // 정확히 일치 우선, 없으면 첫 번째
+              const exact = matches.find((m) => m.name === q);
+              const pick = exact ?? matches[0];
+              ticker = pick.ticker as string;
+              code = pick.code as string;
+              resolvedName = pick.name as string;
+            }
+          }
+
+          if (!ticker) {
+            results.push({
+              ticker_name: e.ticker_name,
+              resolved_ticker: null,
+              resolved_code: null,
+              action: e.action ?? 'other',
+              content: e.content,
+              status: 'not_found',
+              error: 'KRX 매칭 실패',
+            });
+            continue;
+          }
+
+          // 기존 메모 조회
+          const { data: existing } = await supabase
+            .from('stock_memos')
+            .select('content')
+            .eq('household_id', householdId)
+            .eq('ticker', ticker)
+            .maybeSingle();
+
+          const actionLabel: Record<string, string> = {
+            buy: '🟢 매수',
+            sell: '🔴 매도',
+            watch: '👀 관심',
+            hold: '⚪ 유지',
+            other: '📝',
+          };
+          const tag = actionLabel[e.action ?? 'other'] ?? '📝';
+          const sourceTag = source ? ` · ${source}` : '';
+          const newBlock = `[${date}] ${tag}${sourceTag}\n${e.content.trim()}`;
+          const merged = existing?.content
+            ? `${newBlock}\n\n---\n\n${existing.content}`
+            : newBlock;
+
+          const { error: upsertErr } = await supabase
+            .from('stock_memos')
+            .upsert(
+              {
+                household_id: householdId,
+                ticker,
+                content: merged,
+              },
+              { onConflict: 'household_id,ticker' },
+            );
+
+          if (upsertErr) {
+            results.push({
+              ticker_name: resolvedName,
+              resolved_ticker: ticker,
+              resolved_code: code,
+              action: e.action ?? 'other',
+              content: e.content,
+              status: 'error',
+              error: upsertErr.message,
+            });
+          } else {
+            results.push({
+              ticker_name: resolvedName,
+              resolved_ticker: ticker,
+              resolved_code: code,
+              action: e.action ?? 'other',
+              content: e.content,
+              status: 'saved',
+            });
+          }
+        }
+
+        const savedCount = results.filter((r) => r.status === 'saved').length;
+        return {
+          ok: true,
+          data: {
+            date,
+            source,
+            saved: savedCount,
+            total: entries.length,
+            results,
+          },
+        };
+      }
+
+      case 'get_stock_recommendations': {
+        const tickerArg = args.ticker as string | undefined;
+        const nameArg = args.ticker_name as string | undefined;
+        const limit = (args.limit as number) ?? 10;
+
+        let ticker = tickerArg?.trim() || '';
+        if (!ticker && nameArg) {
+          const { data: matches } = await supabase
+            .from('stock_krx_stocks')
+            .select('ticker, name')
+            .ilike('name', `%${nameArg.trim()}%`)
+            .limit(1);
+          if (matches && matches.length > 0) ticker = matches[0].ticker as string;
+        }
+
+        let q = supabase
+          .from('stock_memos')
+          .select('ticker, content, updated_at')
+          .eq('household_id', householdId)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+        if (ticker) q = q.eq('ticker', ticker);
+
+        const { data, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        return { ok: true, data: { memos: data ?? [] } };
       }
 
       case 'get_time_breakdown': {
