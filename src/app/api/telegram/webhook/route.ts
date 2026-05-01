@@ -234,7 +234,7 @@ async function handleReceiptPhoto(
         raw_input: '',
         tags: [],
         essential: false,
-        status: 'draft',
+        status: 'reviewed',
         sync_status: 'pending',
       });
       if (error) console.warn('[receipt insert]', error);
@@ -247,8 +247,8 @@ async function handleReceiptPhoto(
 📅 ${date}
 🧾 ${items.length}건 · 총 ${total.toLocaleString('ko-KR')}원
 
-💾 ${inserted}건 임시 저장 (draft)
-앱 → 가계부 → '미확인' 거래에서 확인 후 확정해주세요.`;
+📥 ${inserted}건 Inbox 에 저장
+앱 → 가계부 → 우상단 📥 Inbox 에서 확인 후 확정해주세요.`;
     await sendTelegramMessage(tg.bot_token, chatId, reply);
 
     return NextResponse.json({ ok: true, inserted });

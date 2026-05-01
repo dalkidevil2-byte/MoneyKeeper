@@ -448,7 +448,8 @@ export async function executeTool(
           raw_input: '',
           tags: [],
           essential: false,
-          status: (args.status as string) ?? 'reviewed',
+          // 텔레그램/AI 로 입력된 거래는 항상 Inbox 에서 확인되도록 reviewed + pending
+          status: 'reviewed',
           sync_status: 'pending',
         };
         const { data, error } = await supabase
@@ -461,7 +462,7 @@ export async function executeTool(
           ok: true,
           data: {
             transaction: data,
-            message: `✅ ${merchant} ${(insert.amount as number).toLocaleString('ko-KR')}원 등록됨`,
+            message: `📥 ${merchant} ${(insert.amount as number).toLocaleString('ko-KR')}원\n→ 가계부 Inbox 에서 확인 후 확정해주세요.`,
           },
         };
       }
