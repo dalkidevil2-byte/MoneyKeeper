@@ -3,7 +3,7 @@
 import { use, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Plus, Settings as SettingsIcon, Trash2, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Plus, Settings as SettingsIcon, Trash2, ExternalLink, Sparkles, Loader2 } from 'lucide-react';
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
 
@@ -192,9 +192,42 @@ function EntryFormSheet({
   );
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
+  const [aiIntent, setAiIntent] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState('');
   const [newType, setNewType] = useState<ArchiveProperty['type']>('text');
   void color;
+
+  const aiAddProperty = async () => {
+    if (!aiIntent.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const res = await fetch(
+        `/api/archive/collections/${collectionId}/ai-property`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: aiIntent.trim() }),
+        },
+      );
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? '실패');
+      const added = (j.added ?? []) as ArchiveProperty[];
+      setSchema(j.schema ?? schema);
+      setAiIntent('');
+      setAiMode(false);
+      setAdding(false);
+      // 짧은 안내 (콘솔만)
+      console.log('AI 가 추가한 속성:', added);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const addProperty = async () => {
     if (!newLabel.trim()) return;
@@ -290,45 +323,111 @@ function EntryFormSheet({
           {/* 속성 추가 */}
           {adding ? (
             <div className="bg-violet-50 border border-violet-200 rounded-2xl p-3 space-y-2">
-              <div className="text-xs font-semibold text-violet-700">새 속성 추가</div>
-              <input
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                placeholder="속성 이름 (예: 시청 날짜, 함께 본 사람)"
-                autoFocus
-                className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white"
-              />
-              <select
-                value={newType}
-                onChange={(e) => setNewType(e.target.value as ArchiveProperty['type'])}
-                className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white"
-              >
-                <option value="text">짧은 텍스트</option>
-                <option value="longtext">긴 텍스트</option>
-                <option value="number">숫자</option>
-                <option value="currency">금액</option>
-                <option value="date">날짜</option>
-                <option value="url">URL</option>
-                <option value="select">단일 선택</option>
-                <option value="multiselect">복수 선택</option>
-                <option value="rating">별점</option>
-                <option value="checkbox">체크박스</option>
-              </select>
-              <div className="flex gap-2">
+              {/* 모드 토글 */}
+              <div className="flex gap-1 p-0.5 bg-white rounded-lg">
                 <button
-                  onClick={() => setAdding(false)}
-                  className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm"
+                  onClick={() => setAiMode(false)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded ${
+                    !aiMode ? 'bg-violet-600 text-white' : 'text-gray-500'
+                  }`}
                 >
-                  취소
+                  직접 입력
                 </button>
                 <button
-                  onClick={addProperty}
-                  disabled={!newLabel.trim()}
-                  className="flex-1 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50"
+                  onClick={() => setAiMode(true)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded inline-flex items-center justify-center gap-1 ${
+                    aiMode ? 'bg-violet-600 text-white' : 'text-gray-500'
+                  }`}
                 >
-                  추가
+                  <Sparkles size={11} /> AI 추천
                 </button>
               </div>
+
+              {aiMode ? (
+                <>
+                  <div className="text-xs font-semibold text-violet-700">
+                    어떤 속성이 필요한가요?
+                  </div>
+                  <textarea
+                    value={aiIntent}
+                    onChange={(e) => setAiIntent(e.target.value)}
+                    placeholder="예: 시청 날짜와 함께 본 사람, 또는 이 영화의 평점 / 명대사 / 분위기"
+                    rows={2}
+                    autoFocus
+                    className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white resize-none"
+                  />
+                  {aiError && (
+                    <div className="text-[11px] text-rose-500">{aiError}</div>
+                  )}
+                  <div className="text-[11px] text-violet-600">
+                    AI가 적절한 속성 1~3개를 자동으로 만들어드려요.
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setAdding(false);
+                        setAiMode(false);
+                      }}
+                      className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={aiAddProperty}
+                      disabled={!aiIntent.trim() || aiBusy}
+                      className="flex-1 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1"
+                    >
+                      {aiBusy ? (
+                        <><Loader2 size={12} className="animate-spin" /> 생성 중…</>
+                      ) : (
+                        <><Sparkles size={12} /> AI 추가</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs font-semibold text-violet-700">새 속성 추가</div>
+                  <input
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                    placeholder="속성 이름 (예: 시청 날짜, 함께 본 사람)"
+                    autoFocus
+                    className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white"
+                  />
+                  <select
+                    value={newType}
+                    onChange={(e) => setNewType(e.target.value as ArchiveProperty['type'])}
+                    className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white"
+                  >
+                    <option value="text">짧은 텍스트</option>
+                    <option value="longtext">긴 텍스트</option>
+                    <option value="number">숫자</option>
+                    <option value="currency">금액</option>
+                    <option value="date">날짜</option>
+                    <option value="url">URL</option>
+                    <option value="select">단일 선택</option>
+                    <option value="multiselect">복수 선택</option>
+                    <option value="rating">별점</option>
+                    <option value="checkbox">체크박스</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setAdding(false)}
+                      className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={addProperty}
+                      disabled={!newLabel.trim()}
+                      className="flex-1 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50"
+                    >
+                      추가
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <button
