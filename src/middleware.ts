@@ -9,13 +9,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 외부 cron 호출용 엔드포인트 — CRON_SECRET 일치 시 인증 우회
+  // 외부 cron / 텔레그램 webhook 호출용 — CRON_SECRET 일치 시 인증 우회
   const cronSecret = process.env.CRON_SECRET;
   if (
     cronSecret &&
     (pathname === '/api/todo/telegram/dispatch' ||
       pathname === '/api/todo/telegram/debug' ||
-      pathname === '/api/google-calendar/auto-sync')
+      pathname === '/api/google-calendar/auto-sync' ||
+      pathname === '/api/telegram/webhook')
   ) {
     const provided =
       req.headers.get('x-cron-secret') ?? searchParams.get('secret');
