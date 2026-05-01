@@ -2,7 +2,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { sendTelegramMessage } from '@/lib/telegram';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const TZ = 'Asia/Seoul';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -57,9 +63,9 @@ async function handle(req: NextRequest) {
       return NextResponse.json({ ok: true, sent: 0, reason: 'no chat_ids' });
     }
 
-    // 오늘+내일 시간 일정
-    const today = dayjs().format('YYYY-MM-DD');
-    const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD');
+    // 오늘+내일 시간 일정 — 서버 UTC 가 아닌 KST 기준
+    const today = dayjs().tz(TZ).format('YYYY-MM-DD');
+    const tomorrow = dayjs().tz(TZ).add(1, 'day').format('YYYY-MM-DD');
     const { data: tasks } = await supabase
       .from('tasks')
       .select(`
@@ -72,7 +78,7 @@ async function handle(req: NextRequest) {
       .eq('is_fixed', true)
       .in('due_date', [today, tomorrow]);
 
-    const now = dayjs();
+    const now = dayjs().tz(TZ);
     const candidates: {
       task_id: string;
       task_title: string;
@@ -85,7 +91,10 @@ async function handle(req: NextRequest) {
     for (const t of tasks ?? []) {
       if (t.status === 'done') continue;
       if (!t.due_date || !t.due_time) continue;
-      const dueAt = dayjs(`${t.due_date}T${(t.due_time as string).slice(0, 8)}`);
+      const dueAt = dayjs.tz(
+        `${t.due_date}T${(t.due_time as string).slice(0, 8)}`,
+        TZ,
+      );
       const diffMin = dueAt.diff(now, 'minute');
       if (diffMin < 0) continue;
       // lead 매칭 — 분 단위로 [-2, +2] 윈도우 안에 들어오면 트리거

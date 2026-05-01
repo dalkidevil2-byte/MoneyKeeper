@@ -2,6 +2,12 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const TZ = 'Asia/Seoul';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -37,9 +43,9 @@ export async function GET() {
     .map((m) => ({ name: m.name, chat_id: m.telegram_chat_id }));
 
   // 4. 오늘+내일 시간 일정 + 매칭 분석
-  const today = dayjs().format('YYYY-MM-DD');
-  const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD');
-  const now = dayjs();
+  const today = dayjs().tz(TZ).format('YYYY-MM-DD');
+  const tomorrow = dayjs().tz(TZ).add(1, 'day').format('YYYY-MM-DD');
+  const now = dayjs().tz(TZ);
 
   const { data: tasks } = await supabase
     .from('tasks')
@@ -56,7 +62,10 @@ export async function GET() {
   debug.candidate_tasks = (tasks ?? [])
     .filter((t) => t.due_date && t.due_time)
     .map((t) => {
-      const dueAt = dayjs(`${t.due_date}T${(t.due_time as string).slice(0, 8)}`);
+      const dueAt = dayjs.tz(
+        `${t.due_date}T${(t.due_time as string).slice(0, 8)}`,
+        TZ,
+      );
       const diffMin = dueAt.diff(now, 'minute');
       const matchedLead = (leads as number[]).find(
         (m) => Math.abs(diffMin - m) <= 2,
