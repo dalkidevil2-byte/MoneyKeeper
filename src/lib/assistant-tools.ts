@@ -425,16 +425,31 @@ export async function executeTool(
 
       case 'create_transaction': {
         const today = dayjs().tz(TZ).format('YYYY-MM-DD');
+        const userType = (args.type as string) ?? 'expense';
+        // 'expense' → 'variable_expense' 매핑 (가계부 type 체계)
+        const dbType =
+          userType === 'expense'
+            ? 'variable_expense'
+            : userType === 'income'
+              ? 'income'
+              : userType;
+        const merchant = (args.store_name as string) ?? '';
         const insert: Record<string, unknown> = {
           household_id: householdId,
           amount: Math.abs(args.amount as number),
-          type: (args.type as string) ?? 'expense',
-          store_name: (args.store_name as string) ?? '',
+          type: dbType,
+          merchant_name: merchant,
+          name: merchant,
           memo: (args.memo as string) ?? '📲 텔레그램',
           category_main: (args.category_main as string) ?? '',
           category_sub: (args.category_sub as string) ?? '',
           date: (args.date as string) ?? today,
-          status: (args.status as string) ?? 'confirmed',
+          input_type: 'text',
+          raw_input: '',
+          tags: [],
+          essential: false,
+          status: (args.status as string) ?? 'reviewed',
+          sync_status: 'pending',
         };
         const { data, error } = await supabase
           .from('transactions')
@@ -446,7 +461,7 @@ export async function executeTool(
           ok: true,
           data: {
             transaction: data,
-            message: `✅ ${insert.store_name} ${(insert.amount as number).toLocaleString('ko-KR')}원 등록됨`,
+            message: `✅ ${merchant} ${(insert.amount as number).toLocaleString('ko-KR')}원 등록됨`,
           },
         };
       }

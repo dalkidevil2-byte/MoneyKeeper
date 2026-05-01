@@ -223,15 +223,22 @@ async function handleReceiptPhoto(
         household_id: householdId,
         member_id: member.id,
         amount: Math.abs(it.amount),
-        type: it.amount < 0 ? 'income' : 'expense',
+        type: it.amount < 0 ? 'income' : 'variable_expense',
         category_main: it.category_main ?? '',
         category_sub: it.category_sub ?? '',
-        store_name: storeName,
+        merchant_name: storeName,
+        name: it.name ?? storeName,
         memo: `📲 텔레그램 (${it.name})`,
         date,
+        input_type: 'ocr',
+        raw_input: '',
+        tags: [],
+        essential: false,
         status: 'draft',
+        sync_status: 'pending',
       });
-      if (!error) inserted++;
+      if (error) console.warn('[receipt insert]', error);
+      else inserted++;
     }
 
     // 4) 답변
