@@ -14,6 +14,7 @@ export function middleware(req: NextRequest) {
   if (
     cronSecret &&
     (pathname === '/api/todo/telegram/dispatch' ||
+      pathname === '/api/todo/telegram/debug' ||
       pathname === '/api/google-calendar/auto-sync')
   ) {
     const provided =
