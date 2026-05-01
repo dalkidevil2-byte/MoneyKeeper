@@ -136,6 +136,7 @@ export default function TodoHomePage() {
   };
 
   const todayList = data?.today ?? [];
+  const tomorrowList = data?.tomorrow ?? [];
   const overdueList = data?.overdue ?? [];
   const totalToday = data?.counts.today_total ?? 0;
   const doneToday = data?.counts.today_done ?? 0;
@@ -295,6 +296,25 @@ export default function TodoHomePage() {
           memberId={memberFilter || undefined}
           onCreated={refetch}
         />
+
+        {/* 내일 일정 (event) — 미리보기 */}
+        {tomorrowList.length > 0 && (
+          <section>
+            <h2 className="text-sm font-bold text-gray-500 mb-2">
+              🔮 내일의 일정 ({tomorrowList.length})
+            </h2>
+            <div className="space-y-2 opacity-90">
+              {tomorrowList.map((item) => (
+                <TaskCard
+                  key={`tmrw-${item.task.id}-${item.occurrence_date}`}
+                  item={item}
+                  onToggle={() => {}}
+                  onClick={() => openEdit(item.task)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 할일 (todo) — 기한 임박순 */}
         <TodoSection

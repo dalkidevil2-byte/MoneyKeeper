@@ -64,8 +64,9 @@ export function useTasks(params: UseTasksParams = {}) {
 interface TodayResponse {
   date: string;
   today: TodayTask[];
+  tomorrow: TodayTask[];
   overdue: TodayTask[];
-  counts: { today_total: number; today_done: number; overdue: number };
+  counts: { today_total: number; today_done: number; tomorrow_total: number; overdue: number };
 }
 
 export function useTodayTasks(memberId?: string) {

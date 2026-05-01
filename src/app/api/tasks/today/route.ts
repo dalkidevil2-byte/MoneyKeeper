@@ -59,30 +59,28 @@ export async function GET(req: NextRequest) {
 
     const today: TodayTask[] = [];
     const overdue: TodayTask[] = [];
+    const tomorrow: TodayTask[] = [];
     const todayKey = date.format('YYYY-MM-DD');
+    const tomorrowDate = date.add(1, 'day');
+    const tomorrowKey = tomorrowDate.format('YYYY-MM-DD');
 
     for (const task of allTasks) {
       if (task.type === 'one_time') {
-        // 완료된 일회성: due_date 가 오늘인 것만 (취소선 노출)
-        // bulk-complete-past 등으로 일괄 완료한 옛 일정은 노출하지 않음
+        // 완료된 일회성: due_date 가 오늘/내일인 것만 (취소선 노출)
         if (task.status === 'done') {
           if (task.due_date === todayKey) {
-            today.push({
-              task,
-              occurrence_date: todayKey,
-              completed_today: true,
-            });
+            today.push({ task, occurrence_date: todayKey, completed_today: true });
+          } else if (task.due_date === tomorrowKey) {
+            tomorrow.push({ task, occurrence_date: tomorrowKey, completed_today: true });
           }
           continue;
         }
         // snoozed는 snoozed_to가 오늘이면 표시
         const effectiveDate = task.status === 'snoozed' ? task.snoozed_to : task.due_date;
         if (effectiveDate === todayKey) {
-          today.push({
-            task,
-            occurrence_date: todayKey,
-            completed_today: false,
-          });
+          today.push({ task, occurrence_date: todayKey, completed_today: false });
+        } else if (effectiveDate === tomorrowKey) {
+          tomorrow.push({ task, occurrence_date: tomorrowKey, completed_today: false });
         } else if (isTaskOverdue(task, todayKey)) {
           overdue.push({
             task,
@@ -91,7 +89,7 @@ export async function GET(req: NextRequest) {
           });
         }
       } else {
-        // routine
+        // routine — 오늘과 내일 둘 다 체크
         const completions = completionsMap[task.id] ?? [];
         if (isRoutineDueOn(task.recurrence, task.due_date, date, completions)) {
           const todayCompletion = completions.find((c) => c.completed_on === todayKey);
@@ -100,6 +98,13 @@ export async function GET(req: NextRequest) {
             occurrence_date: todayKey,
             completed_today: !!todayCompletion,
             completion_id: todayCompletion?.id,
+          });
+        }
+        if (isRoutineDueOn(task.recurrence, task.due_date, tomorrowDate, completions)) {
+          tomorrow.push({
+            task: { ...task, completions },
+            occurrence_date: tomorrowKey,
+            completed_today: false,
           });
         }
       }
@@ -120,15 +125,18 @@ export async function GET(req: NextRequest) {
       return (a.task.created_at ?? '').localeCompare(b.task.created_at ?? '');
     };
     today.sort(sortFn);
+    tomorrow.sort(sortFn);
     overdue.sort((a, b) => (a.task.due_date ?? '').localeCompare(b.task.due_date ?? ''));
 
     return NextResponse.json({
       date: todayKey,
       today,
+      tomorrow,
       overdue,
       counts: {
         today_total: today.length,
         today_done: today.filter((t) => t.completed_today).length,
+        tomorrow_total: tomorrow.length,
         overdue: overdue.length,
       },
     });
