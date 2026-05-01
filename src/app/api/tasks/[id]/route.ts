@@ -121,6 +121,19 @@ export async function PATCH(
 
     if (error) throw error;
 
+    // 시간/날짜 관련 필드가 변경됐으면 텔레그램 sent_log 삭제 → 재알림 가능
+    const timeFields = ['due_date', 'due_time', 'end_date', 'end_time'];
+    if (timeFields.some((k) => k in update)) {
+      try {
+        await supabase
+          .from('telegram_sent_log')
+          .delete()
+          .eq('task_id', id);
+      } catch (e) {
+        console.warn('[telegram] sent_log 삭제 실패', e);
+      }
+    }
+
     // 구글 캘린더 자동 동기화 (event 만)
     if (data && data.kind === 'event' && data.due_date) {
       try {
