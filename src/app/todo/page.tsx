@@ -8,6 +8,7 @@ import 'dayjs/locale/ko';
 import TaskCard from '@/components/todo/TaskCard';
 import TaskTimer from '@/components/todo/TaskTimer';
 import FrequentTodoChips from '@/components/todo/FrequentTodoChips';
+import ActivityChips from '@/components/todo/ActivityChips';
 import NotificationBell from '@/components/todo/NotificationBell';
 import QuickInputBar from '@/components/todo/QuickInputBar';
 import TaskFormSheet from '@/components/todo/TaskFormSheet';
@@ -289,6 +290,9 @@ export default function TodoHomePage() {
             </div>
           )}
         </section>
+
+        {/* 활동 추적 — ▶/■ 로 시간 기록 + 목표/Daily Track 자동 연동 */}
+        <ActivityChips onChange={refetch} />
 
         {/* 자주 쓰는 할일 칩 (빠른 추가) */}
         <FrequentTodoChips

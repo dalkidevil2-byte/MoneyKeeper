@@ -609,3 +609,54 @@ export interface TodoNotionSource {
   created_at: string;
   updated_at: string;
 }
+
+// ─────────────────────────────────────────
+// 일상 활동 (Activity) — 시간 추적용
+// ─────────────────────────────────────────
+export interface Activity {
+  id: string;
+  household_id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  category: string;
+  member_id: string | null;
+  is_favorite: boolean;
+  is_active: boolean;
+  position: number;
+  goal_id: string | null;
+  daily_track_id: string | null;
+  goal_count_mode: 'session' | 'hours';
+  created_at: string;
+  updated_at: string;
+  // 계산 필드
+  running_session?: ActivitySession | null;
+  today_minutes?: number;
+  week_minutes?: number;
+}
+
+export interface ActivitySession {
+  id: string;
+  household_id: string;
+  activity_id: string;
+  member_id: string | null;
+  session_date: string;
+  start_at: string;     // ISO
+  end_at: string | null; // null = 진행 중
+  duration_minutes: number | null;
+  note: string;
+  created_at: string;
+}
+
+export interface CreateActivityInput {
+  household_id?: string;
+  name: string;
+  emoji?: string;
+  color?: string;
+  category?: string;
+  member_id?: string | null;
+  is_favorite?: boolean;
+  goal_id?: string | null;
+  daily_track_id?: string | null;
+  goal_count_mode?: 'session' | 'hours';
+}
