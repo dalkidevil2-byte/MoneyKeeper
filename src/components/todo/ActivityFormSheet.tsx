@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { X, Trash2 } from 'lucide-react';
-import type { Activity } from '@/types';
+import type { Activity, Member } from '@/types';
+import { useMembers } from '@/hooks/useAccounts';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -19,10 +20,12 @@ const PRESET_COLORS = [
 
 export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) {
   const isEdit = !!initial;
+  const { members } = useMembers();
   const [name, setName] = useState(initial?.name ?? '');
   const [emoji, setEmoji] = useState(initial?.emoji ?? '⏱');
   const [color, setColor] = useState(initial?.color ?? '#6366f1');
   const [category, setCategory] = useState(initial?.category ?? '');
+  const [memberId, setMemberId] = useState<string>(initial?.member_id ?? '');
   const [goalId, setGoalId] = useState(initial?.goal_id ?? '');
   const [trackId, setTrackId] = useState(initial?.daily_track_id ?? '');
   const [mode, setMode] = useState<'session' | 'hours'>(
@@ -54,6 +57,7 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
         emoji,
         color,
         category,
+        member_id: memberId || null,
         goal_id: goalId || null,
         daily_track_id: trackId || null,
         goal_count_mode: mode,
@@ -145,6 +149,25 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
               ))}
             </div>
           </div>
+
+          {/* 담당자 */}
+          {members.length > 0 && (
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">담당자 (선택)</label>
+              <select
+                value={memberId}
+                onChange={(e) => setMemberId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+              >
+                <option value="">공유 (담당자 없음)</option>
+                {members.map((m: Member) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* 카테고리 */}
           <div>

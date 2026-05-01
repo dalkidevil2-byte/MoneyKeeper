@@ -268,6 +268,9 @@ export default function TodoHomePage() {
           </section>
         )}
 
+        {/* 활동 추적 — 진행중 활동이 있으면 가장 위 */}
+        <ActivityChips onChange={refetch} />
+
         {/* 오늘 일정 (event) */}
         <section>
           <h2 className="text-sm font-bold text-gray-700 mb-2">📅 오늘의 일정</h2>
@@ -290,9 +293,6 @@ export default function TodoHomePage() {
             </div>
           )}
         </section>
-
-        {/* 활동 추적 — ▶/■ 로 시간 기록 + 목표/Daily Track 자동 연동 */}
-        <ActivityChips onChange={refetch} />
 
         {/* 자주 쓰는 할일 칩 (빠른 추가) */}
         <FrequentTodoChips

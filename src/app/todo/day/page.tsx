@@ -131,16 +131,17 @@ function TodoDayPage() {
   // 그 날의 todo 세션 (별도 fetch)
   const [sessions, setSessions] = useState<Array<Record<string, unknown>>>([]);
   // 활동 세션 (별도 fetch)
-  const [activitySessions, setActivitySessions] = useState<
-    Array<{
-      id: string;
-      start_at: string;
-      end_at: string | null;
-      duration_minutes: number | null;
-      session_date: string;
-      activity?: { id: string; name: string; emoji?: string; color?: string };
-    }>
-  >([]);
+  type ActivitySessionRow = {
+    id: string;
+    start_at: string;
+    end_at: string | null;
+    duration_minutes: number | null;
+    session_date: string;
+    note?: string;
+    activity?: { id: string; name: string; emoji?: string; color?: string };
+  };
+  const [activitySessions, setActivitySessions] = useState<ActivitySessionRow[]>([]);
+  const [selectedActSession, setSelectedActSession] = useState<ActivitySessionRow | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/tasks/sessions?from=${date}&to=${date}`)
@@ -662,9 +663,13 @@ function TodoDayPage() {
               16,
             );
             return (
-              <div
+              <button
                 key={`act-${s.id}`}
-                className={`absolute rounded text-white text-[10px] leading-tight overflow-hidden shadow-sm border border-white/30 ${
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedActSession(s);
+                }}
+                className={`absolute rounded text-white text-[10px] leading-tight overflow-hidden shadow-sm border border-white/30 active:opacity-70 ${
                   isRunning ? 'animate-pulse' : ''
                 }`}
                 style={{
@@ -675,14 +680,16 @@ function TodoDayPage() {
                   backgroundColor: s.activity.color ?? '#6366f1',
                   zIndex: 5,
                 }}
-                title={`${s.activity.emoji ?? ''} ${s.activity.name} · ${s.duration_minutes ?? '진행중'}분`}
+                title={`${s.activity.emoji ?? ''} ${s.activity.name}`}
               >
-                {heightPx >= 30 && (
-                  <div className="px-1 py-0.5 truncate">
+                {heightPx >= 30 ? (
+                  <div className="px-1 py-0.5 truncate text-left">
                     {s.activity.emoji ?? ''} {s.activity.name}
                   </div>
+                ) : (
+                  <div className="text-center pt-0.5">{s.activity.emoji ?? '⏱'}</div>
                 )}
-              </div>
+              </button>
             );
           })}
 
@@ -781,6 +788,84 @@ function TodoDayPage() {
         defaultEndTime={prefillEnd}
         occurrenceDate={date}
       />
+
+      {/* 활동 세션 상세 — 작은 모달 */}
+      {selectedActSession && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          onClick={() => setSelectedActSession(null)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-t-3xl p-5 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pb-3">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="flex items-center gap-3 mb-4">
+              <span
+                className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl"
+                style={{ backgroundColor: selectedActSession.activity?.color ?? '#6366f1' }}
+              >
+                {selectedActSession.activity?.emoji ?? '⏱'}
+              </span>
+              <div>
+                <div className="text-base font-bold text-gray-900">
+                  {selectedActSession.activity?.name}
+                </div>
+                <div className="text-[11px] text-gray-500">
+                  {dayjs(selectedActSession.session_date).format('M월 D일 (ddd)')}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex justify-between">
+                <span className="text-gray-500">시작</span>
+                <span className="font-semibold tabular-nums">
+                  {dayjs(selectedActSession.start_at).format('HH:mm:ss')}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">종료</span>
+                <span className="font-semibold tabular-nums">
+                  {selectedActSession.end_at
+                    ? dayjs(selectedActSession.end_at).format('HH:mm:ss')
+                    : '진행 중'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">소요시간</span>
+                <span className="font-bold text-amber-600">
+                  {selectedActSession.duration_minutes != null
+                    ? `${Math.floor(selectedActSession.duration_minutes / 60)}시간 ${selectedActSession.duration_minutes % 60}분`
+                    : '진행 중'}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={async () => {
+                  if (!confirm('이 세션을 삭제할까요?')) return;
+                  await fetch(`/api/activities/sessions/${selectedActSession.id}`, {
+                    method: 'DELETE',
+                  });
+                  setSelectedActSession(null);
+                  refetchSessions();
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-rose-200 text-rose-500 text-sm font-semibold"
+              >
+                🗑 삭제
+              </button>
+              <button
+                onClick={() => setSelectedActSession(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
