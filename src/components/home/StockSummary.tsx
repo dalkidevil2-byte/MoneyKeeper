@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { aggregateByTicker, computeHoldings, type StockTx } from '@/lib/stock-holdings';
 
 type Quote = {
@@ -16,8 +17,34 @@ type Summary = {
   holdingsCount: number;
 } | null;
 
+const STORAGE_KEY = 'home:stock_amount_hidden';
+
 export default function StockSummary() {
   const [summary, setSummary] = useState<Summary>(null);
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === '1') setHidden(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleHidden = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHidden((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +104,8 @@ export default function StockSummary() {
     };
   }, []);
 
+  const mask = '••••••';
+
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
       {summary === null ? (
@@ -86,24 +115,34 @@ export default function StockSummary() {
       ) : (
         <>
           <div className="flex items-baseline justify-between">
-            <span className="text-xs text-gray-500">총 평가액</span>
+            <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+              총 평가액
+              <button
+                onClick={toggleHidden}
+                className="p-0.5 text-gray-400 hover:text-gray-600"
+                aria-label={hidden ? '금액 보기' : '금액 가리기'}
+                title={hidden ? '금액 보기' : '금액 가리기'}
+              >
+                {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+              </button>
+            </span>
             <span className="text-sm font-bold text-gray-900">
-              {Math.round(summary.current).toLocaleString('ko-KR')}원
+              {hidden ? mask : `${Math.round(summary.current).toLocaleString('ko-KR')}원`}
             </span>
           </div>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-[11px] text-gray-400">
-              {summary.holdingsCount}종목 · 원금 {Math.round(summary.invested).toLocaleString('ko-KR')}
+              {summary.holdingsCount}종목 · 원금{' '}
+              {hidden ? mask : Math.round(summary.invested).toLocaleString('ko-KR')}
             </span>
             <span
               className={`text-[11px] font-semibold ${
                 summary.unrealized >= 0 ? 'text-red-500' : 'text-blue-500'
               }`}
             >
-              {summary.unrealized >= 0 ? '+' : ''}
-              {Math.round(summary.unrealized).toLocaleString('ko-KR')} (
-              {summary.unrealizedPct >= 0 ? '+' : ''}
-              {summary.unrealizedPct.toFixed(2)}%)
+              {hidden
+                ? `${summary.unrealizedPct >= 0 ? '+' : ''}${summary.unrealizedPct.toFixed(2)}%`
+                : `${summary.unrealized >= 0 ? '+' : ''}${Math.round(summary.unrealized).toLocaleString('ko-KR')} (${summary.unrealizedPct >= 0 ? '+' : ''}${summary.unrealizedPct.toFixed(2)}%)`}
             </span>
           </div>
         </>
