@@ -673,22 +673,18 @@ function TodoDayPage() {
                   isRunning ? 'animate-pulse' : ''
                 }`}
                 style={{
-                  top: (startMin / 60) * HOUR_HEIGHT + 1,
-                  height: heightPx,
+                  top: (startMin / 60) * HOUR_HEIGHT,
+                  height: Math.max(heightPx, 22),  // 최소 22px (탭 가능한 영역)
                   left: 50,
-                  width: 36,
+                  width: 64,
                   backgroundColor: s.activity.color ?? '#6366f1',
                   zIndex: 5,
                 }}
-                title={`${s.activity.emoji ?? ''} ${s.activity.name}`}
+                title={`${s.activity.emoji ?? ''} ${s.activity.name} · ${s.duration_minutes ?? '진행중'}분`}
               >
-                {heightPx >= 30 ? (
-                  <div className="px-1 py-0.5 truncate text-left">
-                    {s.activity.emoji ?? ''} {s.activity.name}
-                  </div>
-                ) : (
-                  <div className="text-center pt-0.5">{s.activity.emoji ?? '⏱'}</div>
-                )}
+                <div className="px-1 py-0.5 truncate text-left whitespace-nowrap">
+                  {s.activity.emoji ?? ''} {s.activity.name}
+                </div>
               </button>
             );
           })}
@@ -729,8 +725,8 @@ function TodoDayPage() {
                 style={{
                   top: top + 1,
                   height: Math.max(height - 2, 18),
-                  left: `calc(${leftPct}% + 90px)`,
-                  width: `calc(${widthPct}% - 92px)`,
+                  left: `calc(${leftPct}% + 118px)`,
+                  width: `calc(${widthPct}% - 120px)`,
                   backgroundColor: getTaskColor(p.task),
                   touchAction: 'none',
                 }}
