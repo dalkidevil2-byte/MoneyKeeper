@@ -56,7 +56,7 @@ export async function GET() {
     .eq('is_fixed', true)
     .in('due_date', [today, tomorrow]);
 
-  const leads = Array.isArray(notif?.lead_minutes) ? notif.lead_minutes : [30];
+  const leads = Array.isArray(notif?.lead_minutes) ? notif.lead_minutes : [5, 30];
   debug.now = now.format('YYYY-MM-DD HH:mm');
   debug.today = today;
   debug.candidate_tasks = (tasks ?? [])

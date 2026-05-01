@@ -32,7 +32,7 @@ async function handle(req: NextRequest) {
     const leadMinutes: number[] =
       notifSettings?.lead_minutes && Array.isArray(notifSettings.lead_minutes)
         ? notifSettings.lead_minutes
-        : [30];
+        : [5, 30];
 
     const { data: tgSettings } = await supabase
       .from('telegram_settings')
