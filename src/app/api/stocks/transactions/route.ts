@@ -103,6 +103,8 @@ export async function POST(req: NextRequest) {
         date: body.date,
         quantity: body.quantity,
         price: body.price,
+        fee: typeof body.fee === 'number' && body.fee >= 0 ? body.fee : 0,
+        tax: typeof body.tax === 'number' && body.tax >= 0 ? body.tax : 0,
         memo: body.memo ?? '',
       })
       .select()

@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Plus } from 'lucide-react';
+import { ChevronLeft, Plus, Camera } from 'lucide-react';
 import dayjs from 'dayjs';
 import StockTransactionSheet, {
   type ExistingTx,
 } from '@/components/stock/StockTransactionSheet';
+import StockImportFromImage from '@/components/stock/StockImportFromImage';
 import { computeRealizedTrades, type StockTx } from '@/lib/stock-holdings';
 
 type TxRow = ExistingTx & {
@@ -30,6 +31,7 @@ export default function StockTransactionsPage() {
     | { mode: 'edit'; tx: ExistingTx }
     | null
   >(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -352,20 +354,36 @@ export default function StockTransactionsPage() {
         )}
       </div>
 
-      {/* FAB */}
-      <button
-        onClick={() => setSheet({ mode: 'create' })}
-        className="fixed bottom-24 right-1/2 translate-x-[calc(min(50vw,256px)-32px)] w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg active:bg-indigo-700 flex items-center justify-center z-30"
-        title="거래 추가"
-      >
-        <Plus size={24} strokeWidth={2.5} />
-      </button>
+      {/* FAB — 캡쳐 등록 + 직접 입력 */}
+      <div className="fixed bottom-24 right-1/2 translate-x-[calc(min(50vw,256px)-32px)] flex flex-col items-end gap-2 z-30">
+        <button
+          onClick={() => setImporting(true)}
+          className="w-12 h-12 rounded-full bg-violet-600 text-white shadow-lg active:bg-violet-700 flex items-center justify-center"
+          title="캡쳐로 등록 (AI)"
+        >
+          <Camera size={20} strokeWidth={2.5} />
+        </button>
+        <button
+          onClick={() => setSheet({ mode: 'create' })}
+          className="w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg active:bg-indigo-700 flex items-center justify-center"
+          title="거래 추가"
+        >
+          <Plus size={24} strokeWidth={2.5} />
+        </button>
+      </div>
 
       {sheet && (
         <StockTransactionSheet
           mode={sheet.mode}
           tx={sheet.mode === 'edit' ? sheet.tx : undefined}
           onClose={() => setSheet(null)}
+          onSaved={load}
+        />
+      )}
+
+      {importing && (
+        <StockImportFromImage
+          onClose={() => setImporting(false)}
           onSaved={load}
         />
       )}

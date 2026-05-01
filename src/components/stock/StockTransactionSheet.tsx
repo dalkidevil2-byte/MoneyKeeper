@@ -22,7 +22,23 @@ export type ExistingTx = {
   date: string;
   quantity: number;
   price: number;
+  fee?: number;
+  tax?: number;
   memo: string;
+};
+
+// OCR 결과로 시트를 미리 채울 때 사용
+export type PrefillTx = {
+  account_id?: string;
+  ticker?: string;
+  company_name?: string;
+  type?: 'BUY' | 'SELL';
+  date?: string;
+  quantity?: number;
+  price?: number;
+  fee?: number;
+  tax?: number;
+  memo?: string;
 };
 
 type KrxResult = { code: string; ticker: string; name: string; market: string };
@@ -31,6 +47,7 @@ interface Props {
   mode: 'create' | 'edit';
   tx?: ExistingTx;                // edit 모드에서 필요
   defaultAccountId?: string;      // create 모드에서 미리 선택
+  prefill?: PrefillTx;            // create 모드에서 OCR 결과 미리채움
   apiBase?: '/api/stocks' | '/api/stocks/paper'; // default: '/api/stocks'
   onClose: () => void;
   onSaved: () => void;
@@ -40,19 +57,32 @@ export default function StockTransactionSheet({
   mode,
   tx,
   defaultAccountId,
+  prefill,
   apiBase = '/api/stocks',
   onClose,
   onSaved,
 }: Props) {
   const [accounts, setAccounts] = useState<StockAccount[]>([]);
-  const [accountId, setAccountId] = useState<string>(tx?.account_id ?? defaultAccountId ?? '');
-  const [type, setType] = useState<'BUY' | 'SELL'>(tx?.type ?? 'BUY');
-  const [ticker, setTicker] = useState(tx?.ticker ?? '');
-  const [companyName, setCompanyName] = useState(tx?.company_name ?? '');
-  const [date, setDate] = useState(tx?.date ?? dayjs().format('YYYY-MM-DD'));
-  const [quantity, setQuantity] = useState<string>(tx ? String(tx.quantity) : '');
-  const [price, setPrice] = useState<string>(tx ? String(tx.price) : '');
-  const [memo, setMemo] = useState(tx?.memo ?? '');
+  const [accountId, setAccountId] = useState<string>(
+    tx?.account_id ?? prefill?.account_id ?? defaultAccountId ?? '',
+  );
+  const [type, setType] = useState<'BUY' | 'SELL'>(tx?.type ?? prefill?.type ?? 'BUY');
+  const [ticker, setTicker] = useState(tx?.ticker ?? prefill?.ticker ?? '');
+  const [companyName, setCompanyName] = useState(tx?.company_name ?? prefill?.company_name ?? '');
+  const [date, setDate] = useState(tx?.date ?? prefill?.date ?? dayjs().format('YYYY-MM-DD'));
+  const [quantity, setQuantity] = useState<string>(
+    tx ? String(tx.quantity) : prefill?.quantity != null ? String(prefill.quantity) : '',
+  );
+  const [price, setPrice] = useState<string>(
+    tx ? String(tx.price) : prefill?.price != null ? String(prefill.price) : '',
+  );
+  const [fee, setFee] = useState<string>(
+    tx?.fee != null ? String(tx.fee) : prefill?.fee != null ? String(prefill.fee) : '',
+  );
+  const [tax, setTax] = useState<string>(
+    tx?.tax != null ? String(tx.tax) : prefill?.tax != null ? String(prefill.tax) : '',
+  );
+  const [memo, setMemo] = useState(tx?.memo ?? prefill?.memo ?? '');
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -117,6 +147,8 @@ export default function StockTransactionSheet({
     if (!isFinite(q) || q <= 0) return setErrorMsg('수량을 올바르게 입력해주세요.');
     if (!isFinite(p) || p < 0) return setErrorMsg('단가를 올바르게 입력해주세요.');
 
+    const feeNum = parseFloat(fee);
+    const taxNum = parseFloat(tax);
     const payload = {
       account_id: accountId,
       ticker: ticker.trim().toUpperCase(),
@@ -125,6 +157,8 @@ export default function StockTransactionSheet({
       date,
       quantity: q,
       price: p,
+      fee: isFinite(feeNum) && feeNum >= 0 ? feeNum : 0,
+      tax: type === 'SELL' && isFinite(taxNum) && taxNum >= 0 ? taxNum : 0,
       memo: memo.trim(),
     };
 
@@ -151,7 +185,7 @@ export default function StockTransactionSheet({
     } finally {
       setSaving(false);
     }
-  }, [accountId, ticker, companyName, type, date, quantity, price, memo, mode, tx, apiBase, onSaved, onClose]);
+  }, [accountId, ticker, companyName, type, date, quantity, price, fee, tax, memo, mode, tx, apiBase, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (mode !== 'edit' || !tx) return;
@@ -329,12 +363,59 @@ export default function StockTransactionSheet({
             </div>
           </div>
 
-          {/* 금액 미리보기 */}
-          {quantity && price && isFinite(parseFloat(quantity)) && isFinite(parseFloat(price)) && (
-            <div className="text-right text-xs text-gray-500">
-              총 {(parseFloat(quantity) * parseFloat(price)).toLocaleString('ko-KR')}
+          {/* 수수료 / 세금 */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                수수료 <span className="text-gray-300">(원)</span>
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={fee}
+                onChange={(e) => setFee(e.target.value)}
+                placeholder="0"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:border-indigo-400 focus:outline-none"
+              />
             </div>
-          )}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                거래세 <span className="text-gray-300">{type === 'SELL' ? '(매도시)' : '(N/A)'}</span>
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={type === 'SELL' ? tax : ''}
+                onChange={(e) => setTax(e.target.value)}
+                disabled={type !== 'SELL'}
+                placeholder="0"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:border-indigo-400 focus:outline-none disabled:opacity-40 disabled:bg-gray-50"
+              />
+            </div>
+          </div>
+
+          {/* 금액 미리보기 */}
+          {quantity && price && isFinite(parseFloat(quantity)) && isFinite(parseFloat(price)) && (() => {
+            const gross = parseFloat(quantity) * parseFloat(price);
+            const f = isFinite(parseFloat(fee)) ? parseFloat(fee) : 0;
+            const t = type === 'SELL' && isFinite(parseFloat(tax)) ? parseFloat(tax) : 0;
+            const net = type === 'BUY' ? gross + f : gross - f - t;
+            return (
+              <div className="text-right text-xs text-gray-500 space-y-0.5">
+                <div>거래대금 {gross.toLocaleString('ko-KR')}원</div>
+                {(f > 0 || t > 0) && (
+                  <div className="text-gray-400">
+                    {f > 0 && `수수료 ${f.toLocaleString('ko-KR')}`}
+                    {f > 0 && t > 0 && ' · '}
+                    {t > 0 && `거래세 ${t.toLocaleString('ko-KR')}`}
+                  </div>
+                )}
+                <div className="font-semibold text-gray-700">
+                  {type === 'BUY' ? '실매수' : '실수령'} {Math.round(net).toLocaleString('ko-KR')}원
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 메모 */}
           <div>

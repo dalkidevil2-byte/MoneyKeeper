@@ -23,6 +23,8 @@ export async function PATCH(
   if (body.date !== undefined) updates.date = body.date;
   if (body.quantity !== undefined) updates.quantity = body.quantity;
   if (body.price !== undefined) updates.price = body.price;
+  if (body.fee !== undefined) updates.fee = body.fee;
+  if (body.tax !== undefined) updates.tax = body.tax;
   if (body.memo !== undefined) updates.memo = body.memo;
   if (body.account_id !== undefined) updates.account_id = body.account_id;
 
