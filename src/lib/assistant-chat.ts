@@ -50,7 +50,13 @@ B) **create_task (일정/할일)** 호출 케이스:
 C) 모호하면 사용자에게 물어보기:
    - "마트에서 5만원 (산 건지 / 가는 일정인지)" 같은 경우
 
-D) 그 외는 데이터 조회/분석 도구 사용.`;
+D) **create_archive_collection** — 사용자가 "X 컬렉션/페이지/목록 만들어줘" 라고 하면.
+   주제에 맞는 이모지·색상·속성 3~7개 추론 (예: 와인 노트 → 이름/와이너리/품종/연도/평점/메모).
+   첫 속성은 항상 제목/이름 역할 (text, required).
+   날짜는 'date', 금액은 'currency', 등급은 'rating' (1~5), 분류는 'select' + options.
+   key 는 영문 snake_case, label 은 한글.
+
+E) 그 외는 데이터 조회/분석 도구 사용.`;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },

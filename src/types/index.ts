@@ -648,6 +648,56 @@ export interface ActivitySession {
   created_at: string;
 }
 
+// ─────────────────────────────────────────
+// 아카이브 — 사용자 정의 컬렉션 (노션-lite)
+// ─────────────────────────────────────────
+export type ArchivePropertyType =
+  | 'text'
+  | 'longtext'
+  | 'number'
+  | 'date'
+  | 'url'
+  | 'select'
+  | 'multiselect'
+  | 'rating'
+  | 'checkbox'
+  | 'currency'  // 금액
+  | 'member';
+
+export interface ArchiveProperty {
+  key: string;          // 내부 key (영문 권장)
+  label: string;        // 표시 이름
+  type: ArchivePropertyType;
+  options?: string[];   // select / multiselect
+  required?: boolean;
+}
+
+export interface ArchiveCollection {
+  id: string;
+  household_id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  description: string;
+  schema: ArchiveProperty[];
+  is_active: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  // 계산 필드
+  entry_count?: number;
+}
+
+export interface ArchiveEntry {
+  id: string;
+  collection_id: string;
+  household_id: string;
+  data: Record<string, unknown>;
+  member_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CreateActivityInput {
   household_id?: string;
   name: string;

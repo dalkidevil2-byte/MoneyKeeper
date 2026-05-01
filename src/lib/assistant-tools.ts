@@ -116,6 +116,57 @@ export const ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'create_archive_collection',
+      description:
+        '아카이브에 새 컬렉션 생성. 사용자가 "X 페이지/컬렉션/목록 만들어줘" 라고 할 때 호출. 적절한 이모지/속성 자동 추론. 예: "여행 기록", "운동 일지", "와인 노트".',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '컬렉션 이름' },
+          emoji: { type: 'string', description: '이모지 1개' },
+          color: {
+            type: 'string',
+            description:
+              'hex 색상 (예: #6366f1). 주제에 어울리는 색.',
+          },
+          description: { type: 'string', description: '한 줄 설명' },
+          schema: {
+            type: 'array',
+            description: '속성 배열. 일반적으로 3~7개. 첫 속성은 제목 역할.',
+            items: {
+              type: 'object',
+              properties: {
+                key: {
+                  type: 'string',
+                  description: '영문 snake_case (예: title, cook_time)',
+                },
+                label: { type: 'string', description: '표시 이름 (한글)' },
+                type: {
+                  type: 'string',
+                  enum: [
+                    'text', 'longtext', 'number', 'currency',
+                    'date', 'url', 'select', 'multiselect',
+                    'rating', 'checkbox',
+                  ],
+                },
+                options: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'select / multiselect 일 때만',
+                },
+                required: { type: 'boolean' },
+              },
+              required: ['key', 'label', 'type'],
+            },
+          },
+        },
+        required: ['name', 'schema'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'create_transaction',
       description:
         '가계부에 거래(지출/수입) 등록. "올리브영 2만원", "마트에서 35000원 썼어" 같은 메시지에서 호출. 카테고리/결제수단 미상이면 추측해서 채움.',
@@ -421,6 +472,31 @@ export async function executeTool(
           .single();
         if (error) return { ok: false, error: error.message };
         return { ok: true, data: { task: data, message: `${args.title} 생성됨` } };
+      }
+
+      case 'create_archive_collection': {
+        const insert = {
+          household_id: householdId,
+          name: (args.name as string) ?? '새 컬렉션',
+          emoji: (args.emoji as string) ?? '📦',
+          color: (args.color as string) ?? '#6366f1',
+          description: (args.description as string) ?? '',
+          schema: args.schema ?? [],
+          is_active: true,
+        };
+        const { data, error } = await supabase
+          .from('archive_collections')
+          .insert(insert)
+          .select('*')
+          .single();
+        if (error) return { ok: false, error: error.message };
+        return {
+          ok: true,
+          data: {
+            collection: data,
+            message: `✨ "${insert.name}" 컬렉션 생성됨 (속성 ${(insert.schema as unknown[]).length}개)\n→ /archive 에서 항목 추가`,
+          },
+        };
       }
 
       case 'create_transaction': {

@@ -13,6 +13,7 @@ import {
   FlaskConical,
   ChevronRight,
   Sparkles,
+  Archive,
 } from 'lucide-react';
 
 type Section = {
@@ -72,6 +73,14 @@ const SECTIONS: Section[] = [
     desc: 'Paper trading',
     bg: 'bg-purple-100',
     iconColor: 'text-purple-600',
+  },
+  {
+    href: '/archive',
+    icon: Archive,
+    label: '아카이브',
+    desc: '일기 · 레시피 · 독서 · 자유 컬렉션',
+    bg: 'bg-slate-100',
+    iconColor: 'text-slate-700',
   },
 ];
 
