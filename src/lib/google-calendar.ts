@@ -296,19 +296,18 @@ export async function pushTaskToGoogle(
     );
     if (res.ok) return task.google_event_id;
     if (res.status === 404 || res.status === 410) {
-      // 삭제됐으면 새로 생성 (primary 로 fallback)
-      return await createEvent(
-        encodeURIComponent(auth.sync.calendar_id || 'primary'),
-        headers,
-        ev,
-      );
+      // ⚠️ 외부 sync(노션-구글 등) 가 ID 갈아치우는 환경 무한 루프 방지:
+      // stale ID 만나면 새 event 생성하지 않고 null 반환 → 매핑 끊김.
+      // 다음 pull 에서 dedup 으로 새 ID 와 다시 매칭됨.
+      console.warn('[gcal] stale event_id (404/410) — 매핑 해제', task.google_event_id);
+      return null;
     }
     const t = await res.text();
     console.warn('[gcal] update fail', res.status, t);
     return task.google_event_id;
   }
 
-  // 신규 생성
+  // 신규 생성 — google_event_id 없는 신규 task 만
   return await createEvent(calId, headers, ev);
 }
 

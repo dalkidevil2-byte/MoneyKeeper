@@ -139,7 +139,13 @@ export async function PATCH(
       try {
         const { pushTaskToGoogle } = await import('@/lib/google-calendar');
         const gid = await pushTaskToGoogle(data.household_id, data as unknown as import('@/types').Task);
-        if (gid && gid !== data.google_event_id) {
+        if (gid === null && data.google_event_id) {
+          // stale 매핑 해제 — 무한 루프 방지
+          await supabase
+            .from('tasks')
+            .update({ google_event_id: null, google_synced_at: new Date().toISOString() })
+            .eq('id', id);
+        } else if (gid && gid !== data.google_event_id) {
           await supabase
             .from('tasks')
             .update({ google_event_id: gid, google_synced_at: new Date().toISOString() })
