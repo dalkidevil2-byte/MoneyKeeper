@@ -5,7 +5,7 @@ import { pullEventsToTasks, pushTaskToGoogle } from '@/lib/google-calendar';
 import type { Task } from '@/types';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
-const THROTTLE_MIN = 1;
+const THROTTLE_MIN = 10;
 
 /**
  * 페이지 진입 시 호출되는 자동 sync.

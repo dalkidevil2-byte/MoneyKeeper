@@ -7,6 +7,13 @@
 
 import { createServerSupabaseClient } from './supabase';
 import type { Task } from '@/types';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const TZ = 'Asia/Seoul';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CAL_API_BASE = 'https://www.googleapis.com/calendar/v3';
@@ -509,21 +516,22 @@ export async function pullEventsToTasks(householdId: string): Promise<{
         due_time: string | null;
         end_date: string;
       };
-      let q = supabase
+      // dedup 검사: title + due_date + due_time(앞 5자) 기준
+      // due_time 은 "14:48:00" 또는 "14:48" 등 형식 차이 흡수 위해 substring 비교
+      const { data: candidates } = await supabase
         .from('tasks')
-        .select('id')
+        .select('id, due_time')
         .eq('household_id', householdId)
         .eq('kind', 'event')
         .eq('is_active', true)
         .eq('title', f.title)
         .eq('due_date', f.due_date)
         .is('google_event_id', null);
-      // due_time 정확히 매칭 (null vs 값)
-      if (f.due_time) q = q.eq('due_time', f.due_time);
-      else q = q.is('due_time', null);
-
-      const { data: candidates } = await q.limit(1);
-      const existing = candidates?.[0];
+      const wantHm = f.due_time ? f.due_time.slice(0, 5) : null;
+      const existing = (candidates ?? []).find((c) => {
+        const haveHm = c.due_time ? (c.due_time as string).slice(0, 5) : null;
+        return haveHm === wantHm;
+      });
 
       if (existing) {
         // 기존 task 에 google 매핑만 추가 (status/is_active 등 사용자 데이터 유지)
@@ -581,12 +589,15 @@ function eventToTaskFields(ev: GEvent): Record<string, unknown> | null {
       end_date = due_date;
     }
   } else {
-    const sd = ev.start.dateTime!;
-    due_date = sd.slice(0, 10);
-    due_time = sd.slice(11, 19);
-    const ed = ev.end?.dateTime ?? sd;
-    end_date = ed.slice(0, 10);
-    end_time = ed.slice(11, 19);
+    // 어떤 timezone 형식으로 오든 KST 로 정규화해서 저장
+    const sdRaw = ev.start.dateTime!;
+    const sdt = dayjs(sdRaw).tz(TZ);
+    due_date = sdt.format('YYYY-MM-DD');
+    due_time = sdt.format('HH:mm:ss');
+    const edRaw = ev.end?.dateTime ?? sdRaw;
+    const edt = dayjs(edRaw).tz(TZ);
+    end_date = edt.format('YYYY-MM-DD');
+    end_time = edt.format('HH:mm:ss');
   }
 
   return {
