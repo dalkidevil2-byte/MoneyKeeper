@@ -415,8 +415,15 @@ function TodoSection({
 
   // 모든 미완료 할일을 노출 (시작일 미래여도 보이게 — 사용자가 "있는 줄도 모르는" 상황 방지)
   // pending 과 done 분리 — done 은 맨 아래 별도 섹션
+  // 완료된 항목은 최근 3일 이내만 노출 (이전 것은 자동으로 사라짐 — 기록은 /todo/archive 에서 확인)
+  const threeDaysAgo = today.subtract(3, 'day');
   const pending = todos.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
-  const done = todos.filter((t) => t.status === 'done');
+  const done = todos.filter((t) => {
+    if (t.status !== 'done') return false;
+    // completed_at 없으면(혹시 있을 레거시) 일단 노출
+    if (!t.completed_at) return true;
+    return dayjs(t.completed_at).isAfter(threeDaysAgo);
+  });
 
   // pending 만 deadline 그룹핑
   const groups: Record<string, Task[]> = {
