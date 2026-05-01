@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import type { Task, CreateTaskInput, TodayTask } from '@/types';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -74,7 +80,11 @@ export function useTodayTasks(memberId?: string) {
   const [loading, setLoading] = useState(true);
 
   const fetchToday = useCallback(() => {
-    const sp = new URLSearchParams({ household_id: HOUSEHOLD_ID });
+    const sp = new URLSearchParams({
+      household_id: HOUSEHOLD_ID,
+      // KST 기준 오늘 날짜를 명시적으로 보내서 서버 timezone 차이 회피
+      date: dayjs().tz('Asia/Seoul').format('YYYY-MM-DD'),
+    });
     if (memberId) sp.set('member_id', memberId);
     setLoading(true);
     fetch(`/api/tasks/today?${sp.toString()}`)

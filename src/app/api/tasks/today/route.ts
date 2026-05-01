@@ -2,8 +2,14 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { isRoutineDueOn, isTaskOverdue } from '@/lib/task-recurrence';
 import type { Task, TaskCompletion, TodayTask } from '@/types';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const KST = 'Asia/Seoul';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -15,10 +21,10 @@ export async function GET(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { searchParams } = new URL(req.url);
   const householdId = searchParams.get('household_id') ?? DEFAULT_HOUSEHOLD_ID;
-  const dateStr = searchParams.get('date') ?? dayjs().format('YYYY-MM-DD');
+  const dateStr = searchParams.get('date') ?? dayjs().tz(KST).format('YYYY-MM-DD');
   const memberId = searchParams.get('member_id');
 
-  const date = dayjs(dateStr);
+  const date = dayjs.tz(dateStr, KST);
 
   try {
     // 활성 task 전체 (cancelled 제외)
