@@ -497,7 +497,8 @@ export async function executeTool(
             const { data } = await supabase
               .from('stock_transactions')
               .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
-              .in('account_id', accIds);
+              .in('account_id', accIds)
+              .limit(10000);
             txs = data ?? [];
           }
         }
@@ -511,40 +512,54 @@ export async function executeTool(
       case 'get_stock_news': {
         const { searchStockNews } = await import('./stock-news');
         const limit = (args.limit as number) ?? 5;
-        let tickers: string[] = [];
-        if (args.ticker) {
-          tickers = [args.ticker as string];
-        } else {
-          // 보유 상위 3개
-          const { computeHoldings, aggregateByTicker } = await import('./stock-holdings');
-          const { data: owners } = await supabase
-            .from('stock_owners')
+        // 보유 종목 → ticker → company_name 매핑
+        const { data: owners } = await supabase
+          .from('stock_owners')
+          .select('id')
+          .eq('household_id', householdId);
+        const ownerIds = (owners ?? []).map((o) => o.id as string);
+        let txs: Array<{ ticker: string; company_name: string }> = [];
+        if (ownerIds.length > 0) {
+          const { data: accs } = await supabase
+            .from('stock_accounts')
             .select('id')
-            .eq('household_id', householdId);
-          const ownerIds = (owners ?? []).map((o) => o.id as string);
-          let txs: unknown[] = [];
-          if (ownerIds.length > 0) {
-            const { data: accs } = await supabase
-              .from('stock_accounts')
-              .select('id')
-              .in('owner_id', ownerIds);
-            const accIds = (accs ?? []).map((a) => a.id as string);
-            if (accIds.length > 0) {
-              const { data } = await supabase
-                .from('stock_transactions')
-                .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
-                .in('account_id', accIds);
-              txs = data ?? [];
-            }
+            .in('owner_id', ownerIds);
+          const accIds = (accs ?? []).map((a) => a.id as string);
+          if (accIds.length > 0) {
+            const { data } = await supabase
+              .from('stock_transactions')
+              .select('ticker, company_name')
+              .in('account_id', accIds);
+            txs = (data ?? []) as Array<{ ticker: string; company_name: string }>;
           }
-          const holdings = computeHoldings((txs ?? []) as never);
-          const agg = aggregateByTicker(holdings);
-          tickers = agg.slice(0, 3).map((a) => a.ticker);
         }
-        const news: Array<{ ticker: string; items: unknown[] }> = [];
-        for (const t of tickers) {
-          const items = await searchStockNews(t, limit);
-          news.push({ ticker: t, items });
+        const tickerToName = new Map<string, string>();
+        for (const t of txs) {
+          if (t.ticker && t.company_name) tickerToName.set(t.ticker, t.company_name);
+        }
+
+        let queries: Array<{ ticker: string; name: string }> = [];
+        if (args.ticker) {
+          const tk = args.ticker as string;
+          queries = [{ ticker: tk, name: tickerToName.get(tk) ?? tk }];
+        } else {
+          // 보유 상위 3종목 (보유량 큰 순)
+          const { computeHoldings, aggregateByTicker } = await import('./stock-holdings');
+          const holdings = computeHoldings(
+            txs as never,
+          );
+          const agg = aggregateByTicker(holdings);
+          queries = agg.slice(0, 3).map((a) => ({
+            ticker: a.ticker,
+            name: a.companyName || tickerToName.get(a.ticker) || a.ticker,
+          }));
+        }
+
+        const news: Array<{ ticker: string; name: string; items: unknown[] }> = [];
+        for (const q of queries) {
+          // 회사명으로 검색 (한글 이름이 정확)
+          const items = await searchStockNews(q.name, limit);
+          news.push({ ticker: q.ticker, name: q.name, items });
         }
         return { ok: true, data: { news } };
       }
