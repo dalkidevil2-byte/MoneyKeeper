@@ -108,15 +108,16 @@ export async function syncNotionSource(
   for (const r of toInsertRows) {
     const payload = buildPayload(r);
     // 기존 매칭 task 검색 — source_external_id 가 비어있는 것 (= 다른 sync 가 만든 거)
+    // dedup: title + due_date + due_time 일치하는 task 가 있으면 합치기
+    // (다른 sync 소스가 만든 task 거나, 같은 노션 페이지가 새 ID 로 들어와도)
     let q = supabase
       .from('tasks')
-      .select('id')
+      .select('id, source_external_id')
       .eq('household_id', source.household_id)
       .eq('kind', 'event')
       .eq('is_active', true)
       .eq('title', payload.title)
-      .eq('due_date', payload.due_date as string)
-      .is('source_external_id', null);
+      .eq('due_date', payload.due_date as string);
     if (payload.due_time) q = q.eq('due_time', payload.due_time as string);
     else q = q.is('due_time', null);
 

@@ -517,16 +517,16 @@ export async function pullEventsToTasks(householdId: string): Promise<{
         end_date: string;
       };
       // dedup 검사: title + due_date + due_time(앞 5자) 기준
-      // due_time 은 "14:48:00" 또는 "14:48" 등 형식 차이 흡수 위해 substring 비교
+      // ⚠️ google_event_id 가 NULL 이든, 다른 event_id 가 매핑돼있든 동일 콘텐츠면 매칭.
+      //    노션-Google 외부 sync 가 매번 새 ID 를 부여해도 우리 task 한 건에 통합 매핑.
       const { data: candidates } = await supabase
         .from('tasks')
-        .select('id, due_time')
+        .select('id, due_time, google_event_id')
         .eq('household_id', householdId)
         .eq('kind', 'event')
         .eq('is_active', true)
         .eq('title', f.title)
-        .eq('due_date', f.due_date)
-        .is('google_event_id', null);
+        .eq('due_date', f.due_date);
       const wantHm = f.due_time ? f.due_time.slice(0, 5) : null;
       const existing = (candidates ?? []).find((c) => {
         const haveHm = c.due_time ? (c.due_time as string).slice(0, 5) : null;
