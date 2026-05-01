@@ -16,8 +16,11 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
+  const [maxHeight, setMaxHeight] = useState(288);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const filtered = options.filter((o) => o.toLowerCase().includes(query.toLowerCase()));
   const canAdd = onAddOption && query.trim() && !options.some((o) => o === query.trim());
@@ -26,6 +29,19 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
     if (open) {
       setQuery('');
       setTimeout(() => inputRef.current?.focus(), 50);
+      // 위/아래 어디 띄울지 + 최대 높이 결정
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (rect) {
+        const spaceBelow = window.innerHeight - rect.bottom - 16;
+        const spaceAbove = rect.top - 16;
+        if (spaceBelow >= 200 || spaceBelow >= spaceAbove) {
+          setDropUp(false);
+          setMaxHeight(Math.min(380, Math.max(160, spaceBelow)));
+        } else {
+          setDropUp(true);
+          setMaxHeight(Math.min(380, Math.max(160, spaceAbove)));
+        }
+      }
     }
   }, [open]);
 
@@ -57,6 +73,7 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
   return (
     <div ref={containerRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
@@ -69,7 +86,11 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+        <div
+          className={`absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden ${
+            dropUp ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}
+        >
           {/* 검색 입력 */}
           <div className="p-2 border-b border-gray-100">
             <input
@@ -86,10 +107,11 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
             />
           </div>
 
-          {/* 옵션 목록 — 스크롤 가능, 우측 인디케이터 */}
+          {/* 옵션 목록 — 스크롤 가능 (계산된 maxHeight 사용) */}
           <div
-            className="max-h-72 overflow-y-auto"
+            className="overflow-y-auto"
             style={{
+              maxHeight: `${maxHeight - 60}px`,
               scrollbarWidth: 'thin',
               WebkitOverflowScrolling: 'touch',
               boxShadow: 'inset 0 -10px 8px -10px rgba(0,0,0,0.08)',
