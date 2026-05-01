@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Link as LinkIcon, X, CheckCircle2, Palette, Copy, Cake } from 'lucide-react';
+import { RefreshCw, Link as LinkIcon, X, CheckCircle2, Palette, Copy, Cake, AlertTriangle } from 'lucide-react';
 import dayjs from 'dayjs';
 
 type Status =
@@ -229,6 +229,43 @@ export default function GoogleCalendarSection() {
               <br />
               구글에서 만든 일정은 진입 시 자동 가져오기 (5분 throttle).
             </p>
+
+            {/* 위험: 초기화 + 재동기화 */}
+            <button
+              onClick={async () => {
+                if (
+                  !confirm(
+                    '⚠️ 우리 앱의 모든 일정(event)을 삭제하고 구글 캘린더에서 다시 가져옵니다.\n\n' +
+                      '• 할일(todo)은 삭제 안 함\n' +
+                      '• 구글 캘린더 측 데이터는 그대로\n' +
+                      '• 직접 입력한 일정도 google 에 push 된 게 아니면 사라질 수 있음\n\n진행할까요?',
+                  )
+                )
+                  return;
+                if (!confirm('정말 진행할까요? (되돌리기 어려움)')) return;
+                setBusy(true);
+                setSyncResult(null);
+                try {
+                  const res = await fetch('/api/google-calendar/reset', { method: 'POST' });
+                  if (!res.ok) {
+                    setSyncResult('초기화 실패');
+                    return;
+                  }
+                  const j = await res.json();
+                  const p = j.pulled ?? {};
+                  setSyncResult(
+                    `초기화 완료: ${j.cleared}건 비활성화 → 신규 ${p.created}건 가져옴`,
+                  );
+                  await load();
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              disabled={busy}
+              className="mt-2 w-full py-2 rounded-xl border border-rose-300 text-rose-600 text-xs font-bold inline-flex items-center justify-center gap-1 active:bg-rose-50 disabled:opacity-50"
+            >
+              <AlertTriangle size={12} /> 일정 초기화 + 재동기화 (위험)
+            </button>
           </>
         )}
       </div>
