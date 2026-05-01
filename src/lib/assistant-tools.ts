@@ -116,6 +116,43 @@ export const ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'create_transaction',
+      description:
+        '가계부에 거래(지출/수입) 등록. "올리브영 2만원", "마트에서 35000원 썼어" 같은 메시지에서 호출. 카테고리/결제수단 미상이면 추측해서 채움.',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: { type: 'number', description: '금액 (원)' },
+          type: {
+            type: 'string',
+            enum: ['expense', 'income'],
+            description: '지출/수입 (기본 expense)',
+          },
+          store_name: { type: 'string', description: '가게/장소' },
+          memo: { type: 'string', description: '추가 메모 (선택)' },
+          category_main: {
+            type: 'string',
+            description:
+              '대분류 추측. 식비/쇼핑/교통/카페/문화/의료/생활 등',
+          },
+          category_sub: { type: 'string' },
+          date: {
+            type: 'string',
+            description: 'YYYY-MM-DD. 명시 없으면 오늘',
+          },
+          status: {
+            type: 'string',
+            enum: ['draft', 'reviewed', 'confirmed'],
+            description: '기본 confirmed. 자신없으면 draft 로 저장',
+          },
+        },
+        required: ['amount', 'store_name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_stock_portfolio',
       description: '주식 보유 종목, 평균단가, 평가액, 미실현 손익. 사용자가 주식·포트폴리오 관련 질문 시 사용.',
       parameters: { type: 'object', properties: {} },
@@ -384,6 +421,34 @@ export async function executeTool(
           .single();
         if (error) return { ok: false, error: error.message };
         return { ok: true, data: { task: data, message: `${args.title} 생성됨` } };
+      }
+
+      case 'create_transaction': {
+        const today = dayjs().tz(TZ).format('YYYY-MM-DD');
+        const insert: Record<string, unknown> = {
+          household_id: householdId,
+          amount: Math.abs(args.amount as number),
+          type: (args.type as string) ?? 'expense',
+          store_name: (args.store_name as string) ?? '',
+          memo: (args.memo as string) ?? '📲 텔레그램',
+          category_main: (args.category_main as string) ?? '',
+          category_sub: (args.category_sub as string) ?? '',
+          date: (args.date as string) ?? today,
+          status: (args.status as string) ?? 'confirmed',
+        };
+        const { data, error } = await supabase
+          .from('transactions')
+          .insert(insert)
+          .select('*')
+          .single();
+        if (error) return { ok: false, error: error.message };
+        return {
+          ok: true,
+          data: {
+            transaction: data,
+            message: `✅ ${insert.store_name} ${(insert.amount as number).toLocaleString('ko-KR')}원 등록됨`,
+          },
+        };
       }
 
       case 'get_stock_portfolio': {
