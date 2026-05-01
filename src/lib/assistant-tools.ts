@@ -116,6 +116,36 @@ export const ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_stock_portfolio',
+      description: '주식 보유 종목, 평균단가, 평가액, 미실현 손익. 사용자가 주식·포트폴리오 관련 질문 시 사용.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'analyze_stock_trades',
+      description: '주식 거래 패턴 분석 — 평균 보유일, 단타 vs 장투, 승률, 종목별 손익.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_stock_news',
+      description: '특정 종목의 최근 뉴스 (Yahoo Finance). ticker 미지정시 보유 상위 종목 전체 뉴스.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ticker: { type: 'string', description: '예: AAPL, 005930.KS' },
+          limit: { type: 'integer' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_time_breakdown',
       description:
         '특정 기간의 카테고리별/멤버별 시간 누적 — 어디에 시간 많이 썼는지.',
@@ -354,6 +384,120 @@ export async function executeTool(
           .single();
         if (error) return { ok: false, error: error.message };
         return { ok: true, data: { task: data, message: `${args.title} 생성됨` } };
+      }
+
+      case 'get_stock_portfolio': {
+        const { computeHoldings, aggregateByTicker, computeRealizedPL } = await import('./stock-holdings');
+        const { data: txs } = await supabase
+          .from('stock_transactions')
+          .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+          .eq('household_id', householdId)
+          .order('date', { ascending: true });
+        if (!txs || txs.length === 0) {
+          return { ok: true, data: { message: '주식 거래 내역이 없습니다.' } };
+        }
+        const holdings = computeHoldings(txs as never);
+        const agg = aggregateByTicker(holdings);
+        const realized = computeRealizedPL(txs as never);
+
+        // 시세 조회
+        const tickers = Array.from(new Set(agg.map((a) => a.ticker)));
+        let quotes: Record<string, { price: number }> = {};
+        if (tickers.length > 0) {
+          try {
+            const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(',')}`;
+            const r = await fetch(url, {
+              headers: { 'User-Agent': 'Mozilla/5.0' },
+            });
+            if (r.ok) {
+              const j = await r.json();
+              const results = j?.quoteResponse?.result ?? [];
+              for (const q of results) {
+                if (q.symbol && typeof q.regularMarketPrice === 'number') {
+                  quotes[q.symbol] = { price: q.regularMarketPrice };
+                }
+              }
+            }
+          } catch {
+            /* skip */
+          }
+        }
+
+        let totalInvested = 0;
+        let totalCurrent = 0;
+        const positions = agg.map((a) => {
+          const cur = quotes[a.ticker]?.price ?? a.avgPrice;
+          const value = a.qty * cur;
+          totalInvested += a.invested;
+          totalCurrent += value;
+          return {
+            ticker: a.ticker,
+            companyName: a.companyName,
+            qty: a.qty,
+            avg_price: Math.round(a.avgPrice * 100) / 100,
+            current_price: Math.round(cur * 100) / 100,
+            invested: Math.round(a.invested),
+            value: Math.round(value),
+            unrealized_pl: Math.round(value - a.invested),
+            unrealized_pct:
+              a.invested > 0
+                ? Math.round(((value - a.invested) / a.invested) * 1000) / 10
+                : 0,
+          };
+        }).sort((a, b) => b.value - a.value);
+
+        return {
+          ok: true,
+          data: {
+            invested: Math.round(totalInvested),
+            current: Math.round(totalCurrent),
+            unrealized_pl: Math.round(totalCurrent - totalInvested),
+            unrealized_pct:
+              totalInvested > 0
+                ? Math.round(((totalCurrent - totalInvested) / totalInvested) * 1000) / 10
+                : 0,
+            realized_pl: Math.round(realized),
+            positions,
+          },
+        };
+      }
+
+      case 'analyze_stock_trades': {
+        const { analyzeTrades } = await import('./stock-analysis');
+        const { data: txs } = await supabase
+          .from('stock_transactions')
+          .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+          .eq('household_id', householdId);
+        if (!txs || txs.length === 0) {
+          return { ok: true, data: { message: '거래 내역이 없습니다.' } };
+        }
+        const analysis = analyzeTrades(txs as never);
+        return { ok: true, data: analysis };
+      }
+
+      case 'get_stock_news': {
+        const { searchStockNews } = await import('./stock-news');
+        const limit = (args.limit as number) ?? 5;
+        let tickers: string[] = [];
+        if (args.ticker) {
+          tickers = [args.ticker as string];
+        } else {
+          // 보유 상위 3개
+          const { computeHoldings, aggregateByTicker } = await import('./stock-holdings');
+          const { data: txs } = await supabase
+            .from('stock_transactions')
+            .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+            .eq('household_id', householdId);
+          const holdings = computeHoldings((txs ?? []) as never);
+          const agg = aggregateByTicker(holdings);
+          tickers = agg.slice(0, 3).map((a) => a.ticker);
+        }
+        const news: Array<{ ticker: string; items: unknown[] }> = [];
+        for (const t of tickers) {
+          const items = await searchStockNews(t, limit);
+          news.push({ ticker: t, items });
+        }
+        return { ok: true, data: { news } };
       }
 
       case 'get_time_breakdown': {
