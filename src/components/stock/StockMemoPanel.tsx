@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Edit3, Save, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Edit3, Save, Trash2, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
+import HoldingsCompare from './HoldingsCompare';
+import TickerFixModal from './TickerFixModal';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -38,38 +40,59 @@ function parseBlocks(content: string): Block[] {
   return out;
 }
 
+type OwnerHolding = {
+  owner_id: string;
+  owner_name: string;
+  qty: number;
+  avgPrice: number;
+  invested: number;
+};
+
 interface Props {
   ticker: string;
   /** 헤더(제목) 노출 여부 */
   showHeader?: boolean;
   /** 처음에 접힌 상태로 시작 */
   initialCollapsed?: boolean;
+  /** ticker 변경 시 부모에 알림 (예: chart 페이지의 ticker 갱신) */
+  onTickerChanged?: (newTicker: string) => void;
 }
 
 export default function StockMemoPanel({
   ticker,
   showHeader = true,
   initialCollapsed = false,
+  onTickerChanged,
 }: Props) {
   const [content, setContent] = useState('');
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [name, setName] = useState<string | null>(null);
+  const [holdings, setHoldings] = useState<OwnerHolding[]>([]);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [fixing, setFixing] = useState(false);
 
   const load = useCallback(async () => {
     if (!ticker) return;
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/stocks/memos?household_id=${HOUSEHOLD_ID}&ticker=${encodeURIComponent(ticker)}`,
+        `/api/stocks/memos?household_id=${HOUSEHOLD_ID}&ticker=${encodeURIComponent(ticker)}&enrich=1`,
       );
       const j = await res.json();
-      const raw = (j.memos?.[0]?.content as string) ?? '';
+      const memo = j.memos?.[0];
+      const raw = (memo?.content as string) ?? '';
       setContent(raw);
       setBlocks(parseBlocks(raw));
+      setName(memo?.name ?? null);
+      setHoldings((memo?.holdings ?? []) as OwnerHolding[]);
+      setCurrentPrice(memo?.current_price ?? null);
+      setCurrency(memo?.currency ?? null);
     } finally {
       setLoading(false);
     }
@@ -128,22 +151,46 @@ export default function StockMemoPanel({
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       {showHeader && (
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          className="w-full px-4 py-3 flex items-center justify-between border-b border-gray-50 active:bg-gray-50"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-gray-900">📌 메모</span>
-            <span className="text-[11px] text-gray-400">
-              {blocks.length > 0 ? `${blocks.length}건` : '없음'}
-            </span>
-          </div>
-          {collapsed ? (
-            <ChevronDown size={16} className="text-gray-400" />
-          ) : (
-            <ChevronUp size={16} className="text-gray-400" />
+        <div className="border-b border-gray-50 flex items-center">
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            className="flex-1 px-4 py-3 flex items-center justify-between active:bg-gray-50"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-bold text-gray-900 truncate">
+                📌 메모 {name && <span className="font-normal text-gray-500">· {name}</span>}
+              </span>
+              <span className="text-[11px] text-gray-400 shrink-0">
+                {blocks.length > 0 ? `${blocks.length}건` : '없음'}
+              </span>
+            </div>
+            {collapsed ? (
+              <ChevronDown size={16} className="text-gray-400" />
+            ) : (
+              <ChevronUp size={16} className="text-gray-400" />
+            )}
+          </button>
+          {!collapsed && content && (
+            <button
+              onClick={() => setFixing(true)}
+              className="p-2 mr-1 rounded-lg text-amber-600 hover:bg-amber-50"
+              title="종목 매칭 수정"
+            >
+              <Wand2 size={14} />
+            </button>
           )}
-        </button>
+        </div>
+      )}
+
+      {/* 보유 정보 */}
+      {!collapsed && holdings.length > 0 && (
+        <div className="px-3 py-2 border-b border-gray-50">
+          <HoldingsCompare
+            holdings={holdings}
+            currentPrice={currentPrice}
+            currency={currency}
+          />
+        </div>
       )}
 
       {!collapsed && (
@@ -229,6 +276,19 @@ export default function StockMemoPanel({
             </>
           )}
         </div>
+      )}
+
+      {fixing && (
+        <TickerFixModal
+          fromTicker={ticker}
+          fromName={name}
+          onClose={() => setFixing(false)}
+          onMoved={(newTicker) => {
+            setFixing(false);
+            if (onTickerChanged) onTickerChanged(newTicker);
+            else load();
+          }}
+        />
       )}
     </div>
   );

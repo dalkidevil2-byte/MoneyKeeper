@@ -2,16 +2,30 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Search, Trash2, Save, Edit3, X } from 'lucide-react';
+import { ChevronLeft, Search, Trash2, Save, Edit3, X, Wand2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import HoldingsCompare from '@/components/stock/HoldingsCompare';
+import TickerFixModal from '@/components/stock/TickerFixModal';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
+
+type OwnerHolding = {
+  owner_id: string;
+  owner_name: string;
+  qty: number;
+  avgPrice: number;
+  invested: number;
+};
 
 type Memo = {
   id: string;
   ticker: string;
   content: string;
   updated_at: string;
+  name?: string | null;
+  current_price?: number | null;
+  currency?: string | null;
+  holdings?: OwnerHolding[];
 };
 
 type Block = {
@@ -23,7 +37,6 @@ type Block = {
 };
 
 type EnrichedMemo = Memo & {
-  name: string | null;
   blocks: Block[];
 };
 
@@ -59,33 +72,16 @@ export default function StockMemosPage() {
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [fixingTicker, setFixingTicker] = useState<{ ticker: string; name?: string | null } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/stocks/memos?household_id=${HOUSEHOLD_ID}`);
+      const res = await fetch(`/api/stocks/memos?household_id=${HOUSEHOLD_ID}&enrich=1`);
       const j = await res.json();
       const list: Memo[] = j.memos ?? [];
-      const tickers = list.map((m) => m.ticker);
-      const nameMap: Record<string, string> = {};
-      if (tickers.length > 0) {
-        // KRX 이름 매핑 — 6자리 코드 또는 .KS/.KQ 두 형태 다 들어와도 처리
-        const qs = encodeURIComponent(tickers.join(','));
-        const r = await fetch(`/api/stocks/quote?symbols=${qs}`);
-        if (r.ok) {
-          const qJ = await r.json();
-          const results = qJ?.quoteResponse?.result ?? [];
-          for (const q of results) {
-            if (q.symbol) {
-              nameMap[q.symbol] =
-                q.shortName || q.longName || q.displayName || q.symbol;
-            }
-          }
-        }
-      }
       const enriched: EnrichedMemo[] = list.map((m) => ({
         ...m,
-        name: nameMap[m.ticker] ?? null,
         blocks: parseBlocks(m.content ?? ''),
       }));
       setMemos(enriched);
@@ -214,15 +210,19 @@ export default function StockMemosPage() {
               className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
             >
               <div className="px-4 py-3 flex items-center justify-between border-b border-gray-50">
-                <div className="min-w-0">
-                  <div className="text-sm font-bold text-gray-900 truncate">
+                <Link
+                  href={`/stocks/chart?ticker=${encodeURIComponent(m.ticker)}`}
+                  className="min-w-0 flex-1 active:opacity-60"
+                >
+                  <div className="text-sm font-bold text-gray-900 truncate hover:text-violet-700">
                     {m.name ?? m.ticker}
+                    <span className="text-[11px] text-gray-300 font-normal ml-1.5">↗</span>
                   </div>
                   <div className="text-[11px] text-gray-400 mt-0.5">
                     {m.ticker} · {m.blocks.length}건 · 최근{' '}
                     {dayjs(m.updated_at).format('M월 D일')}
                   </div>
-                </div>
+                </Link>
                 {editingTicker === m.ticker ? (
                   <div className="flex items-center gap-1">
                     <button
@@ -247,6 +247,13 @@ export default function StockMemosPage() {
                 ) : (
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={() => setFixingTicker({ ticker: m.ticker, name: m.name })}
+                      className="p-2 rounded-lg text-amber-600 hover:bg-amber-50"
+                      title="종목 매칭 수정"
+                    >
+                      <Wand2 size={15} />
+                    </button>
+                    <button
                       onClick={() => startEdit(m)}
                       className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
                       title="편집"
@@ -263,6 +270,17 @@ export default function StockMemosPage() {
                   </div>
                 )}
               </div>
+
+              {/* 보유 비교 — 메모와 같이 보여줌 */}
+              {editingTicker !== m.ticker && m.holdings && m.holdings.length > 0 && (
+                <div className="px-4 py-3 border-b border-gray-50">
+                  <HoldingsCompare
+                    holdings={m.holdings}
+                    currentPrice={m.current_price ?? null}
+                    currency={m.currency}
+                  />
+                </div>
+              )}
 
               {editingTicker === m.ticker ? (
                 <div className="p-3">
@@ -317,6 +335,18 @@ export default function StockMemosPage() {
           ))
         )}
       </div>
+
+      {fixingTicker && (
+        <TickerFixModal
+          fromTicker={fixingTicker.ticker}
+          fromName={fixingTicker.name}
+          onClose={() => setFixingTicker(null)}
+          onMoved={() => {
+            setFixingTicker(null);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

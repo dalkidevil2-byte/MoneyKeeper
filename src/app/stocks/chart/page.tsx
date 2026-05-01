@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ChevronLeft, RefreshCw, Search } from 'lucide-react';
 import StockMemoPanel from '@/components/stock/StockMemoPanel';
 import {
@@ -44,8 +45,19 @@ const PERIODS = [
 ];
 
 export default function ChartPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-gray-400">불러오는 중…</div>}>
+      <ChartPageInner />
+    </Suspense>
+  );
+}
+
+function ChartPageInner() {
+  const sp = useSearchParams();
+  const initialTicker = sp.get('ticker') ?? '';
+
   const [options, setOptions] = useState<Option[]>([]);
-  const [ticker, setTicker] = useState<string>('');
+  const [ticker, setTicker] = useState<string>(initialTicker);
   const [tickerName, setTickerName] = useState<string>('');
   const [period, setPeriod] = useState<string>('3mo');
 
