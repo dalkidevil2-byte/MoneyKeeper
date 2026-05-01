@@ -35,20 +35,46 @@ export async function GET() {
 
   const insights: any[] = [];
 
+  // 가맹점 이름 정규화 — '쿠팡(주)', 'Coupang', '쿠팡 로켓배송' → 같은 그룹
+  const normalizeMerchant = (s: string): string => {
+    return s
+      .toLowerCase()
+      .replace(/\(주\)|\(유\)|주식회사|\bco\.?\b|\binc\.?\b|\bltd\.?\b/gi, '')
+      .replace(/[\s\-_·,.]/g, '')
+      .trim();
+  };
+
   // ── 1. 반복 가맹점 분석 (쇼핑·취미 등은 제외) ──
-  const merchantMap: Record<string, { dates: string[]; amounts: number[]; category: string }> = {};
+  const merchantMap: Record<
+    string,
+    { displayName: string; dates: string[]; amounts: number[]; category: string }
+  > = {};
   for (const tx of txs) {
     if (NON_RECURRING_CATEGORIES.has(tx.category_main)) continue;
-    const key = tx.merchant_name || tx.name;
-    if (!key || key.length < 2) continue;
-    if (!merchantMap[key]) merchantMap[key] = { dates: [], amounts: [], category: tx.category_main };
+    const raw = tx.merchant_name || tx.name;
+    if (!raw || raw.length < 2) continue;
+    const key = normalizeMerchant(raw);
+    if (!key) continue;
+    if (!merchantMap[key]) {
+      merchantMap[key] = {
+        displayName: raw,
+        dates: [],
+        amounts: [],
+        category: tx.category_main,
+      };
+    }
+    // 가장 짧은 (간결한) 표시 이름 채택
+    if (raw.length < merchantMap[key].displayName.length) {
+      merchantMap[key].displayName = raw;
+    }
     merchantMap[key].dates.push(tx.date);
     merchantMap[key].amounts.push(tx.amount);
   }
 
   const recurringMerchants = Object.entries(merchantMap)
     .filter(([, v]) => v.dates.length >= 2)
-    .map(([merchant, v]) => {
+    .map(([_key, v]) => {
+      const merchant = v.displayName;
       const dates = v.dates.map((d) => dayjs(d));
       const gaps: number[] = [];
       for (let i = 1; i < dates.length; i++) {
