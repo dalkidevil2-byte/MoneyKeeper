@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { computeHoldings, type StockTx } from '@/lib/stock-holdings';
+import {
+  computeHoldings,
+  computeRealizedTrades,
+  type StockTx,
+} from '@/lib/stock-holdings';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -86,36 +90,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 3) 현재가
-  let priceByTicker: Record<string, { price: number; currency?: string }> = {};
-  try {
-    const qs = encodeURIComponent(tickers.join(','));
-    const proto = req.headers.get('x-forwarded-proto') ?? 'https';
-    const host = req.headers.get('host');
-    if (host) {
-      const r = await fetch(`${proto}://${host}/api/stocks/quote?symbols=${qs}`);
-      if (r.ok) {
-        const j = await r.json();
-        const results = (j?.quoteResponse?.result ?? []) as Array<{
-          symbol?: string;
-          regularMarketPrice?: number;
-          currency?: string;
-        }>;
-        priceByTicker = {};
-        for (const x of results) {
-          if (x.symbol && typeof x.regularMarketPrice === 'number') {
-            priceByTicker[x.symbol] = { price: x.regularMarketPrice, currency: x.currency };
-          }
-        }
-      }
-    }
-  } catch {
-    // 시세 실패해도 나머지는 정상
-  }
+  // 시세는 클라이언트에서 별도 호출 (서버 self-fetch 가 환경에 따라 불안정)
 
   const enriched = memos.map((m) => {
     const grouped = txByTicker[m.ticker] ?? [];
-    // owner 별로 거래 묶어서 holding 계산
+    // owner 별로 거래 묶어서 holding / realized 계산
     const byOwner: Record<string, StockTx[]> = {};
     for (const { owner_id, tx } of grouped) {
       if (!byOwner[owner_id]) byOwner[owner_id] = [];
@@ -128,6 +107,14 @@ export async function GET(req: NextRequest) {
       avgPrice: number;
       invested: number;
     }> = [];
+    const realizedByOwner: Array<{
+      owner_id: string;
+      owner_name: string;
+      total_pl: number;
+      total_qty: number;
+      trade_count: number;
+    }> = [];
+
     for (const [ownerId, ownerTxs] of Object.entries(byOwner)) {
       const hs = computeHoldings(ownerTxs);
       let qty = 0;
@@ -146,13 +133,39 @@ export async function GET(req: NextRequest) {
           invested,
         });
       }
+      // 실현 손익 (이 종목 한정)
+      const realized = computeRealizedTrades(ownerTxs).filter((r) => r.ticker === m.ticker);
+      if (realized.length > 0) {
+        realizedByOwner.push({
+          owner_id: ownerId,
+          owner_name: ownerById[ownerId] ?? '?',
+          total_pl: realized.reduce((s, r) => s + r.pl, 0),
+          total_qty: realized.reduce((s, r) => s + r.quantity, 0),
+          trade_count: realized.length,
+        });
+      }
     }
+
+    // 거래 내역 (UI 표시용 — owner_name 추가)
+    const trades = grouped
+      .map(({ owner_id, tx }) => ({
+        id: tx.id,
+        date: tx.date,
+        type: tx.type,
+        quantity: tx.quantity,
+        price: tx.price,
+        owner_id,
+        owner_name: ownerById[owner_id] ?? '?',
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
     return {
       ...m,
       name: nameByTicker[m.ticker] ?? null,
-      current_price: priceByTicker[m.ticker]?.price ?? null,
-      currency: priceByTicker[m.ticker]?.currency ?? null,
       holdings,
+      realized: realizedByOwner,
+      trades,
+      has_history: trades.length > 0,
     };
   });
 

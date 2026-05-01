@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { ChevronLeft, Search, Trash2, Save, Edit3, X, Wand2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import HoldingsCompare from '@/components/stock/HoldingsCompare';
+import OwnerPnLSummary from '@/components/stock/OwnerPnLSummary';
+import TradeHistoryCompact from '@/components/stock/TradeHistoryCompact';
 import TickerFixModal from '@/components/stock/TickerFixModal';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -17,6 +19,24 @@ type OwnerHolding = {
   invested: number;
 };
 
+type Trade = {
+  id: string;
+  date: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  owner_id: string;
+  owner_name: string;
+};
+
+type Realized = {
+  owner_id: string;
+  owner_name: string;
+  total_pl: number;
+  total_qty: number;
+  trade_count: number;
+};
+
 type Memo = {
   id: string;
   ticker: string;
@@ -26,6 +46,9 @@ type Memo = {
   current_price?: number | null;
   currency?: string | null;
   holdings?: OwnerHolding[];
+  realized?: Realized[];
+  trades?: Trade[];
+  has_history?: boolean;
 };
 
 type Block = {
@@ -80,10 +103,71 @@ export default function StockMemosPage() {
       const res = await fetch(`/api/stocks/memos?household_id=${HOUSEHOLD_ID}&enrich=1`);
       const j = await res.json();
       const list: Memo[] = j.memos ?? [];
+
+      // 시세 클라이언트에서 일괄 조회
+      const tickers = Array.from(new Set(list.map((m) => m.ticker).filter(Boolean)));
+      const priceMap: Record<string, { price: number; currency?: string }> = {};
+      if (tickers.length > 0) {
+        try {
+          const qRes = await fetch(
+            `/api/stocks/quote?symbols=${encodeURIComponent(tickers.join(','))}`,
+          );
+          if (qRes.ok) {
+            const qJ = await qRes.json();
+            const results = qJ?.quoteResponse?.result ?? [];
+            for (const r of results) {
+              if (r.symbol && typeof r.regularMarketPrice === 'number') {
+                priceMap[r.symbol] = {
+                  price: r.regularMarketPrice,
+                  currency: r.currency,
+                };
+              }
+            }
+          }
+        } catch {
+          /* 시세 실패해도 메모는 표시 */
+        }
+      }
+
       const enriched: EnrichedMemo[] = list.map((m) => ({
         ...m,
+        current_price: priceMap[m.ticker]?.price ?? null,
+        currency: priceMap[m.ticker]?.currency ?? null,
         blocks: parseBlocks(m.content ?? ''),
       }));
+
+      // 정렬:
+      // 1) 보유 종목 (평가액 큰 순)
+      // 2) 거래 이력은 있지만 미보유 (최근 거래일 순)
+      // 3) 거래 없음 (메모 업데이트 순)
+      const tier = (m: EnrichedMemo): number => {
+        if ((m.holdings?.length ?? 0) > 0) return 0;
+        if (m.has_history) return 1;
+        return 2;
+      };
+      enriched.sort((a, b) => {
+        const ta = tier(a);
+        const tb = tier(b);
+        if (ta !== tb) return ta - tb;
+        if (ta === 0) {
+          const aValue = (a.holdings ?? []).reduce(
+            (s, h) => s + h.qty * (a.current_price ?? h.avgPrice),
+            0,
+          );
+          const bValue = (b.holdings ?? []).reduce(
+            (s, h) => s + h.qty * (b.current_price ?? h.avgPrice),
+            0,
+          );
+          if (aValue !== bValue) return bValue - aValue;
+        }
+        if (ta === 1) {
+          const aLast = a.trades?.[0]?.date ?? '';
+          const bLast = b.trades?.[0]?.date ?? '';
+          if (aLast !== bLast) return bLast.localeCompare(aLast);
+        }
+        return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+      });
+
       setMemos(enriched);
     } finally {
       setLoading(false);
@@ -271,16 +355,38 @@ export default function StockMemosPage() {
                 )}
               </div>
 
-              {/* 보유 비교 — 메모와 같이 보여줌 */}
-              {editingTicker !== m.ticker && m.holdings && m.holdings.length > 0 && (
-                <div className="px-4 py-3 border-b border-gray-50">
-                  <HoldingsCompare
-                    holdings={m.holdings}
-                    currentPrice={m.current_price ?? null}
-                    currency={m.currency}
-                  />
-                </div>
-              )}
+              {/* 보유 + 누적손익 + 거래내역 */}
+              {editingTicker !== m.ticker &&
+                ((m.holdings && m.holdings.length > 0) ||
+                  m.current_price != null ||
+                  (m.trades && m.trades.length > 0)) && (
+                  <div className="px-4 py-3 border-b border-gray-50 space-y-2">
+                    {((m.holdings && m.holdings.length > 0) || m.current_price != null) && (
+                      <HoldingsCompare
+                        holdings={m.holdings ?? []}
+                        currentPrice={m.current_price ?? null}
+                        currency={m.currency ?? null}
+                      />
+                    )}
+                    {/* 누적 손익 — 거래 이력이 있을 때 */}
+                    {m.trades && m.trades.length > 0 && (
+                      <OwnerPnLSummary
+                        holdings={m.holdings ?? []}
+                        realized={m.realized ?? []}
+                        currentPrice={m.current_price ?? null}
+                        currency={m.currency ?? null}
+                      />
+                    )}
+                    {m.trades && m.trades.length > 0 && (
+                      <TradeHistoryCompact
+                        trades={m.trades}
+                        realized={m.realized ?? []}
+                        currency={m.currency ?? null}
+                        initialCollapsed={(m.holdings?.length ?? 0) > 0}
+                      />
+                    )}
+                  </div>
+                )}
 
               {editingTicker === m.ticker ? (
                 <div className="p-3">

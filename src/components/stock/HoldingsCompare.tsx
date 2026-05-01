@@ -15,18 +15,29 @@ interface Props {
 }
 
 export default function HoldingsCompare({ holdings, currentPrice, currency }: Props) {
-  if (holdings.length === 0) {
-    return (
-      <div className="px-3 py-2 rounded-lg bg-gray-50 text-[11px] text-gray-400">
-        이 종목 보유 없음
-      </div>
-    );
-  }
-
   const fmt = (n: number) => {
     if (currency === 'USD') return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
     return `${Math.round(n).toLocaleString('ko-KR')}원`;
   };
+
+  // 미보유 종목 — 현재가만 있으면 그것만이라도 표시
+  if (holdings.length === 0) {
+    if (currentPrice == null) {
+      return (
+        <div className="px-3 py-2 rounded-lg bg-gray-50 text-[11px] text-gray-400">
+          이 종목 보유 없음
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2 flex items-center justify-between">
+        <span className="text-[11px] text-gray-500">📊 미보유</span>
+        <span className="text-xs font-semibold text-gray-700">
+          현재가 {fmt(currentPrice)}
+        </span>
+      </div>
+    );
+  }
 
   // 전체 합산
   const totalQty = holdings.reduce((s, h) => s + h.qty, 0);

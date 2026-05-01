@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Edit3, Save, Trash2, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
 import HoldingsCompare from './HoldingsCompare';
+import OwnerPnLSummary from './OwnerPnLSummary';
+import TradeHistoryCompact from './TradeHistoryCompact';
 import TickerFixModal from './TickerFixModal';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -48,6 +50,24 @@ type OwnerHolding = {
   invested: number;
 };
 
+type Realized = {
+  owner_id: string;
+  owner_name: string;
+  total_pl: number;
+  total_qty: number;
+  trade_count: number;
+};
+
+type Trade = {
+  id: string;
+  date: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  owner_id: string;
+  owner_name: string;
+};
+
 interface Props {
   ticker: string;
   /** 헤더(제목) 노출 여부 */
@@ -68,6 +88,8 @@ export default function StockMemoPanel({
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [name, setName] = useState<string | null>(null);
   const [holdings, setHoldings] = useState<OwnerHolding[]>([]);
+  const [realized, setRealized] = useState<Realized[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [currency, setCurrency] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,8 +113,27 @@ export default function StockMemoPanel({
       setBlocks(parseBlocks(raw));
       setName(memo?.name ?? null);
       setHoldings((memo?.holdings ?? []) as OwnerHolding[]);
-      setCurrentPrice(memo?.current_price ?? null);
-      setCurrency(memo?.currency ?? null);
+      setRealized((memo?.realized ?? []) as Realized[]);
+      setTrades((memo?.trades ?? []) as Trade[]);
+
+      // 시세는 클라이언트에서 별도 호출
+      try {
+        const qRes = await fetch(
+          `/api/stocks/quote?symbols=${encodeURIComponent(ticker)}`,
+        );
+        if (qRes.ok) {
+          const qJ = await qRes.json();
+          const r0 = qJ?.quoteResponse?.result?.[0];
+          setCurrentPrice(typeof r0?.regularMarketPrice === 'number' ? r0.regularMarketPrice : null);
+          setCurrency(r0?.currency ?? null);
+        } else {
+          setCurrentPrice(null);
+          setCurrency(null);
+        }
+      } catch {
+        setCurrentPrice(null);
+        setCurrency(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -182,14 +223,32 @@ export default function StockMemoPanel({
         </div>
       )}
 
-      {/* 보유 정보 */}
-      {!collapsed && holdings.length > 0 && (
-        <div className="px-3 py-2 border-b border-gray-50">
-          <HoldingsCompare
-            holdings={holdings}
-            currentPrice={currentPrice}
-            currency={currency}
-          />
+      {/* 보유 정보 + 누적 손익 + 거래내역 */}
+      {!collapsed && (holdings.length > 0 || currentPrice != null || trades.length > 0) && (
+        <div className="px-3 py-2 border-b border-gray-50 space-y-2">
+          {(holdings.length > 0 || currentPrice != null) && (
+            <HoldingsCompare
+              holdings={holdings}
+              currentPrice={currentPrice}
+              currency={currency}
+            />
+          )}
+          {trades.length > 0 && (
+            <OwnerPnLSummary
+              holdings={holdings}
+              realized={realized}
+              currentPrice={currentPrice}
+              currency={currency}
+            />
+          )}
+          {trades.length > 0 && (
+            <TradeHistoryCompact
+              trades={trades}
+              realized={realized}
+              currency={currency}
+              initialCollapsed={holdings.length > 0}
+            />
+          )}
         </div>
       )}
 
