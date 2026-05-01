@@ -178,48 +178,53 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
         if (idle.length === 0) return null;
         const visible = expanded ? idle : idle.slice(0, 3);
         return (
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
             {visible.map((a) => (
               <div
                 key={a.id}
-                className="flex items-stretch rounded-xl overflow-hidden border border-gray-200 bg-white"
+                className="flex items-stretch rounded-2xl overflow-hidden border border-gray-200 bg-white"
               >
                 <button
                   onClick={() => start(a)}
                   disabled={busyId === a.id}
-                  className="flex items-center gap-1.5 px-2 py-1 active:bg-gray-50 disabled:opacity-50 min-w-0"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setEditing(a);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 active:bg-gray-50 disabled:opacity-50 min-w-0"
                 >
                   <span
-                    className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white"
+                    className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white"
                     style={{ backgroundColor: a.color }}
                   >
-                    <Play size={9} fill="currentColor" />
+                    <Play size={12} fill="currentColor" />
                   </span>
-                  <span className="text-xs text-gray-800 truncate inline-flex items-center gap-0.5">
-                    <span>{a.emoji}</span>
-                    <span>{a.name}</span>
-                  </span>
-                  {(a.today_minutes ?? 0) > 0 && (
-                    <span className="text-[10px] text-gray-400 ml-1 shrink-0">
-                      {fmtMin(a.today_minutes!)}
-                    </span>
-                  )}
+                  <div className="text-left min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 truncate inline-flex items-center gap-1">
+                      <span>{a.emoji}</span>
+                      <span>{a.name}</span>
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      오늘 {fmtMin(a.today_minutes ?? 0)}
+                    </div>
+                  </div>
                 </button>
                 <button
                   onClick={() => setEditing(a)}
-                  className="px-1 text-gray-300 hover:text-gray-500 active:bg-gray-100"
+                  className="px-1.5 text-gray-300 hover:text-gray-500 active:bg-gray-100"
                   aria-label="설정"
+                  title="활동 설정"
                 >
-                  <SettingsIcon size={10} />
+                  <SettingsIcon size={11} />
                 </button>
               </div>
             ))}
             {!expanded && idle.length > 3 && (
               <button
                 onClick={() => setExpanded(true)}
-                className="px-2 py-1 rounded-xl border border-dashed border-gray-300 text-xs text-gray-500"
+                className="px-3 py-2 rounded-2xl border border-dashed border-gray-300 text-xs text-gray-500 font-semibold inline-flex items-center"
               >
-                + {idle.length - 3}개
+                + {idle.length - 3}개 더보기
               </button>
             )}
           </div>
