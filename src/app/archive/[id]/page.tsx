@@ -205,23 +205,31 @@ function EntryFormSheet({
     setAiBusy(true);
     setAiError(null);
     try {
+      // 새 ai-schema 엔드포인트 — 추가/수정/삭제/이동 모두 지원
       const res = await fetch(
-        `/api/archive/collections/${collectionId}/ai-property`,
+        `/api/archive/collections/${collectionId}/ai-schema`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intent: aiIntent.trim() }),
+          body: JSON.stringify({
+            intent: aiIntent.trim(),
+            currentSchema: schema,
+          }),
         },
       );
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? '실패');
-      const added = (j.added ?? []) as ArchiveProperty[];
-      setSchema(j.schema ?? schema);
+      const newSchema = (j.schema ?? schema) as ArchiveProperty[];
+      // entry form 안에서는 즉시 DB 반영 (기존 직접추가 흐름과 동일)
+      await fetch(`/api/archive/collections/${collectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schema: newSchema }),
+      });
+      setSchema(newSchema);
       setAiIntent('');
       setAiMode(false);
       setAdding(false);
-      // 짧은 안내 (콘솔만)
-      console.log('AI 가 추가한 속성:', added);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : '실패');
     } finally {
@@ -346,12 +354,12 @@ function EntryFormSheet({
               {aiMode ? (
                 <>
                   <div className="text-xs font-semibold text-violet-700">
-                    어떤 속성이 필요한가요?
+                    AI 에게 무엇을 요청할까요?
                   </div>
                   <textarea
                     value={aiIntent}
                     onChange={(e) => setAiIntent(e.target.value)}
-                    placeholder="예: 시청 날짜와 함께 본 사람, 또는 이 영화의 평점 / 명대사 / 분위기"
+                    placeholder='추가/수정/삭제/이동 모두 가능. 예: "별점 추가", "memo 빼줘", "리뷰는 긴 텍스트로", "별점을 첫번째로"'
                     rows={2}
                     autoFocus
                     className="w-full px-3 py-2 border border-violet-200 rounded-xl text-sm bg-white resize-none"
@@ -359,8 +367,8 @@ function EntryFormSheet({
                   {aiError && (
                     <div className="text-[11px] text-rose-500">{aiError}</div>
                   )}
-                  <div className="text-[11px] text-violet-600">
-                    AI가 적절한 속성 1~3개를 자동으로 만들어드려요.
+                  <div className="text-[11px] text-violet-600 leading-relaxed">
+                    AI 가 자연어 명령으로 속성을 추가·수정·삭제·이동합니다. 즉시 저장돼요.
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -378,9 +386,9 @@ function EntryFormSheet({
                       className="flex-1 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1"
                     >
                       {aiBusy ? (
-                        <><Loader2 size={12} className="animate-spin" /> 생성 중…</>
+                        <><Loader2 size={12} className="animate-spin" /> AI 적용 중…</>
                       ) : (
-                        <><Sparkles size={12} /> AI 추가</>
+                        <><Sparkles size={12} /> AI 적용</>
                       )}
                     </button>
                   </div>
@@ -434,7 +442,7 @@ function EntryFormSheet({
               onClick={() => setAdding(true)}
               className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-gray-500 text-sm font-semibold inline-flex items-center justify-center gap-1 active:bg-gray-50"
             >
-              <Plus size={14} /> 속성 추가
+              <Plus size={14} /> 속성 추가 / AI 편집
             </button>
           )}
 
@@ -489,6 +497,41 @@ function CollectionSettingsSheet({
     (collection.schema ?? []) as ArchiveProperty[],
   );
   const [busy, setBusy] = useState(false);
+
+  // AI 편집
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiIntent, setAiIntent] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+
+  const aiEditSchema = async () => {
+    if (!aiIntent.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const res = await fetch(
+        `/api/archive/collections/${collection.id}/ai-schema`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            intent: aiIntent.trim(),
+            currentSchema: schema,
+          }),
+        },
+      );
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? '실패');
+      setSchema(j.schema as ArchiveProperty[]);
+      setAiSummary(j.summary ?? '업데이트됨');
+      setAiIntent('');
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const updateProp = (i: number, patch: Partial<ArchiveProperty>) => {
     setSchema(schema.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
@@ -581,13 +624,65 @@ function CollectionSettingsSheet({
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs text-gray-500 font-semibold">속성</label>
-              <button
-                onClick={addProp}
-                className="text-xs text-violet-600 font-semibold inline-flex items-center gap-0.5"
-              >
-                <Plus size={12} /> 추가
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setAiOpen((v) => !v);
+                    setAiError(null);
+                    setAiSummary(null);
+                  }}
+                  className={`text-xs font-semibold inline-flex items-center gap-0.5 ${
+                    aiOpen ? 'text-violet-700' : 'text-violet-600'
+                  }`}
+                >
+                  <Sparkles size={12} /> AI 편집
+                </button>
+                <button
+                  onClick={addProp}
+                  className="text-xs text-gray-600 font-semibold inline-flex items-center gap-0.5"
+                >
+                  <Plus size={12} /> 직접 추가
+                </button>
+              </div>
             </div>
+
+            {/* AI 편집 패널 */}
+            {aiOpen && (
+              <div className="mb-3 rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-200 p-3 space-y-2">
+                <div className="text-[11px] text-violet-700 leading-relaxed">
+                  자연어로 명령하세요. 예:<br />
+                  · "memo 속성 빼줘" · "리뷰는 긴 텍스트로 바꿔줘"<br />
+                  · "별점을 첫번째로 옮겨줘" · "사진 url 추가"
+                </div>
+                <textarea
+                  value={aiIntent}
+                  onChange={(e) => setAiIntent(e.target.value)}
+                  placeholder="예) 날짜 삭제하고 별점을 위로 올려줘"
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-violet-200 text-sm focus:outline-none focus:border-violet-400 resize-none placeholder-gray-400"
+                  disabled={aiBusy}
+                />
+                {aiError && (
+                  <div className="text-[11px] text-rose-500 px-1">{aiError}</div>
+                )}
+                {aiSummary && (
+                  <div className="text-[11px] text-violet-700 px-1 inline-flex items-center gap-1">
+                    <Sparkles size={10} /> {aiSummary} — 미리보기 적용됨. 저장 눌러야 확정.
+                  </div>
+                )}
+                <button
+                  onClick={aiEditSchema}
+                  disabled={!aiIntent.trim() || aiBusy}
+                  className="w-full py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1.5"
+                >
+                  {aiBusy ? (
+                    <><Loader2 size={12} className="animate-spin" /> AI 편집 중…</>
+                  ) : (
+                    <><Sparkles size={12} /> AI 적용</>
+                  )}
+                </button>
+              </div>
+            )}
             <div className="space-y-2">
               {schema.map((p, i) => (
                 <div
