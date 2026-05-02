@@ -48,6 +48,89 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [aiTextModalOpen, setAiTextModalOpen] = useState(false);
   const [aiText, setAiText] = useState('');
 
+  // 노션 임포트
+  const [notionModalOpen, setNotionModalOpen] = useState(false);
+  const [notionDbId, setNotionDbId] = useState('');
+  const [notionBusy, setNotionBusy] = useState(false);
+  const [notionError, setNotionError] = useState<string | null>(null);
+  const [notionPreview, setNotionPreview] = useState<{
+    suggestions: Array<{
+      notion: string;
+      notion_type: string;
+      archive_key: string | null;
+      archive_label: string | null;
+    }>;
+    preview: Array<Record<string, unknown>>;
+    total_fetched: number;
+  } | null>(null);
+  const [notionResult, setNotionResult] = useState<{
+    imported: number;
+    skipped: number;
+  } | null>(null);
+
+  const notionPreviewFetch = async (useAi = false) => {
+    if (!notionDbId.trim() || notionBusy) return;
+    setNotionBusy(true);
+    setNotionError(null);
+    setNotionPreview(null);
+    try {
+      const res = await fetch(`/api/archive/collections/${id}/import-notion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notion_database_id: notionDbId.trim(),
+          dry_run: true,
+          use_ai: useAi,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? '노션 미리보기 실패');
+      setNotionPreview(j);
+    } catch (e) {
+      setNotionError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setNotionBusy(false);
+    }
+  };
+
+  const notionImportRun = async () => {
+    if (!notionDbId.trim() || notionBusy) return;
+    if (!confirm('이 컬렉션으로 가져올까요? 기존 항목은 그대로 두고 추가됩니다.')) return;
+    setNotionBusy(true);
+    setNotionError(null);
+    try {
+      // 미리보기에서 확인된 매핑 그대로 전달 (AI 매핑이든 자동매핑이든)
+      const propertyMap: Record<string, string> = {};
+      for (const s of notionPreview?.suggestions ?? []) {
+        if (s.archive_key) propertyMap[s.notion] = s.archive_key;
+      }
+      const res = await fetch(`/api/archive/collections/${id}/import-notion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notion_database_id: notionDbId.trim(),
+          property_map: propertyMap,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? '가져오기 실패');
+      setNotionResult({ imported: j.imported ?? 0, skipped: j.skipped ?? 0 });
+      load();
+    } catch (e) {
+      setNotionError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setNotionBusy(false);
+    }
+  };
+
+  const closeNotion = () => {
+    setNotionModalOpen(false);
+    setNotionDbId('');
+    setNotionPreview(null);
+    setNotionResult(null);
+    setNotionError(null);
+  };
+
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -190,6 +273,19 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             <h1 className="text-lg font-bold text-gray-900 truncate">{collection.name}</h1>
             <span className="text-[11px] text-gray-400 shrink-0">{entries.length}건</span>
           </div>
+          <button
+            onClick={() => {
+              setNotionModalOpen(true);
+              setNotionResult(null);
+              setNotionPreview(null);
+              setNotionError(null);
+            }}
+            className="p-2 rounded-xl text-gray-500 active:bg-gray-100"
+            aria-label="노션 가져오기"
+            title="노션 DB 가져오기"
+          >
+            📥
+          </button>
           <button
             onClick={() => setEditingSchema(true)}
             className="p-2 rounded-xl text-gray-500 active:bg-gray-100 mr-12"
@@ -608,6 +704,175 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                   <><Sparkles size={14} /> AI 분석</>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 노션 임포트 모달 */}
+      {notionModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => !notionBusy && closeNotion()}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <h3 className="text-base font-bold text-gray-900 inline-flex items-center gap-1.5">
+                📥 노션에서 가져오기
+              </h3>
+              <button
+                onClick={() => !notionBusy && closeNotion()}
+                disabled={notionBusy}
+                className="p-1 rounded text-gray-500 hover:bg-gray-100"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-5 pb-4 space-y-3 flex-1">
+              {!notionResult ? (
+                <>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    노션 DB의 페이지들을 이 컬렉션 ({collection.name}) 의 항목으로 가져옵니다.
+                    노션 통합(Integration)이 해당 DB에 공유돼 있어야 해요.
+                  </p>
+                  <div>
+                    <label className="text-[11px] text-gray-500 mb-1 block">
+                      노션 DB ID 또는 URL
+                    </label>
+                    <input
+                      value={notionDbId}
+                      onChange={(e) => setNotionDbId(e.target.value)}
+                      placeholder="https://www.notion.so/xxx?v=yyy 또는 32자 ID"
+                      disabled={notionBusy}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      노션 DB 페이지에서 ⋯ → 링크 복사 → 여기에 붙여넣기.
+                    </p>
+                  </div>
+
+                  {notionError && (
+                    <div className="text-[11px] text-rose-500 px-1 bg-rose-50 border border-rose-100 rounded p-2">
+                      {notionError}
+                    </div>
+                  )}
+
+                  {notionPreview && (
+                    <div className="space-y-3">
+                      <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
+                        <div className="text-[11px] font-semibold text-violet-900 mb-2">
+                          속성 매칭 ({notionPreview.suggestions.filter((s) => s.archive_key).length}/
+                          {notionPreview.suggestions.length})
+                        </div>
+                        <ul className="space-y-1">
+                          {notionPreview.suggestions.map((s) => (
+                            <li
+                              key={s.notion}
+                              className="flex items-center justify-between text-[11px]"
+                            >
+                              <span className="text-violet-800">
+                                {s.notion} <span className="text-violet-400">({s.notion_type})</span>
+                              </span>
+                              <span
+                                className={s.archive_label ? 'text-emerald-600 font-semibold' : 'text-gray-400'}
+                              >
+                                {s.archive_label ? `→ ${s.archive_label}` : '— (스킵됨)'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-[10px] text-violet-500 mt-2">
+                          속성 이름이 비슷한 것끼리 자동 매칭됨. 매칭 안 된 노션 속성은 무시돼요.
+                          매칭이 안 맞으면 컬렉션의 속성 라벨을 노션과 같게 바꾸세요.
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                        <div className="text-[11px] font-semibold text-gray-700 mb-1.5">
+                          미리보기 (처음 {notionPreview.preview.length}건)
+                        </div>
+                        <ul className="space-y-2">
+                          {notionPreview.preview.map((entry, i) => (
+                            <li key={i} className="text-[11px] text-gray-700">
+                              {Object.entries(entry)
+                                .map(([k, v]) => {
+                                  const label = schema.find((p) => p.key === k)?.label ?? k;
+                                  const display =
+                                    Array.isArray(v) ? `[${v.length}]` : String(v).slice(0, 30);
+                                  return `${label}: ${display}`;
+                                })
+                                .join(' · ')}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center">
+                  <div className="text-3xl mb-2">✅</div>
+                  <div className="text-sm font-bold text-emerald-800">가져오기 완료</div>
+                  <div className="text-xs text-emerald-700 mt-1">
+                    가져옴: {notionResult.imported}건
+                    {notionResult.skipped > 0 && ` · 스킵: ${notionResult.skipped}건`}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 pt-2 pb-6 border-t border-gray-100 flex gap-2">
+              {!notionResult ? (
+                <>
+                  <button
+                    onClick={closeNotion}
+                    disabled={notionBusy}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  {!notionPreview ? (
+                    <>
+                      <button
+                        onClick={() => notionPreviewFetch(false)}
+                        disabled={!notionDbId.trim() || notionBusy}
+                        className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1"
+                      >
+                        {notionBusy ? <><Loader2 size={14} className="animate-spin" /> 미리보기</> : '미리보기'}
+                      </button>
+                      <button
+                        onClick={() => notionPreviewFetch(true)}
+                        disabled={!notionDbId.trim() || notionBusy}
+                        className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1"
+                        title="AI 가 속성 의미를 보고 매칭"
+                      >
+                        <Sparkles size={14} /> AI 매핑
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={notionImportRun}
+                      disabled={notionBusy}
+                      className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1"
+                    >
+                      {notionBusy ? <><Loader2 size={14} className="animate-spin" /> 가져오는 중…</> : '✅ 가져오기 실행'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={closeNotion}
+                  className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold"
+                >
+                  닫기
+                </button>
+              )}
             </div>
           </div>
         </div>
