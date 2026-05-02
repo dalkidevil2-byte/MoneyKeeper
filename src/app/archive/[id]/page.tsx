@@ -29,6 +29,10 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [entries, setEntries] = useState<ArchiveEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEntry, setEditingEntry] = useState<ArchiveEntry | 'new' | null>(null);
+  const [duplicateData, setDuplicateData] = useState<{
+    data: Record<string, unknown>;
+    sourceTitle: string;
+  } | null>(null);
   const [editingSchema, setEditingSchema] = useState(false);
   const [search, setSearch] = useState('');
   const [reorderMode, setReorderMode] = useState(false);
@@ -84,6 +88,36 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
       return false;
     });
   }, [entries, search]);
+
+  // 기존 항목 복제 — 같은 데이터로 새 entry 만들 준비.
+  // 체크리스트는 모두 미체크로 리셋, date 는 비움 (새 일정에 맞게)
+  const duplicateEntry = (e: ArchiveEntry) => {
+    const src = (e.data ?? {}) as Record<string, unknown>;
+    const titleProp = (collection?.schema ?? [])[0] as ArchiveProperty | undefined;
+    const sourceTitle = titleProp ? String(src[titleProp.key] ?? '항목') : '항목';
+
+    const cloned: Record<string, unknown> = {};
+    for (const p of (collection?.schema ?? []) as ArchiveProperty[]) {
+      const v = src[p.key];
+      if (v == null) continue;
+      if (p.type === 'checklist' && Array.isArray(v)) {
+        // 라벨만 유지, done 모두 false
+        cloned[p.key] = (v as Array<{ label: string }>).map((it) => ({
+          label: it.label,
+          done: false,
+        }));
+      } else if (p.type === 'date') {
+        // 날짜는 새로 입력하도록 비움
+        // (특별히 세팅 안 함)
+      } else if (p.type === 'files') {
+        // 파일은 복제 안 함 (URL 만 복사하면 같은 파일 가리킴 — 의도와 다를 수 있음)
+        // 필요하면 사용자가 시트에서 같은 파일 다시 첨부
+      } else {
+        cloned[p.key] = v;
+      }
+    }
+    setDuplicateData({ data: cloned, sourceTitle });
+  };
 
   // 텍스트로 새 항목 자동 채우기
   const aiFillFromText = async () => {
@@ -405,9 +439,50 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
           schema={schema}
           color={collection.color}
           entry={editingEntry === 'new' ? null : editingEntry}
+          onDuplicate={(e) => {
+            setEditingEntry(null);
+            duplicateEntry(e);
+          }}
           onClose={() => setEditingEntry(null)}
           onSaved={() => {
             setEditingEntry(null);
+            load();
+          }}
+        />
+      )}
+
+      {/* 기존 항목에서 복제된 새 entry 시트 */}
+      {duplicateData && (
+        <EntryFormSheet
+          collectionId={id}
+          schema={schema}
+          color={collection.color}
+          entry={null}
+          prefillData={duplicateData.data}
+          prefillBanner={
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-start gap-2">
+              <span className="text-lg shrink-0">📋</span>
+              <div className="flex-1 text-[11px] text-emerald-800 min-w-0">
+                <div className="font-bold mb-1">
+                  &ldquo;{duplicateData.sourceTitle}&rdquo; 에서 복제됨
+                </div>
+                <div className="text-emerald-700">
+                  체크리스트는 모두 미체크 상태로 초기화됐어요.
+                  날짜/제목 새로 입력하고 저장하세요.
+                </div>
+              </div>
+              <button
+                onClick={() => setDuplicateData(null)}
+                className="p-1 text-emerald-500 hover:bg-emerald-100 rounded shrink-0"
+                aria-label="취소"
+              >
+                <XIcon size={14} />
+              </button>
+            </div>
+          }
+          onClose={() => setDuplicateData(null)}
+          onSaved={() => {
+            setDuplicateData(null);
             load();
           }}
         />
@@ -564,6 +639,7 @@ function EntryFormSheet({
   entry,
   prefillData,
   prefillBanner,
+  onDuplicate,
   onClose,
   onSaved,
 }: {
@@ -573,6 +649,7 @@ function EntryFormSheet({
   entry: ArchiveEntry | null;
   prefillData?: Record<string, unknown>;
   prefillBanner?: React.ReactNode;
+  onDuplicate?: (entry: ArchiveEntry) => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -721,12 +798,23 @@ function EntryFormSheet({
             {mode === 'view' ? '항목' : entry ? '항목 수정' : '새 항목'}
           </h3>
           {mode === 'view' && (
-            <button
-              onClick={() => setMode('edit')}
-              className="text-sm font-semibold text-violet-600 inline-flex items-center gap-1"
-            >
-              ✏️ 수정
-            </button>
+            <div className="flex items-center gap-3">
+              {entry && onDuplicate && (
+                <button
+                  onClick={() => onDuplicate(entry)}
+                  className="text-sm font-semibold text-emerald-600 inline-flex items-center gap-1"
+                  title="이 항목을 복제해서 새 항목 만들기"
+                >
+                  📋 복제
+                </button>
+              )}
+              <button
+                onClick={() => setMode('edit')}
+                className="text-sm font-semibold text-violet-600 inline-flex items-center gap-1"
+              >
+                ✏️ 수정
+              </button>
+            </div>
           )}
         </div>
 
