@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { Client } from '@notionhq/client';
 import OpenAI from 'openai';
+import { getSecret } from '@/lib/app-secrets';
 import type { ArchiveProperty } from '@/types';
 
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
@@ -121,12 +121,29 @@ export async function POST(
   const { id } = await params;
   const supabase = createServerSupabaseClient();
   try {
-    if (!process.env.NOTION_TOKEN) {
+    // 컬렉션의 household_id 먼저 확인 (시크릿 조회용)
+    const { data: collection } = await supabase
+      .from('archive_collections')
+      .select('household_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    const notionToken = await getSecret(
+      'notion_token',
+      'NOTION_TOKEN',
+      collection?.household_id,
+    );
+    if (!notionToken) {
       return NextResponse.json(
-        { error: 'NOTION_TOKEN 환경변수가 설정되지 않았어요.' },
-        { status: 500 },
+        {
+          error:
+            '노션 토큰이 등록되지 않았어요. 설정 → 통합(Integrations) 에서 노션 토큰을 입력해주세요.',
+        },
+        { status: 400 },
       );
     }
+    const notion = new Client({ auth: notionToken });
+
     const body = await req.json();
     const dbIdInput: string = body.notion_database_id;
     const dryRun: boolean = !!body.dry_run;
@@ -138,14 +155,14 @@ export async function POST(
     }
     const dbId = parseDatabaseId(dbIdInput);
 
-    // 컬렉션 + schema
+    // 컬렉션 schema (household_id 는 위에서 조회됨)
+    if (!collection) return NextResponse.json({ error: '컬렉션 없음' }, { status: 404 });
     const { data: col } = await supabase
       .from('archive_collections')
-      .select('household_id, schema, name')
+      .select('schema, name')
       .eq('id', id)
       .maybeSingle();
-    if (!col) return NextResponse.json({ error: '컬렉션 없음' }, { status: 404 });
-    const schema = (col.schema ?? []) as ArchiveProperty[];
+    const schema = ((col?.schema ?? []) as ArchiveProperty[]);
 
     // 노션 DB 메타 (속성 목록)
     let dbMeta: { properties: Record<string, { type: string }>; title?: Array<{ plain_text: string }> };
@@ -238,7 +255,7 @@ ${JSON.stringify(archiveList, null, 2)}`;
     }
 
     // 미리보기 (dry_run): 매핑 + 첫 5개 페이지만
-    const householdId = col.household_id ?? '';
+    const householdId = collection.household_id ?? '';
 
     let cursor: string | undefined = undefined;
     const allPages: Array<Record<string, unknown>> = [];

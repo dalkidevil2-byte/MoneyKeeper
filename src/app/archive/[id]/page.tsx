@@ -16,6 +16,7 @@ import {
   ChevronUp,
   ChevronDown,
   X as XIcon,
+  Check,
 } from 'lucide-react';
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
@@ -53,6 +54,55 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [notionDbId, setNotionDbId] = useState('');
   const [notionBusy, setNotionBusy] = useState(false);
   const [notionError, setNotionError] = useState<string | null>(null);
+  // 노션 토큰 상태
+  const [tokenStatus, setTokenStatus] = useState<{
+    set: boolean;
+    masked?: string;
+    encryption_available: boolean;
+  } | null>(null);
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenSaving, setTokenSaving] = useState(false);
+
+  const loadTokenStatus = async () => {
+    try {
+      const r = await fetch('/api/settings/secrets/notion_token');
+      const j = await r.json();
+      setTokenStatus({
+        set: !!j.set,
+        masked: j.masked,
+        encryption_available: !!j.encryption_available,
+      });
+    } catch {
+      setTokenStatus({ set: false, encryption_available: false });
+    }
+  };
+
+  const saveToken = async () => {
+    if (!tokenInput.trim() || tokenSaving) return;
+    setTokenSaving(true);
+    setNotionError(null);
+    try {
+      const r = await fetch('/api/settings/secrets/notion_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: tokenInput.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? '저장 실패');
+      setTokenInput('');
+      await loadTokenStatus();
+    } catch (e) {
+      setNotionError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setTokenSaving(false);
+    }
+  };
+
+  const deleteToken = async () => {
+    if (!confirm('저장된 노션 토큰을 삭제할까요?')) return;
+    await fetch('/api/settings/secrets/notion_token', { method: 'DELETE' });
+    await loadTokenStatus();
+  };
   const [notionPreview, setNotionPreview] = useState<{
     suggestions: Array<{
       notion: string;
@@ -279,6 +329,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               setNotionResult(null);
               setNotionPreview(null);
               setNotionError(null);
+              loadTokenStatus();
             }}
             className="p-2 rounded-xl text-gray-500 active:bg-gray-100"
             aria-label="노션 가져오기"
@@ -738,9 +789,81 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             <div className="overflow-y-auto px-5 pb-4 space-y-3 flex-1">
               {!notionResult ? (
                 <>
+                  {/* 노션 토큰 상태 */}
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-2">
+                    {tokenStatus === null ? (
+                      <div className="text-[11px] text-gray-400">상태 확인 중…</div>
+                    ) : !tokenStatus.encryption_available ? (
+                      <div className="text-[11px] text-rose-600 leading-relaxed">
+                        ⚠️ 암호화 키 (APP_ENCRYPTION_KEY) 가 Vercel 환경변수에
+                        설정돼 있지 않아 토큰을 안전하게 저장할 수 없어요.
+                        <br />
+                        먼저 Vercel Settings → Environment Variables 에
+                        <code className="bg-rose-100 px-1 rounded mx-0.5">APP_ENCRYPTION_KEY</code>
+                        (32자 이상 랜덤 문자열) 추가 후 재배포 해주세요.
+                      </div>
+                    ) : tokenStatus.set ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1.5">
+                          <Check size={12} className="text-emerald-600" />
+                          노션 토큰 등록됨
+                          <span className="text-emerald-500 font-mono">
+                            {tokenStatus.masked}
+                          </span>
+                        </span>
+                        <button
+                          onClick={deleteToken}
+                          className="text-[11px] text-rose-500 hover:underline"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-semibold text-gray-700">
+                          🔑 노션 통합 토큰 등록 필요
+                        </div>
+                        <ol className="text-[11px] text-gray-600 list-decimal pl-4 space-y-0.5 leading-relaxed">
+                          <li>
+                            <a
+                              href="https://www.notion.so/profile/integrations"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-violet-600 underline"
+                            >
+                              notion.so/profile/integrations
+                            </a>{' '}
+                            접속
+                          </li>
+                          <li>+ New integration → Internal → 이름 아무거나</li>
+                          <li>발급된 시크릿(secret_xxx) 복사 → 아래 붙여넣기</li>
+                          <li>가져올 노션 DB 페이지에서 ⋯ → Connections → 만든 통합 추가</li>
+                        </ol>
+                        <input
+                          type="password"
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value)}
+                          placeholder="ntn_xxxxxxxxxxxxxxxx 또는 secret_xxxxxxx"
+                          disabled={tokenSaving}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-mono"
+                        />
+                        <button
+                          onClick={saveToken}
+                          disabled={!tokenInput.trim() || tokenSaving}
+                          className="w-full py-2 rounded-lg bg-violet-600 text-white text-xs font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1"
+                        >
+                          {tokenSaving ? <><Loader2 size={12} className="animate-spin" /> 저장 중…</> : '🔒 암호화하여 저장'}
+                        </button>
+                        <p className="text-[10px] text-gray-400 leading-relaxed">
+                          AES-256-GCM 으로 암호화 후 DB 저장. 평문은 절대 저장되지 않으며,
+                          API 응답에도 마스킹된 형태로만 노출됩니다.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   <p className="text-xs text-gray-500 leading-relaxed">
                     노션 DB의 페이지들을 이 컬렉션 ({collection.name}) 의 항목으로 가져옵니다.
-                    노션 통합(Integration)이 해당 DB에 공유돼 있어야 해요.
                   </p>
                   <div>
                     <label className="text-[11px] text-gray-500 mb-1 block">
@@ -750,8 +873,8 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                       value={notionDbId}
                       onChange={(e) => setNotionDbId(e.target.value)}
                       placeholder="https://www.notion.so/xxx?v=yyy 또는 32자 ID"
-                      disabled={notionBusy}
-                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400"
+                      disabled={notionBusy || !tokenStatus?.set}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400 disabled:bg-gray-50 disabled:opacity-50"
                     />
                     <p className="text-[10px] text-gray-400 mt-1">
                       노션 DB 페이지에서 ⋯ → 링크 복사 → 여기에 붙여넣기.
@@ -841,14 +964,14 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                     <>
                       <button
                         onClick={() => notionPreviewFetch(false)}
-                        disabled={!notionDbId.trim() || notionBusy}
+                        disabled={!notionDbId.trim() || notionBusy || !tokenStatus?.set}
                         className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1"
                       >
                         {notionBusy ? <><Loader2 size={14} className="animate-spin" /> 미리보기</> : '미리보기'}
                       </button>
                       <button
                         onClick={() => notionPreviewFetch(true)}
-                        disabled={!notionDbId.trim() || notionBusy}
+                        disabled={!notionDbId.trim() || notionBusy || !tokenStatus?.set}
                         className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1"
                         title="AI 가 속성 의미를 보고 매칭"
                       >
