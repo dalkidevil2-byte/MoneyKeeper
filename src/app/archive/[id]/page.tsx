@@ -699,6 +699,50 @@ function EntryFormSheet({
                       <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
                         {(val as string) || <span className="text-gray-300">—</span>}
                       </p>
+                    ) : p.type === 'files' ? (
+                      (() => {
+                        const arr = Array.isArray(val)
+                          ? (val as Array<{ url: string; name: string; type?: string }>)
+                          : [];
+                        if (arr.length === 0)
+                          return <span className="text-sm text-gray-300">—</span>;
+                        return (
+                          <div className="grid grid-cols-3 gap-2">
+                            {arr.map((f, i) => {
+                              const isImage =
+                                (f.type ?? '').startsWith('image/') ||
+                                /\.(png|jpe?g|gif|webp|svg|bmp|heic|heif)$/i.test(
+                                  f.name ?? f.url,
+                                );
+                              return (
+                                <a
+                                  key={i}
+                                  href={f.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="aspect-square rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center"
+                                >
+                                  {isImage ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={f.url}
+                                      alt={f.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex flex-col items-center text-center p-2">
+                                      <span className="text-2xl">📎</span>
+                                      <span className="text-[10px] text-gray-600 truncate max-w-full">
+                                        {f.name}
+                                      </span>
+                                    </div>
+                                  )}
+                                </a>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()
                     ) : (
                       <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
                         {display}
@@ -814,6 +858,7 @@ function EntryFormSheet({
                     <option value="multiselect">복수 선택</option>
                     <option value="rating">별점</option>
                     <option value="checkbox">체크박스</option>
+                    <option value="files">파일/사진</option>
                   </select>
                   <div className="flex gap-2">
                     <button
@@ -1007,6 +1052,7 @@ function CollectionSettingsSheet({
     multiselect: '복수 선택',
     rating: '별점',
     checkbox: '체크박스',
+    files: '파일/사진',
   };
 
   return (

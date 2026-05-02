@@ -1,7 +1,128 @@
 'use client';
 
-import { Star } from 'lucide-react';
+import { Star, Paperclip, X, Loader2, FileText, ImageIcon } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { ArchiveProperty } from '@/types';
+
+type FileItem = { url: string; name: string; type?: string; size?: number };
+
+function FilesInput({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (v: FileItem[]) => void;
+}) {
+  const list: FileItem[] = Array.isArray(value)
+    ? (value as FileItem[]).filter((x) => x && typeof x === 'object' && 'url' in x)
+    : [];
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const upload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setBusy(true);
+    setError(null);
+    const next = [...list];
+    try {
+      for (const f of Array.from(files)) {
+        const fd = new FormData();
+        fd.append('file', f);
+        const res = await fetch('/api/archive/upload', { method: 'POST', body: fd });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error ?? '업로드 실패');
+        next.push({ url: j.url, name: j.name, type: j.type, size: j.size });
+      }
+      onChange(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const remove = (idx: number) => {
+    onChange(list.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="space-y-2">
+      {list.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {list.map((f, i) => {
+            const isImage =
+              (f.type ?? '').startsWith('image/') ||
+              /\.(png|jpe?g|gif|webp|svg|bmp|heic|heif)$/i.test(f.name ?? f.url);
+            return (
+              <div
+                key={i}
+                className="relative rounded-lg border border-gray-200 bg-gray-50 overflow-hidden aspect-square"
+              >
+                {isImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <a href={f.url} target="_blank" rel="noreferrer">
+                    <img
+                      src={f.url}
+                      alt={f.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </a>
+                ) : (
+                  <a
+                    href={f.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex flex-col items-center justify-center h-full p-2 text-center"
+                  >
+                    <FileText size={20} className="text-gray-500 mb-1" />
+                    <span className="text-[10px] text-gray-600 truncate max-w-full px-1">
+                      {f.name}
+                    </span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white inline-flex items-center justify-center"
+                  aria-label="제거"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+        className="w-full py-2.5 rounded-xl border border-dashed border-violet-300 text-violet-600 text-xs font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-50 disabled:opacity-50"
+      >
+        {busy ? (
+          <><Loader2 size={12} className="animate-spin" /> 업로드 중…</>
+        ) : (
+          <><Paperclip size={12} /> {list.length === 0 ? '파일 / 사진 추가' : '추가'}</>
+        )}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        onChange={(e) => upload(e.target.files)}
+        className="hidden"
+      />
+      {error && (
+        <div className="text-[11px] text-rose-500 px-1">{error}</div>
+      )}
+    </div>
+  );
+}
+
+void ImageIcon;
 
 interface Props {
   prop: ArchiveProperty;
@@ -142,6 +263,8 @@ export default function PropertyInput({ prop, value, onChange }: Props) {
           <span className="text-sm text-gray-600">{v ? '예' : '아니오'}</span>
         </label>
       );
+    case 'files':
+      return <FilesInput value={v} onChange={onChange} />;
     default:
       return (
         <input
@@ -171,6 +294,11 @@ export function formatPropertyDisplay(prop: ArchiveProperty, value: unknown): st
     case 'longtext': {
       const s = String(value);
       return s.length > 60 ? s.slice(0, 60) + '…' : s;
+    }
+    case 'files': {
+      const arr = Array.isArray(value) ? (value as Array<{ name?: string }>) : [];
+      if (arr.length === 0) return '';
+      return `📎 ${arr.length}개`;
     }
     default:
       return String(value);

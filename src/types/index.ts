@@ -662,7 +662,8 @@ export type ArchivePropertyType =
   | 'rating'
   | 'checkbox'
   | 'currency'  // 금액
-  | 'member';
+  | 'member'
+  | 'files';   // 첨부파일/이미지 (배열로 URL 저장)
 
 export interface ArchiveProperty {
   key: string;          // 내부 key (영문 권장)
