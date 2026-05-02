@@ -181,6 +181,70 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     setNotionError(null);
   };
 
+  // 노션 export 상태
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportTarget, setExportTarget] = useState<'existing' | 'new'>('new');
+  const [exportDbId, setExportDbId] = useState('');
+  const [exportPageId, setExportPageId] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportResult, setExportResult] = useState<{
+    exported: number;
+    total: number;
+    errors: string[];
+    database_url?: string;
+  } | null>(null);
+
+  const runExport = async () => {
+    if (exportBusy) return;
+    if (exportTarget === 'existing' && !exportDbId.trim()) {
+      setExportError('노션 DB ID 를 입력해주세요.');
+      return;
+    }
+    if (exportTarget === 'new' && !exportPageId.trim()) {
+      setExportError('새 DB 를 만들 부모 페이지 ID 를 입력해주세요.');
+      return;
+    }
+    if (
+      !confirm(
+        `${entries.length}개 항목을 노션으로 내보낼까요? 노션에 새 페이지가 생성됩니다.`,
+      )
+    )
+      return;
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const body: Record<string, string> = {};
+      if (exportTarget === 'existing') body.notion_database_id = exportDbId.trim();
+      else body.parent_page_id = exportPageId.trim();
+      const r = await fetch(`/api/archive/collections/${id}/export-notion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? '내보내기 실패');
+      setExportResult({
+        exported: j.exported ?? 0,
+        total: j.total ?? 0,
+        errors: j.errors ?? [],
+        database_url: j.database_url,
+      });
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const closeExport = () => {
+    setExportModalOpen(false);
+    setExportDbId('');
+    setExportPageId('');
+    setExportResult(null);
+    setExportError(null);
+  };
+
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -336,6 +400,19 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             title="노션 DB 가져오기"
           >
             📥
+          </button>
+          <button
+            onClick={() => {
+              setExportModalOpen(true);
+              setExportResult(null);
+              setExportError(null);
+              loadTokenStatus();
+            }}
+            className="p-2 rounded-xl text-gray-500 active:bg-gray-100"
+            aria-label="노션 내보내기"
+            title="노션으로 내보내기"
+          >
+            📤
           </button>
           <button
             onClick={() => setEditingSchema(true)}
@@ -991,6 +1068,175 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               ) : (
                 <button
                   onClick={closeNotion}
+                  className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold"
+                >
+                  닫기
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 노션 export 모달 */}
+      {exportModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => !exportBusy && closeExport()}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <h3 className="text-base font-bold text-gray-900 inline-flex items-center gap-1.5">
+                📤 노션으로 내보내기
+              </h3>
+              <button
+                onClick={() => !exportBusy && closeExport()}
+                disabled={exportBusy}
+                className="p-1 rounded text-gray-500 hover:bg-gray-100"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-5 pb-4 space-y-3 flex-1">
+              {!exportResult ? (
+                <>
+                  {!tokenStatus?.set && (
+                    <div className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded p-2">
+                      ⚠️ 노션 토큰이 등록되지 않았어요. 📥 가져오기에서 먼저 등록해주세요.
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    이 컬렉션의 {entries.length}개 항목을 노션 페이지로 만듭니다.
+                    체크리스트는 <code className="bg-gray-100 px-1 rounded">[x] / [ ]</code> 텍스트로 평탄화돼요.
+                  </p>
+
+                  {/* 모드 선택 */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setExportTarget('new')}
+                      className={`px-3 py-2.5 rounded-xl text-sm font-semibold border ${
+                        exportTarget === 'new'
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-white text-gray-600 border-gray-200'
+                      }`}
+                    >
+                      🆕 새 DB 만들기
+                    </button>
+                    <button
+                      onClick={() => setExportTarget('existing')}
+                      className={`px-3 py-2.5 rounded-xl text-sm font-semibold border ${
+                        exportTarget === 'existing'
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-white text-gray-600 border-gray-200'
+                      }`}
+                    >
+                      📂 기존 DB 에 추가
+                    </button>
+                  </div>
+
+                  {exportTarget === 'new' ? (
+                    <div>
+                      <label className="text-[11px] text-gray-500 mb-1 block">
+                        부모 페이지 ID 또는 URL
+                      </label>
+                      <input
+                        value={exportPageId}
+                        onChange={(e) => setExportPageId(e.target.value)}
+                        placeholder="https://www.notion.so/페이지URL 또는 32자 ID"
+                        disabled={exportBusy}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                        노션에 빈 페이지 만들고 ⋯ → Connections 로 통합 공유 → 그 페이지 링크 복사 → 여기 붙여넣기.
+                        그 페이지 안에 새 DB 가 생성돼요.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-[11px] text-gray-500 mb-1 block">
+                        기존 노션 DB ID 또는 URL
+                      </label>
+                      <input
+                        value={exportDbId}
+                        onChange={(e) => setExportDbId(e.target.value)}
+                        placeholder="https://www.notion.so/xxx?v=yyy"
+                        disabled={exportBusy}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                        ⚠️ 기존 DB 의 속성 이름이 이 컬렉션의 속성 이름(label) 과
+                        같아야 매칭됩니다. 다르면 새 DB 만들기를 추천해요.
+                      </p>
+                    </div>
+                  )}
+
+                  {exportError && (
+                    <div className="text-[11px] text-rose-500 px-1 bg-rose-50 border border-rose-100 rounded p-2">
+                      {exportError}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center space-y-2">
+                  <div className="text-3xl">✅</div>
+                  <div className="text-sm font-bold text-emerald-800">내보내기 완료</div>
+                  <div className="text-xs text-emerald-700">
+                    {exportResult.exported}/{exportResult.total} 페이지 생성
+                  </div>
+                  {exportResult.database_url && (
+                    <a
+                      href={exportResult.database_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold mt-1"
+                    >
+                      🔗 노션에서 열기
+                    </a>
+                  )}
+                  {exportResult.errors.length > 0 && (
+                    <details className="text-left">
+                      <summary className="text-[11px] text-rose-500 cursor-pointer">
+                        에러 {exportResult.errors.length}건
+                      </summary>
+                      <ul className="text-[10px] text-rose-600 mt-1 space-y-0.5">
+                        {exportResult.errors.map((er, i) => (
+                          <li key={i} className="break-all">{er}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 pt-2 pb-6 border-t border-gray-100 flex gap-2">
+              {!exportResult ? (
+                <>
+                  <button
+                    onClick={closeExport}
+                    disabled={exportBusy}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={runExport}
+                    disabled={exportBusy || !tokenStatus?.set}
+                    className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-1"
+                  >
+                    {exportBusy ? <><Loader2 size={14} className="animate-spin" /> 내보내는 중…</> : '📤 내보내기'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={closeExport}
                   className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold"
                 >
                   닫기
