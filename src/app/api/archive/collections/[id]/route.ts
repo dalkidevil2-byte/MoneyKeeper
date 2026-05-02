@@ -33,7 +33,7 @@ export async function PATCH(
   const supabase = createServerSupabaseClient();
   try {
     const body = await req.json();
-    const allowed = ['name', 'emoji', 'color', 'description', 'schema', 'position', 'is_active'] as const;
+    const allowed = ['name', 'emoji', 'color', 'description', 'schema', 'position', 'is_active', 'card_layout'] as const;
     const update: Record<string, unknown> = {};
     for (const k of allowed) {
       if (Object.prototype.hasOwnProperty.call(body, k)) update[k] = body[k];

@@ -239,6 +239,27 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             // entries (전체) 에서의 실제 인덱스
             const realIdx = entries.findIndex((x) => x.id === e.id);
 
+            // gallery 모드 — 첫 'files' 속성에서 첫 이미지 추출
+            const cardLayout = collection.card_layout === 'gallery' ? 'gallery' : 'list';
+            let coverUrl: string | null = null;
+            if (cardLayout === 'gallery') {
+              for (const p of schema) {
+                if (p.type !== 'files') continue;
+                const arr = Array.isArray(data[p.key])
+                  ? (data[p.key] as Array<{ url?: string; name?: string; type?: string }>)
+                  : [];
+                const firstImg = arr.find((f) => {
+                  if (!f?.url) return false;
+                  if ((f.type ?? '').startsWith('image/')) return true;
+                  return /\.(png|jpe?g|gif|webp|svg|bmp|heic|heif)$/i.test(f.name ?? f.url ?? '');
+                });
+                if (firstImg?.url) {
+                  coverUrl = firstImg.url;
+                  break;
+                }
+              }
+            }
+
             const card = (
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="text-base font-bold text-gray-900 leading-tight">
@@ -326,9 +347,20 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               <button
                 key={e.id}
                 onClick={() => setEditingEntry(e)}
-                className="w-full text-left bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 flex items-center gap-2"
+                className="w-full text-left bg-white rounded-2xl border border-gray-100 active:bg-gray-50 flex items-stretch gap-0 overflow-hidden"
               >
-                {card}
+                {coverUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={coverUrl}
+                    alt=""
+                    className="w-24 h-auto self-stretch object-cover shrink-0 bg-gray-100"
+                    style={{ minHeight: 80 }}
+                  />
+                )}
+                <div className="flex-1 min-w-0 px-4 py-3 flex items-center gap-2">
+                  {card}
+                </div>
               </button>
             );
           })
@@ -972,6 +1004,9 @@ function CollectionSettingsSheet({
   const [schema, setSchema] = useState<ArchiveProperty[]>(
     (collection.schema ?? []) as ArchiveProperty[],
   );
+  const [cardLayout, setCardLayout] = useState<'list' | 'gallery'>(
+    collection.card_layout === 'gallery' ? 'gallery' : 'list',
+  );
   const [busy, setBusy] = useState(false);
 
   // AI 편집
@@ -1033,7 +1068,7 @@ function CollectionSettingsSheet({
       await fetch(`/api/archive/collections/${collection.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, emoji, description, schema }),
+        body: JSON.stringify({ name, emoji, description, schema, card_layout: cardLayout }),
       });
       onSaved();
     } finally {
@@ -1095,6 +1130,38 @@ function CollectionSettingsSheet({
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
             />
+          </div>
+
+          {/* 카드 레이아웃 */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">카드 표시</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setCardLayout('list')}
+                className={`px-3 py-2.5 rounded-xl text-sm font-semibold border ${
+                  cardLayout === 'list'
+                    ? 'bg-violet-600 text-white border-violet-600'
+                    : 'bg-white text-gray-600 border-gray-200'
+                }`}
+              >
+                📝 텍스트
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardLayout('gallery')}
+                className={`px-3 py-2.5 rounded-xl text-sm font-semibold border ${
+                  cardLayout === 'gallery'
+                    ? 'bg-violet-600 text-white border-violet-600'
+                    : 'bg-white text-gray-600 border-gray-200'
+                }`}
+              >
+                🖼 사진 표지
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
+              사진 표지: 첨부파일 속성 안의 첫 번째 이미지가 카드 좌측 표지로 노출돼요.
+            </p>
           </div>
 
           {/* 속성 편집 */}

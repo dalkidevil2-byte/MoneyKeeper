@@ -683,6 +683,8 @@ export interface ArchiveCollection {
   schema: ArchiveProperty[];
   is_active: boolean;
   position: number;
+  // 카드 레이아웃 — 'list' (텍스트만) | 'gallery' (사진 표지)
+  card_layout?: 'list' | 'gallery';
   created_at: string;
   updated_at: string;
   // 계산 필드
