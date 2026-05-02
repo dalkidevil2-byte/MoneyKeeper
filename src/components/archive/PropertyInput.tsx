@@ -3,6 +3,7 @@
 import { Star, Paperclip, X, Loader2, FileText, ImageIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ArchiveProperty } from '@/types';
+import { compressImageIfPossible } from '@/lib/compress-image';
 
 type FileItem = { url: string; name: string; type?: string; size?: number };
 
@@ -26,7 +27,9 @@ function FilesInput({
     setError(null);
     const next = [...list];
     try {
-      for (const f of Array.from(files)) {
+      for (const raw of Array.from(files)) {
+        // 이미지면 클라이언트 압축 (긴 변 1920px / JPEG 82%)
+        const f = await compressImageIfPossible(raw);
         const fd = new FormData();
         fd.append('file', f);
         const res = await fetch('/api/archive/upload', { method: 'POST', body: fd });
