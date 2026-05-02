@@ -256,9 +256,105 @@ URL 형태: `https://moneykeeper-xxx-yourname.vercel.app`
 
 자세한 단계는 fork 한 저장소의 `docs/R2-SETUP.md` 파일 참고 (GitHub 에서 그 경로로 들어가면 보임).
 
-### Google 캘린더 동기화 (옵션)
+### Google 캘린더 동기화 (15~20분, 무료)
 
-할일 ↔ 구글 캘린더 양방향 동기화. 설정 복잡 — 필요할 때 별도 안내.
+앱의 **할일/일정 ↔ Google 캘린더** 양방향 동기화. 폰 기본 캘린더에서도 보임.
+
+> ⚠️ 단계가 많지만 한 번만 셋업하면 끝. 천천히 따라오세요.
+
+#### A) Google Cloud 프로젝트 만들기
+
+- [ ] https://console.cloud.google.com 접속 → Google 계정으로 로그인
+- [ ] 첫 진입 시 약관 동의
+- [ ] 상단 좌측 **프로젝트 선택** 드롭다운 → **새 프로젝트**
+- [ ] **프로젝트 이름**: `moneykeeper` → **만들기**
+- [ ] 생성 후 그 프로젝트 선택됐는지 상단에서 확인
+
+#### B) Google Calendar API 활성화
+
+- [ ] 좌측 햄버거 메뉴(≡) → **API 및 서비스** → **라이브러리**
+- [ ] 검색창에 `Google Calendar API` 입력
+- [ ] **Google Calendar API** 클릭 → **사용 설정** 버튼
+
+#### C) OAuth 동의 화면 설정
+
+- [ ] 좌측 **API 및 서비스** → **OAuth 동의 화면**
+- [ ] **User Type**: **외부** 선택 → **만들기**
+- [ ] **앱 정보** 입력:
+  - 앱 이름: `MoneyKeeper`
+  - 사용자 지원 이메일: 본인 Gmail
+  - 개발자 연락처: 본인 Gmail
+- [ ] **저장 후 계속**
+- [ ] **범위(Scopes)**: 그냥 **저장 후 계속** (자동으로 코드에서 처리됨)
+- [ ] **테스트 사용자**: **+ ADD USERS** → 본인 Gmail 추가 → **저장 후 계속**
+- [ ] **요약** → **대시보드로 돌아가기**
+
+> 💡 **테스트 사용자만 추가해도 OK** — 본인만 쓸 거니까 굳이 "프로덕션" 으로 할 필요 X. 추가한 Gmail 계정은 동기화 가능.
+
+#### D) OAuth 클라이언트 ID 만들기
+
+- [ ] 좌측 **사용자 인증 정보** (또는 **Credentials**)
+- [ ] 상단 **+ 사용자 인증 정보 만들기** → **OAuth 클라이언트 ID**
+- [ ] **애플리케이션 유형**: **웹 애플리케이션**
+- [ ] **이름**: `MoneyKeeper Web`
+- [ ] **승인된 리디렉션 URI** → **+ URI 추가**:
+
+```
+https://본인앱URL.vercel.app/api/google-calendar/callback
+```
+
+(본인 Vercel 앱 URL 뒤에 `/api/google-calendar/callback` 붙이기. 정확히 일치해야 함)
+
+- [ ] **만들기** 클릭
+- [ ] 팝업에 표시되는 **클라이언트 ID** 와 **클라이언트 보안 비밀번호** 메모장에 복사
+
+#### E) Vercel 환경변수 추가
+
+Vercel → 프로젝트 → **Settings** → **Environment Variables** 에 3개 추가:
+
+| Name | Value |
+|---|---|
+| `GOOGLE_CLIENT_ID` | D 단계에서 받은 Client ID |
+| `GOOGLE_CLIENT_SECRET` | D 단계에서 받은 Secret |
+| `GOOGLE_REDIRECT_URI` | `https://본인앱URL.vercel.app/api/google-calendar/callback` (D 단계와 정확히 같게) |
+
+- [ ] 저장 후 **Deployments** → 최신 배포 ⋯ → **Redeploy**
+
+#### F) 앱에서 캘린더 연결
+
+- [ ] 앱 접속 → **할일** → 우상단 ⚙️ 또는 **/todo/settings** 진입
+- [ ] **Google 캘린더 연결** 버튼 클릭
+- [ ] Google 로그인 화면 → 본인 계정 선택
+- [ ] "이 앱은 인증되지 않았습니다" 경고 뜨면 → **고급** → **MoneyKeeper(안전하지 않음)으로 이동** 클릭
+  - (테스트 사용자 모드라 정상 — 본인이 만든 앱이니 안전)
+- [ ] 캘린더 권한 허용 → **계속**
+- [ ] 앱으로 자동 복귀 + "연결됨" 표시
+- [ ] 동기화할 캘린더 선택
+
+#### G) 동작 확인
+
+- [ ] 앱에서 새 일정 만들기 (예: 내일 14:00 회의)
+- [ ] 1~2분 후 Google 캘린더 (web 또는 폰) 에서 확인
+- [ ] 반대로 Google 캘린더에서 일정 만들고 → 1분 후 앱에 반영되는지 확인
+
+#### 자주 막히는 부분
+
+**"redirect_uri_mismatch" 에러**
+- D 단계의 리디렉션 URI 와 E 단계의 `GOOGLE_REDIRECT_URI` 가 **정확히** 같아야 함 (대소문자, https://, 끝 슬래시까지)
+- Vercel 앱 URL 이 `xxx-yourname.vercel.app` 인데 짧은 URL 만 적었다면 다시 정확히 입력
+
+**"이 앱은 차단되었습니다"**
+- C 단계의 테스트 사용자에 본인 Gmail 추가 안 됨 → 추가 후 재시도
+
+**연결 후 동기화 안 됨**
+- Vercel 환경변수 입력 후 **Redeploy** 안 했을 수 있음
+- 로그인 시 권한 모두 허용했는지 확인 (체크박스 누락 시 권한 부족)
+
+**Vercel URL 이 바뀐 경우**
+- 커스텀 도메인 추가나 프로젝트 이름 변경으로 URL 이 바뀌면:
+  - D 단계 리디렉션 URI 새 URL 로 수정
+  - E 단계 `GOOGLE_REDIRECT_URI` 도 동일하게 수정
+  - Redeploy
 
 ---
 
