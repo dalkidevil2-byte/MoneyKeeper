@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { STOCKS_DISABLED } from '@/lib/app-flags';
 import {
   Home,
   List,
@@ -75,6 +76,8 @@ export default function BottomNav() {
   if (pathname === '/') return null;
   if (pathname.startsWith('/archive')) return null;
   if (pathname.startsWith('/assistant')) return null;
+  // 주식 비활성 시: /stocks 경로 진입해도 가계부 네비 표시 (안 보이게 처리)
+  if (STOCKS_DISABLED && pathname.startsWith('/stocks')) return null;
 
   // 섹션 판별: paper > stock > todo > budget 순서로 먼저 매칭
   const isPaperSection = pathname.startsWith('/stocks/paper');

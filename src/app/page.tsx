@@ -8,6 +8,7 @@ import BudgetSummary from '@/components/home/BudgetSummary';
 import StockSummary from '@/components/home/StockSummary';
 import TodoSummary from '@/components/home/TodoSummary';
 import NotificationBell from '@/components/todo/NotificationBell';
+import { STOCKS_DISABLED } from '@/lib/app-flags';
 
 dayjs.locale('ko');
 
@@ -86,23 +87,25 @@ export default function HubPage() {
           <BudgetSummary />
         </Link>
 
-        {/* 주식 카드 */}
-        <Link
-          href="/stocks"
-          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
-              <TrendingUp size={28} className="text-emerald-600" strokeWidth={2} />
+        {/* 주식 카드 — 솔로/일반 사용자용 (NEXT_PUBLIC_DISABLE_STOCKS=true 면 숨김) */}
+        {!STOCKS_DISABLED && (
+          <Link
+            href="/stocks"
+            className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <TrendingUp size={28} className="text-emerald-600" strokeWidth={2} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-gray-900">주식</h2>
+                <p className="text-sm text-gray-500 mt-0.5">포트폴리오 · 관심종목</p>
+              </div>
+              <ChevronRight size={20} className="text-gray-300" />
             </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-bold text-gray-900">주식</h2>
-              <p className="text-sm text-gray-500 mt-0.5">포트폴리오 · 관심종목</p>
-            </div>
-            <ChevronRight size={20} className="text-gray-300" />
-          </div>
-          <StockSummary />
-        </Link>
+            <StockSummary />
+          </Link>
+        )}
 
         {/* 아카이브 카드 */}
         <Link

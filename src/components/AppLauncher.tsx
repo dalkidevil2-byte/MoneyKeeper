@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { STOCKS_DISABLED } from '@/lib/app-flags';
 import {
   Grid3x3,
   X,
@@ -135,7 +136,7 @@ export default function AppLauncher() {
             </div>
 
             <div className="px-4 pb-6 space-y-2 overflow-y-auto">
-              {SECTIONS.map(({ href, icon: Icon, label, desc, bg, iconColor }) => {
+              {SECTIONS.filter((s) => !(STOCKS_DISABLED && s.href === '/stocks')).map(({ href, icon: Icon, label, desc, bg, iconColor }) => {
                 const isCurrent =
                   href === '/' ? pathname === '/' : pathname.startsWith(href);
                 return (
