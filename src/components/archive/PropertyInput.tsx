@@ -1,7 +1,7 @@
 'use client';
 
 import { Star, Paperclip, X, Loader2, FileText, ImageIcon, Check, Plus, GripVertical } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ArchiveProperty } from '@/types';
 import { compressImageIfPossible } from '@/lib/compress-image';
 
@@ -131,6 +131,13 @@ void GripVertical;
 // ─── 체크리스트 ─────────────────────────────────
 type ChecklistItem = { label: string; done: boolean; note?: string };
 
+/**
+ * Google Keep 스타일 체크리스트:
+ * - 매 행 = 체크박스 + 인라인 편집
+ * - Enter: 새 행 자동 생성 + 포커스 이동
+ * - Backspace (빈 행): 그 행 삭제 + 위 행으로 포커스
+ * - 항상 마지막에 빈 "+ 항목 추가" 행이 있어서 누르면 입력 시작
+ */
 function ChecklistInput({
   value,
   onChange,
@@ -141,16 +148,41 @@ function ChecklistInput({
   const items: ChecklistItem[] = Array.isArray(value)
     ? (value as ChecklistItem[]).filter((x) => x && typeof x === 'object' && 'label' in x)
     : [];
-  const [adding, setAdding] = useState('');
+  const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
+  const focusIdxRef = useRef<number | null>(null);
+
+  // 새 행 추가 후 자동 포커스
+  useEffect(() => {
+    if (focusIdxRef.current != null) {
+      const idx = focusIdxRef.current;
+      const el = inputsRef.current[idx];
+      if (el) {
+        el.focus();
+        const len = el.value.length;
+        try {
+          el.setSelectionRange(len, len);
+        } catch {/* ignore */}
+      }
+      focusIdxRef.current = null;
+    }
+  }, [items.length]);
 
   const toggle = (idx: number) => {
     onChange(items.map((it, i) => (i === idx ? { ...it, done: !it.done } : it)));
   };
-  const remove = (idx: number) => {
-    onChange(items.filter((_, i) => i !== idx));
-  };
   const updateLabel = (idx: number, label: string) => {
     onChange(items.map((it, i) => (i === idx ? { ...it, label } : it)));
+  };
+  const insertAfter = (idx: number) => {
+    const next = items.slice();
+    next.splice(idx + 1, 0, { label: '', done: false });
+    focusIdxRef.current = idx + 1;
+    onChange(next);
+  };
+  const remove = (idx: number) => {
+    const next = items.filter((_, i) => i !== idx);
+    if (idx > 0) focusIdxRef.current = idx - 1;
+    onChange(next);
   };
   const move = (idx: number, dir: -1 | 1) => {
     const j = idx + dir;
@@ -159,30 +191,49 @@ function ChecklistInput({
     [next[idx], next[j]] = [next[j], next[idx]];
     onChange(next);
   };
-  const add = () => {
-    const v = adding.trim();
-    if (!v) return;
-    onChange([...items, { label: v, done: false }]);
-    setAdding('');
+  const addAtEnd = () => {
+    const next = [...items, { label: '', done: false }];
+    focusIdxRef.current = next.length - 1;
+    onChange(next);
   };
 
-  const doneCount = items.filter((it) => it.done).length;
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      insertAfter(idx);
+    } else if (e.key === 'Backspace' && items[idx]?.label === '') {
+      e.preventDefault();
+      if (items.length === 1) return;
+      remove(idx);
+    } else if (e.key === 'ArrowUp' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      move(idx, -1);
+    } else if (e.key === 'ArrowDown' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      move(idx, 1);
+    }
+  };
+
+  const doneCount = items.filter((it) => it.done && it.label.trim()).length;
+  const totalCount = items.filter((it) => it.label.trim()).length;
 
   return (
-    <div className="space-y-2">
-      {items.length > 0 && (
-        <div className="text-[11px] text-gray-500">
-          {doneCount}/{items.length} 완료
-          {doneCount === items.length && items.length > 0 && (
+    <div className="space-y-1">
+      {totalCount > 0 && (
+        <div className="text-[11px] text-gray-500 px-1">
+          {doneCount}/{totalCount} 완료
+          {doneCount === totalCount && totalCount > 0 && (
             <span className="ml-1 text-emerald-500 font-semibold">✓ 모두 완료</span>
           )}
         </div>
       )}
-      <ul className="space-y-1">
+      <ul className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100 bg-white">
         {items.map((it, i) => (
           <li
             key={i}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 group"
+            className={`flex items-center gap-2 px-2 py-1 group ${
+              it.done ? 'bg-gray-50' : ''
+            }`}
           >
             <button
               type="button"
@@ -190,72 +241,49 @@ function ChecklistInput({
               className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
                 it.done
                   ? 'bg-violet-600 border-violet-600 text-white'
-                  : 'bg-white border-gray-300'
+                  : 'bg-white border-gray-300 hover:border-violet-400'
               }`}
               aria-label={it.done ? '완료 취소' : '완료'}
             >
               {it.done && <Check size={12} strokeWidth={3} />}
             </button>
             <input
+              ref={(el) => {
+                inputsRef.current[i] = el;
+              }}
               type="text"
               value={it.label}
               onChange={(e) => updateLabel(i, e.target.value)}
-              className={`flex-1 bg-transparent text-sm focus:outline-none ${
+              onKeyDown={(e) => onKeyDown(e, i)}
+              placeholder="항목"
+              className={`flex-1 bg-transparent text-sm focus:outline-none py-1 ${
                 it.done ? 'line-through text-gray-400' : 'text-gray-800'
               }`}
             />
             <button
               type="button"
-              onClick={() => move(i, -1)}
-              disabled={i === 0}
-              className="text-xs text-gray-400 disabled:opacity-30 px-1"
-              title="위로"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => move(i, 1)}
-              disabled={i === items.length - 1}
-              className="text-xs text-gray-400 disabled:opacity-30 px-1"
-              title="아래로"
-            >
-              ↓
-            </button>
-            <button
-              type="button"
               onClick={() => remove(i)}
-              className="text-rose-400 hover:text-rose-500 px-1"
+              className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-gray-300 hover:text-rose-500 px-1 transition-opacity"
               aria-label="삭제"
             >
               <X size={14} />
             </button>
           </li>
         ))}
+        <li>
+          <button
+            type="button"
+            onClick={addAtEnd}
+            className="w-full flex items-center gap-2 px-2 py-2 text-gray-400 hover:bg-gray-50 text-sm"
+          >
+            <Plus size={16} />
+            <span>+ 항목 추가</span>
+          </button>
+        </li>
       </ul>
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={adding}
-          onChange={(e) => setAdding(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="추가할 항목 (Enter)"
-          className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400"
-        />
-        <button
-          type="button"
-          onClick={add}
-          disabled={!adding.trim()}
-          className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center gap-1"
-        >
-          <Plus size={14} /> 추가
-        </button>
-      </div>
+      <p className="text-[10px] text-gray-400 px-1">
+        Enter: 다음 항목 · Backspace(빈 줄): 삭제 · Ctrl+↑↓: 순서 이동
+      </p>
     </div>
   );
 }

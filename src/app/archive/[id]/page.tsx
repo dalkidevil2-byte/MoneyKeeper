@@ -577,9 +577,21 @@ function EntryFormSheet({
   onSaved: () => void;
 }) {
   const [schema, setSchema] = useState<ArchiveProperty[]>(initialSchema);
-  const [data, setData] = useState<Record<string, unknown>>(
-    (entry?.data as Record<string, unknown>) ?? prefillData ?? {},
-  );
+  const [data, setData] = useState<Record<string, unknown>>(() => {
+    if (entry?.data) return entry.data as Record<string, unknown>;
+    // 새 항목: schema 의 checklist 기본 항목으로 자동 채움 (template 동작)
+    const init: Record<string, unknown> = {};
+    for (const p of initialSchema) {
+      if (p.type === 'checklist' && p.options && p.options.length > 0) {
+        init[p.key] = p.options.map((label) => ({ label, done: false }));
+      }
+    }
+    // AI prefill 이 있으면 그걸로 덮어쓰기
+    if (prefillData) {
+      for (const [k, v] of Object.entries(prefillData)) init[k] = v;
+    }
+    return init;
+  });
   // 기존 항목은 보기 모드로 시작, 새 항목/AI prefill 은 편집 모드
   const [mode, setMode] = useState<'view' | 'edit'>(
     entry && !prefillData ? 'view' : 'edit',
@@ -1356,6 +1368,27 @@ function CollectionSettingsSheet({
                       placeholder="옵션 (쉼표로 구분)"
                       className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
                     />
+                  )}
+                  {p.type === 'checklist' && (
+                    <div>
+                      <textarea
+                        value={(p.options ?? []).join('\n')}
+                        onChange={(e) =>
+                          updateProp(i, {
+                            options: e.target.value
+                              .split('\n')
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          })
+                        }
+                        placeholder={'기본 항목 (한 줄에 하나씩)\n예) 여권\n충전기\n옷 2벌'}
+                        rows={Math.min(8, Math.max(4, (p.options ?? []).length + 1))}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded bg-white resize-y"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        새 항목 추가 시 이 목록이 미체크 상태로 자동으로 채워져요.
+                      </p>
+                    </div>
                   )}
                 </div>
               ))}
