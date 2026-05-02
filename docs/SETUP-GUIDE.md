@@ -51,10 +51,11 @@ GitHub 은 코드를 보관하고 Vercel 과 연결되는 다리 역할이에요
 - [ ] 이메일 인증 완료
 
 ### 1-2. 코드 fork
-- [ ] 친구가 알려준 저장소 URL 접속 (예: `https://github.com/원본주인/MoneyKeeper`)
+- [ ] 받은 GitHub 저장소 링크 접속 (예: `https://github.com/dalkidevil2-byte/MoneyKeeper`)
 - [ ] 우상단 **Fork** 버튼 클릭
 - [ ] **Create fork** 클릭 → 본인 계정에 복사됨
 - [ ] 주소가 `https://github.com/내username/MoneyKeeper` 로 바뀐 것 확인
+- [ ] 이 페이지 URL 메모 — 나중에 Vercel 에서 가져올 때 사용
 
 > 💡 **Fork 란?** 원본 코드를 본인 계정으로 복사하는 것. 본인 계정에서 자유롭게 수정 가능. 원본 주인이 코드 업데이트 해도 본인 fork 와 무관.
 
@@ -79,11 +80,13 @@ Supabase 는 데이터베이스 + 파일 저장소 서비스. **무료 한도** 
 - [ ] **Create new project** → 1~2분 대기 (커피 ☕)
 
 ### 2-3. DB 스키마 한 번에 실행
-- [ ] 좌측 사이드바 **SQL Editor** 클릭
+- [ ] 새 탭에서 **본인 GitHub fork** 열기 → 경로 따라가기:
+  `MoneyKeeper` → `src` → `db` → **`schema-template.sql`** 클릭
+- [ ] 우상단 **Raw** 버튼 클릭 → 페이지 전체 텍스트만 보임
+- [ ] **Ctrl+A** (전체선택) → **Ctrl+C** (복사)
+- [ ] 다시 Supabase 탭으로 → 좌측 사이드바 **SQL Editor** 클릭
 - [ ] 우상단 **+ New query** 클릭
-- [ ] 친구가 보내준 `schema-template.sql` 파일 열기 (메모장 등으로)
-- [ ] 파일 전체 내용 복사 (Ctrl+A → Ctrl+C)
-- [ ] SQL Editor 에 붙여넣기 (Ctrl+V)
+- [ ] 빈 영역에 **Ctrl+V** (붙여넣기)
 - [ ] 우하단 **Run** 클릭
 - [ ] **`Success. No rows returned`** 메시지 확인 ✅
 
@@ -251,7 +254,7 @@ URL 형태: `https://moneykeeper-xxx-yourname.vercel.app`
 
 ### Cloudflare R2 (10GB 무료 — 사진 첨부 많을 때)
 
-자세한 가이드: 친구가 보낸 `R2-SETUP.md` 참고.
+자세한 단계는 fork 한 저장소의 `docs/R2-SETUP.md` 파일 참고 (GitHub 에서 그 경로로 들어가면 보임).
 
 ### Google 캘린더 동기화 (옵션)
 
