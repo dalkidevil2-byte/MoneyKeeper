@@ -663,7 +663,8 @@ export type ArchivePropertyType =
   | 'checkbox'
   | 'currency'  // 금액
   | 'member'
-  | 'files';   // 첨부파일/이미지 (배열로 URL 저장)
+  | 'files'    // 첨부파일/이미지 (배열로 URL 저장)
+  | 'checklist'; // 체크리스트 — [{ label, done, note? }] 배열
 
 export interface ArchiveProperty {
   key: string;          // 내부 key (영문 권장)

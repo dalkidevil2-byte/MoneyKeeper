@@ -10,7 +10,7 @@ const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 const ALLOWED_TYPES = [
   'text', 'longtext', 'number', 'currency',
   'date', 'url', 'select', 'multiselect',
-  'rating', 'checkbox', 'files',
+  'rating', 'checkbox', 'files', 'checklist',
 ] as const;
 
 /**

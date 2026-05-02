@@ -305,6 +305,37 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                         </div>
                       );
                     }
+                    if (p.type === 'checklist') {
+                      const arr = Array.isArray(val)
+                        ? (val as Array<{ done?: boolean }>)
+                        : [];
+                      if (arr.length === 0) return null;
+                      const done = arr.filter((x) => x.done).length;
+                      const pct = (done / arr.length) * 100;
+                      const allDone = done === arr.length;
+                      return (
+                        <div key={p.key} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] text-gray-400">{p.label}</span>
+                            <span
+                              className={`text-[11px] font-semibold ${
+                                allDone ? 'text-emerald-600' : 'text-gray-600'
+                              }`}
+                            >
+                              {allDone ? '✓ 완료' : `${done}/${arr.length}`}
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                allDone ? 'bg-emerald-500' : 'bg-violet-400'
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={p.key} className="flex items-baseline gap-1.5">
                         <span className="text-gray-400 shrink-0">{p.label}</span>
@@ -731,6 +762,46 @@ function EntryFormSheet({
                       <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
                         {(val as string) || <span className="text-gray-300">—</span>}
                       </p>
+                    ) : p.type === 'checklist' ? (
+                      (() => {
+                        const arr = Array.isArray(val)
+                          ? (val as Array<{ label: string; done: boolean }>)
+                          : [];
+                        if (arr.length === 0)
+                          return <span className="text-sm text-gray-300">—</span>;
+                        const done = arr.filter((x) => x.done).length;
+                        return (
+                          <div>
+                            <div className="text-[11px] text-gray-500 mb-1">
+                              {done}/{arr.length} 완료
+                            </div>
+                            <ul className="space-y-1">
+                              {arr.map((it, i) => (
+                                <li key={i} className="flex items-center gap-2 text-sm">
+                                  <span
+                                    className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                                      it.done
+                                        ? 'bg-violet-600 border-violet-600 text-white'
+                                        : 'bg-white border-gray-300'
+                                    }`}
+                                  >
+                                    {it.done && <span className="text-[10px] leading-none">✓</span>}
+                                  </span>
+                                  <span
+                                    className={
+                                      it.done
+                                        ? 'line-through text-gray-400'
+                                        : 'text-gray-800'
+                                    }
+                                  >
+                                    {it.label}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })()
                     ) : p.type === 'files' ? (
                       (() => {
                         const arr = Array.isArray(val)
@@ -891,6 +962,7 @@ function EntryFormSheet({
                     <option value="rating">별점</option>
                     <option value="checkbox">체크박스</option>
                     <option value="files">파일/사진</option>
+                    <option value="checklist">체크리스트</option>
                   </select>
                   <div className="flex gap-2">
                     <button
@@ -1088,6 +1160,7 @@ function CollectionSettingsSheet({
     rating: '별점',
     checkbox: '체크박스',
     files: '파일/사진',
+    checklist: '체크리스트',
   };
 
   return (

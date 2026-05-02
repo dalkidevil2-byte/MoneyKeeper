@@ -136,6 +136,25 @@ export const ARCHIVE_TEMPLATES: ArchiveTemplate[] = [
       { key: 'memo', label: '메모', type: 'longtext' },
     ],
   },
+  {
+    key: 'packing',
+    name: '준비물',
+    emoji: '🎒',
+    color: '#10b981',
+    description: '여행 / 출장 / 등산 / 외출 챙길 것',
+    schema: [
+      { key: 'title', label: '목적지/이벤트', type: 'text', required: true },
+      {
+        key: 'category',
+        label: '종류',
+        type: 'select',
+        options: ['여행', '출장', '등산', '캠핑', '운동', '목욕탕', '병원', '기타'],
+      },
+      { key: 'date', label: '날짜', type: 'date' },
+      { key: 'items', label: '준비물', type: 'checklist' },
+      { key: 'memo', label: '메모', type: 'longtext' },
+    ],
+  },
 ];
 
 /** 빈 컬렉션 시작용 — 최소 schema */

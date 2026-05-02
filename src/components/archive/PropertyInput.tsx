@@ -1,6 +1,6 @@
 'use client';
 
-import { Star, Paperclip, X, Loader2, FileText, ImageIcon } from 'lucide-react';
+import { Star, Paperclip, X, Loader2, FileText, ImageIcon, Check, Plus, GripVertical } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ArchiveProperty } from '@/types';
 import { compressImageIfPossible } from '@/lib/compress-image';
@@ -126,6 +126,139 @@ function FilesInput({
 }
 
 void ImageIcon;
+void GripVertical;
+
+// ─── 체크리스트 ─────────────────────────────────
+type ChecklistItem = { label: string; done: boolean; note?: string };
+
+function ChecklistInput({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (v: ChecklistItem[]) => void;
+}) {
+  const items: ChecklistItem[] = Array.isArray(value)
+    ? (value as ChecklistItem[]).filter((x) => x && typeof x === 'object' && 'label' in x)
+    : [];
+  const [adding, setAdding] = useState('');
+
+  const toggle = (idx: number) => {
+    onChange(items.map((it, i) => (i === idx ? { ...it, done: !it.done } : it)));
+  };
+  const remove = (idx: number) => {
+    onChange(items.filter((_, i) => i !== idx));
+  };
+  const updateLabel = (idx: number, label: string) => {
+    onChange(items.map((it, i) => (i === idx ? { ...it, label } : it)));
+  };
+  const move = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = items.slice();
+    [next[idx], next[j]] = [next[j], next[idx]];
+    onChange(next);
+  };
+  const add = () => {
+    const v = adding.trim();
+    if (!v) return;
+    onChange([...items, { label: v, done: false }]);
+    setAdding('');
+  };
+
+  const doneCount = items.filter((it) => it.done).length;
+
+  return (
+    <div className="space-y-2">
+      {items.length > 0 && (
+        <div className="text-[11px] text-gray-500">
+          {doneCount}/{items.length} 완료
+          {doneCount === items.length && items.length > 0 && (
+            <span className="ml-1 text-emerald-500 font-semibold">✓ 모두 완료</span>
+          )}
+        </div>
+      )}
+      <ul className="space-y-1">
+        {items.map((it, i) => (
+          <li
+            key={i}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 group"
+          >
+            <button
+              type="button"
+              onClick={() => toggle(i)}
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                it.done
+                  ? 'bg-violet-600 border-violet-600 text-white'
+                  : 'bg-white border-gray-300'
+              }`}
+              aria-label={it.done ? '완료 취소' : '완료'}
+            >
+              {it.done && <Check size={12} strokeWidth={3} />}
+            </button>
+            <input
+              type="text"
+              value={it.label}
+              onChange={(e) => updateLabel(i, e.target.value)}
+              className={`flex-1 bg-transparent text-sm focus:outline-none ${
+                it.done ? 'line-through text-gray-400' : 'text-gray-800'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => move(i, -1)}
+              disabled={i === 0}
+              className="text-xs text-gray-400 disabled:opacity-30 px-1"
+              title="위로"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => move(i, 1)}
+              disabled={i === items.length - 1}
+              className="text-xs text-gray-400 disabled:opacity-30 px-1"
+              title="아래로"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="text-rose-400 hover:text-rose-500 px-1"
+              aria-label="삭제"
+            >
+              <X size={14} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={adding}
+          onChange={(e) => setAdding(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="추가할 항목 (Enter)"
+          className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={!adding.trim()}
+          className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-40 inline-flex items-center gap-1"
+        >
+          <Plus size={14} /> 추가
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   prop: ArchiveProperty;
@@ -268,6 +401,8 @@ export default function PropertyInput({ prop, value, onChange }: Props) {
       );
     case 'files':
       return <FilesInput value={v} onChange={onChange} />;
+    case 'checklist':
+      return <ChecklistInput value={v} onChange={onChange} />;
     default:
       return (
         <input
@@ -302,6 +437,12 @@ export function formatPropertyDisplay(prop: ArchiveProperty, value: unknown): st
       const arr = Array.isArray(value) ? (value as Array<{ name?: string }>) : [];
       if (arr.length === 0) return '';
       return `📎 ${arr.length}개`;
+    }
+    case 'checklist': {
+      const arr = Array.isArray(value) ? (value as Array<{ done?: boolean }>) : [];
+      if (arr.length === 0) return '';
+      const done = arr.filter((x) => x.done).length;
+      return `☑ ${done}/${arr.length}`;
     }
     default:
       return String(value);

@@ -9,7 +9,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const ALLOWED_TYPES = [
   'text', 'longtext', 'number', 'currency',
   'date', 'url', 'select', 'multiselect',
-  'rating', 'checkbox', 'files',
+  'rating', 'checkbox', 'files', 'checklist',
 ] as const;
 
 /**

@@ -86,9 +86,15 @@ ${schemaGuide}
 - checkbox 는 true/false.
 - url 은 http(s):// 시작.
 - longtext 는 여러 줄 가능. 메모/감상/요약 등.
+- checklist 는 [{label, done}] 객체 배열. 텍스트가 "준비물 리스트", "할일 목록" 같으면
+  각 항목을 분리해서 label 로. done 은 명시적으로 "완료/체크" 라고 안 쓰면 false.
+  예: "여행 준비물: 여권, 충전기, 옷" → [{label:"여권",done:false},{label:"충전기",done:false},{label:"옷",done:false}]
 - 첫 속성(보통 제목)은 가능한 한 채움. 텍스트의 핵심을 요약.
+- 사용자가 "여행/등산/출장/X 준비물" 처럼 구체적 목적지를 말하면, 그 목적에 맞는
+  현실적 준비물 목록을 checklist 로 자동 생성해도 됨 (단, 기본 입력 텍스트 안의
+  내용을 우선).
 
-지원 타입: text, longtext, number, currency, date, url, select, multiselect, rating, checkbox`;
+지원 타입: text, longtext, number, currency, date, url, select, multiselect, rating, checkbox, files, checklist`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -130,6 +136,32 @@ ${schemaGuide}
         cleanData[p.key] = Boolean(v);
       } else if (p.type === 'multiselect') {
         cleanData[p.key] = Array.isArray(v) ? v : [String(v)];
+      } else if (p.type === 'checklist') {
+        // [{label, done}] 형식 검증 + 정리
+        if (Array.isArray(v)) {
+          const items = v
+            .map((it) => {
+              if (!it) return null;
+              if (typeof it === 'string') return { label: it, done: false };
+              if (typeof it === 'object') {
+                const item = it as { label?: unknown; done?: unknown };
+                const label = String(item.label ?? '').trim();
+                if (!label) return null;
+                return { label, done: Boolean(item.done) };
+              }
+              return null;
+            })
+            .filter(Boolean);
+          if (items.length > 0) cleanData[p.key] = items;
+        } else if (typeof v === 'string') {
+          // "a, b, c" 또는 줄바꿈 분리 string 도 허용
+          const items = v
+            .split(/[,\n]+/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((label) => ({ label, done: false }));
+          if (items.length > 0) cleanData[p.key] = items;
+        }
       } else {
         cleanData[p.key] = v;
       }
