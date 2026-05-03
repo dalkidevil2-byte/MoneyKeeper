@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, Wallet, CreditCard, PiggyBank, Users, Check, Pencil, T
 import Link from 'next/link';
 import { useAccounts, usePaymentMethods, useBudgets, useMembers, useCustomCategories, useFixedExpenseTemplates } from '@/hooks/useAccounts';
 import AiUsageCard from '@/components/AiUsageCard';
+import CollapsibleSection from '@/components/CollapsibleSection';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
@@ -268,14 +269,16 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="px-4 py-4 space-y-6">
+      <div className="px-4 py-4 space-y-3">
 
         {/* 구성원 관리 */}
-        <section>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <Users size={16} className="text-indigo-600" /> 구성원
-            </h2>
+        <CollapsibleSection
+          storageKey="members"
+          title="구성원"
+          icon={<Users size={16} className="text-indigo-600" />}
+          summary={`${members.length}명`}
+        >
+          <div className="flex items-center justify-end mb-2 px-1">
             <button onClick={() => setAddingMember(!addingMember)} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
               <Plus size={14} /> 추가
             </button>
@@ -390,14 +393,16 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </section>
+        </CollapsibleSection>
 
         {/* 계좌 관리 */}
-        <section>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <Wallet size={16} className="text-indigo-600" /> 계좌 / 자산
-            </h2>
+        <CollapsibleSection
+          storageKey="accounts"
+          title="계좌 / 자산"
+          icon={<Wallet size={16} className="text-indigo-600" />}
+          summary={`${accounts.length}개`}
+        >
+          <div className="flex items-center justify-end mb-2 px-1">
             <button onClick={() => setAddingAccount(!addingAccount)} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
               <Plus size={14} /> 추가
             </button>
@@ -496,14 +501,16 @@ export default function SettingsPage() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
         {/* 결제수단 관리 */}
-        <section>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <CreditCard size={16} className="text-indigo-600" /> 결제수단
-            </h2>
+        <CollapsibleSection
+          storageKey="payments"
+          title="결제수단"
+          icon={<CreditCard size={16} className="text-indigo-600" />}
+          summary={`${paymentMethods.length}개`}
+        >
+          <div className="flex items-center justify-end mb-2 px-1">
             <button onClick={() => setAddingPM(!addingPM)} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
               <Plus size={14} /> 추가
             </button>
@@ -647,14 +654,16 @@ export default function SettingsPage() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
         {/* 예산 관리 */}
-        <section>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <PiggyBank size={16} className="text-indigo-600" /> 예산 설정
-            </h2>
+        <CollapsibleSection
+          storageKey="budgets"
+          title="예산 설정"
+          icon={<PiggyBank size={16} className="text-indigo-600" />}
+          summary={`${budgets.length}건`}
+        >
+          <div className="flex items-center justify-end mb-2 px-1">
             <button onClick={() => setAddingBudget(!addingBudget)} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
               <Plus size={14} /> 이번 달 예산 추가
             </button>
@@ -750,7 +759,7 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </section>
+        </CollapsibleSection>
 
         {/* 고정지출 관리 — 전용 페이지로 이동 */}
         <section>
@@ -1012,19 +1021,19 @@ export default function SettingsPage() {
         </section>
 
         {/* 카테고리 관리 */}
-        <section>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <Tag size={16} className="text-indigo-600" /> 카테고리 관리
-            </h2>
-            <div className="flex gap-2">
-              <button onClick={() => { setAddingCatSub(!addingCatSub); setAddingCatMain(false); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
-                <Plus size={14} /> 소분류
-              </button>
-              <button onClick={() => { setAddingCatMain(!addingCatMain); setAddingCatSub(false); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
-                <Plus size={14} /> 대분류
-              </button>
-            </div>
+        <CollapsibleSection
+          storageKey="categories"
+          title="카테고리 관리"
+          icon={<Tag size={16} className="text-indigo-600" />}
+          summary={`${customCategories.length}개`}
+        >
+          <div className="flex items-center justify-end gap-2 mb-2 px-1">
+            <button onClick={() => { setAddingCatSub(!addingCatSub); setAddingCatMain(false); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
+              <Plus size={14} /> 소분류
+            </button>
+            <button onClick={() => { setAddingCatMain(!addingCatMain); setAddingCatSub(false); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
+              <Plus size={14} /> 대분류
+            </button>
           </div>
 
           {/* 대분류 추가 */}
@@ -1125,7 +1134,7 @@ export default function SettingsPage() {
             )}
           </div>
           <p className="text-xs text-gray-400 px-1 mt-1.5">기본 카테고리는 변경할 수 없어요</p>
-        </section>
+        </CollapsibleSection>
 
         {/* AI 사용량 / 비용 */}
         <AiUsageCard />
@@ -1142,9 +1151,12 @@ export default function SettingsPage() {
         </section>
 
         {/* Notion 연동 안내 */}
-        <section>
-          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide px-1 mb-3">Notion 연동</h2>
-          <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+        <CollapsibleSection
+          storageKey="notion"
+          title="Notion 연동"
+          icon={<span className="text-base">📋</span>}
+        >
+          <div className="bg-white rounded-2xl p-2 space-y-3">
             <div className="flex items-start gap-3">
               <span className="text-2xl">📋</span>
               <div>
@@ -1166,7 +1178,7 @@ export default function SettingsPage() {
               <p>4. Vercel에서 Redeploy 후 사용 가능</p>
             </div>
           </div>
-        </section>
+        </CollapsibleSection>
       </div>
     </div>
   );
