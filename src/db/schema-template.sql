@@ -676,6 +676,77 @@ CREATE TRIGGER trg_card_stmt_updated_at
   BEFORE UPDATE ON card_statements
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+-- ARCHIVE_TEMPLATE_START
+-- 자동 생성됨 — scripts/dump-archive-template.mjs 로 갱신하세요.
+-- 마지막 dump: 2026-05-03T07:53:57.999Z
+-- 컬렉션 16개
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '3줄일기', '📔', '#f59e0b', '하루 3줄로 짧게 기록', '[{"key":"date","type":"date","label":"날짜","required":true},{"key":"__","type":"text","label":"오늘은 무슨일이?"},{"key":"tomorrow","type":"longtext","label":"오늘의 인사이트"},{"key":"gratitude_diary","type":"longtext","label":"감사일기"}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='3줄일기' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '영어 한마디', '🗣️', '#4CAF50', '매일 한마디씩 비즈니스 영어 회화 패턴 학습', '[{"key":"title","type":"text","label":"한마디","required":true},{"key":"pattern","type":"longtext","label":"회화 패턴"},{"key":"date","type":"date","label":"날짜"}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='영어 한마디' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '맛집 리스트', '🍽️', '#ff6347', '추천하는 맛집을 기록하는 리스트', '[{"key":"title","type":"text","label":"맛집 이름","required":true},{"key":"location","type":"text","label":"위치","required":true},{"key":"menu","type":"longtext","label":"메뉴"},{"key":"cuisine","type":"select","label":"음식 종류","options":["한식","중식","일식","양식","패스트푸드"]},{"key":"rating","type":"rating","label":"평점","required":false},{"key":"visit_date","type":"date","label":"방문 날짜","required":false},{"key":"features","type":"longtext","label":"특징"},{"key":"business_hours","type":"text","label":"영업시간"},{"key":"recommended_menu","type":"longtext","label":"추천메뉴"},{"key":"notes","type":"longtext","label":"메모","required":false},{"key":"url","type":"url","label":"웹사이트"},{"key":"field_12","type":"url","label":"출처"}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='맛집 리스트' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '운동 따라하기', '🏋️', '#4caf50', '어떤 운동을 할지 모르겠을때 따라할 수 있도록', '[{"key":"title","type":"text","label":"운동 이름","required":true},{"key":"url","type":"url","label":"URL","required":false},{"key":"exercise_date","type":"date","label":"운동 날짜","required":true},{"key":"duration","type":"number","label":"운동 시간 (분)","required":true},{"key":"intensity","type":"select","label":"운동 강도","options":["낮음","보통","높음"],"required":true},{"key":"notes","type":"longtext","label":"메모","required":false}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='운동 따라하기' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '백대명산', '🏔️', '#4caf50', '등산 기록을 관리하는 컬렉션', '[{"key":"challenge_number","type":"number","label":"챌린지 번호"},{"key":"title","type":"text","label":"산 이름","required":true},{"key":"hike_date","type":"date","label":"등산 날짜","required":true},{"key":"difficulty","type":"select","label":"난이도","options":["쉬움","보통","어려움"]},{"key":"duration","type":"number","label":"소요 시간 (시간)","required":true},{"key":"companions","type":"multiselect","label":"동행자","options":["혼자","친구","가족","동호회"]},{"key":"notes","type":"longtext","label":"메모"},{"key":"field_7","type":"files","label":"사진"}]'::jsonb, 0, 'gallery', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='백대명산' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '여행 준비물 리스트', '🧳', '#4a90e2', '여행에 필요한 준비물을 체크할 수 있는 리스트', '[{"key":"title","type":"text","label":"여행 제목","required":true},{"key":"travel_type","type":"select","label":"여행 종류","options":["국내 장기 여행","국내 단기 여행","해외 여행","출장","등산","다낭 여행"]},{"key":"departure_date","type":"date","label":"출발 날짜","required":true},{"key":"return_date","type":"date","label":"귀환 날짜"},{"key":"checklist","type":"checklist","label":"필수 리스트"},{"key":"toiletries","type":"checklist","label":"세면도구"},{"key":"clothing","type":"checklist","label":"의류"},{"key":"electronics","type":"checklist","label":"전자기기"},{"key":"documents","type":"checklist","label":"서류"},{"key":"snacks","type":"checklist","label":"간식"},{"key":"first_aid_kit","type":"checklist","label":"의약품"},{"key":"other_items","type":"checklist","label":"기타항목"}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='여행 준비물 리스트' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '골프 영상', '⛳️', '#4caf50', '골프 관련 영상을 저장하는 컬렉션', '[{"key":"title","type":"text","label":"제목","required":true},{"key":"video_url","type":"url","label":"영상 URL","required":true},{"key":"upload_date","type":"date","label":"업로드 날짜","required":true},{"key":"tags","type":"multiselect","label":"태그","options":["드라이버","퍼팅","아이언","팟","기타"]},{"key":"notes","type":"longtext","label":"노트","required":false}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='골프 영상' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '아이 학원 학습 상담', '📚', '#4f46e5', '아이의 학습 상담 내용을 기록합니다.', '[{"key":"academy_name","type":"text","label":"학원이름"},{"key":"consultation_date","type":"date","label":"상담 날짜","required":true},{"key":"subject","type":"multiselect","label":"과목","options":["수학","영어","과학","사회","예술"]},{"key":"issues","type":"longtext","label":"문제점"},{"key":"recommendations","type":"longtext","label":"추천 사항"},{"key":"follow_up_date","type":"date","label":"후속 상담 날짜"}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='아이 학원 학습 상담' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '차량 관리', '🚗', '#4caf50', '차량의 정비 및 주행 정보를 관리하는 컬렉션', '[{"key":"field5","type":"text","label":"제목"},{"key":"field6","type":"multiselect","label":"속성","options":["보험","정비","수리"]},{"key":"mileage","type":"longtext","label":"메모","required":true},{"key":"maintenance_date","type":"date","label":"날짜","required":true},{"key":"notes","type":"number","label":"주행거리 (km)","required":false},{"key":"field4","type":"files","label":"첨부"}]'::jsonb, 0, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='차량 관리' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '이쁜말 모음', '💖', '#ff6f61', '따뜻한 마음을 전하는 이쁜말들', '[{"key":"title","type":"text","label":"제목","required":true},{"key":"meaning","type":"longtext","label":"의미","required":true},{"key":"usage_example","type":"longtext","label":"사용 예시","required":false},{"key":"category","type":"select","label":"카테고리","options":["사랑","친구","격려","감사","기타"]},{"key":"field_5","type":"url","label":"출처"}]'::jsonb, 1, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='이쁜말 모음' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '독서 목록', '📚', '#10b981', '읽고 있는/읽을/읽은 책', '[{"key":"title","type":"text","label":"제목","required":true},{"key":"author","type":"text","label":"저자"},{"key":"status","type":"select","label":"상태","options":["읽고 싶은","읽는 중","완독","중단"]},{"key":"rating","type":"rating","label":"별점"},{"key":"started_at","type":"date","label":"시작일"},{"key":"finished_at","type":"date","label":"완독일"},{"key":"review","type":"longtext","label":"한줄평/감상"}]'::jsonb, 2, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='독서 목록' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '경조사', '💐', '#ec4899', '축의금/조의금 등 경조사 기록', '[{"key":"who","type":"text","label":"대상","required":true},{"key":"occasion","type":"select","label":"행사","options":["결혼","돌잔치","장례","환갑","칠순","입학","졸업","기타"]},{"key":"date","type":"date","label":"날짜"},{"key":"amount","type":"currency","label":"금액"},{"key":"direction","type":"select","label":"방향","options":["전달","수령"]},{"key":"memo","type":"longtext","label":"메모"}]'::jsonb, 4, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='경조사' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '레시피', '🍳', '#ef4444', '요리 레시피와 링크 보관', '[{"key":"name","type":"text","label":"이름","required":true},{"key":"category","type":"select","label":"분류","options":["한식","양식","일식","중식","디저트","음료","기타"]},{"key":"url","type":"url","label":"레시피 URL"},{"key":"cook_time","type":"number","label":"조리시간 (분)"},{"key":"rating","type":"rating","label":"평점"},{"key":"ingredients","type":"longtext","label":"재료"},{"key":"cooked_count","type":"rating","label":"요리 횟수","options":["1","2","3","4","5","6","7","8","9","10"]},{"key":"memo","type":"longtext","label":"메모"},{"key":"cooked_dates","type":"longtext","label":"요리일 기록"}]'::jsonb, 5, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='레시피' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '드라마/영화', '🎬', '#8b5cf6', '본 드라마, 영화 기록', '[{"key":"title","type":"text","label":"제목","required":true},{"key":"kind","type":"select","label":"종류","options":["드라마","영화","예능","다큐","애니"]},{"key":"status","type":"select","label":"상태","options":["보고 싶은","보는 중","완료","중단"]},{"key":"rating","type":"rating","label":"별점"},{"key":"genre","type":"multiselect","label":"장르","options":["로맨스","액션","스릴러","코미디","판타지","SF","드라마"]},{"key":"platform","type":"text","label":"플랫폼"},{"key":"review","type":"longtext","label":"한줄평"},{"key":"watch_start_date","type":"date","label":"시청 시작일"},{"key":"watch_end_date","type":"date","label":"시청 종료일"},{"key":"watch_day","type":"multiselect","label":"시청 요일","options":["월","화","수","목","금","토","일"]},{"key":"watch_time","type":"text","label":"시청 시간"},{"key":"main_actor","type":"text","label":"주연배우"}]'::jsonb, 6, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='드라마/영화' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '갖고 싶은 것', '🎁', '#3b82f6', '사고 싶은 물건/선물', '[{"key":"name","type":"text","label":"이름","required":true},{"key":"price","type":"currency","label":"가격"},{"key":"url","type":"url","label":"URL"},{"key":"priority","type":"rating","label":"우선순위"},{"key":"bought","type":"checkbox","label":"구매 완료"},{"key":"memo","type":"longtext","label":"메모"}]'::jsonb, 7, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='갖고 싶은 것' AND is_active=true);
+
+INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
+SELECT '00000000-0000-0000-0000-000000000001', '여행 기록', '🌍', '#4caf50', '여행의 추억을 기록하세요.', '[{"key":"title","type":"text","label":"여행지","required":true},{"key":"travel_with","type":"multiselect","label":"함께 간 사람","options":["가족","친구","연인","혼자"]},{"key":"start_date","type":"date","label":"시작 날짜","required":true},{"key":"end_date","type":"date","label":"종료 날짜","required":true},{"key":"duration","type":"text","label":"여행 기간 (일)","required":true},{"key":"field_7","type":"currency","label":"비용"},{"key":"highlights","type":"longtext","label":"하이라이트"}]'::jsonb, 8, 'list', true
+WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='여행 기록' AND is_active=true);
+
+-- ARCHIVE_TEMPLATE_END
+
 -- ============================================================
 -- ✅ 완료! 'Success. No rows returned' 가 보이면 정상.
 -- 이제 Vercel 배포로 넘어가세요.

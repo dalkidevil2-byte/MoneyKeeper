@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "dump:archive": "node --env-file=.env.local scripts/dump-archive-template.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
