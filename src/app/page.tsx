@@ -8,6 +8,7 @@ import BudgetSummary from '@/components/home/BudgetSummary';
 import StockSummary from '@/components/home/StockSummary';
 import TodoSummary from '@/components/home/TodoSummary';
 import NotificationBell from '@/components/todo/NotificationBell';
+import ActivityChips from '@/components/todo/ActivityChips';
 import { STOCKS_DISABLED } from '@/lib/app-flags';
 
 dayjs.locale('ko');
@@ -30,6 +31,11 @@ export default function HubPage() {
           </p>
         </div>
         <NotificationBell />
+      </div>
+
+      {/* 활동 추적 — 빠른 시작/정지 */}
+      <div className="px-5 mb-3">
+        <ActivityChips />
       </div>
 
       {/* 앱 카드들 */}
