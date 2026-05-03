@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { sendTelegramMessage } from '@/lib/telegram';
+import { sendPushToHousehold, isPushConfigured } from '@/lib/web-push';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -153,6 +154,26 @@ async function handle(req: NextRequest) {
             ? `${remaining}분 후`
             : `${Math.floor(remaining / 60)}시간 ${remaining % 60}분 후`;
       const dueLabel = c.due_at.format('HH:mm');
+
+      // 같은 candidate(task+occurrence+lead) 에 대해 push 는 1번만
+      const candidateSent = c.member_ids.some((mid) =>
+        sentSet.has(`${c.task_id}|${c.occurrence_date}|${c.lead}|${mid}`),
+      );
+      if (!candidateSent && isPushConfigured()) {
+        const pushTitle = `🔔 ${c.task_title}`;
+        const pushBody = `⏰ ${dueLabel} · ${remainLabel}`;
+        try {
+          await sendPushToHousehold(householdId, {
+            title: pushTitle,
+            body: pushBody,
+            tag: `task-${c.task_id}-${c.occurrence_date}-${c.lead}`,
+            url: '/todo',
+          });
+        } catch (e) {
+          // push 실패는 telegram 흐름 막지 않음
+          console.warn('[dispatch] push 실패', e);
+        }
+      }
 
       for (const mid of c.member_ids) {
         const m = memberMap.get(mid);

@@ -282,6 +282,46 @@ URL 형태: `https://moneykeeper-xxx-yourname.vercel.app`
 
 기본 셋업 다음에 필요할 때 진행. 스킵해도 앱 동작에 영향 X.
 
+### 앱 푸시 알림 (5분, 무료)
+
+PWA 로 추가한 앱이 닫혀있어도 할일/일정 알림 받기 (텔레그램 대안).
+
+#### A) VAPID 키 발급 (한 번만)
+
+브라우저 콘솔(F12) 에서 한 줄 실행:
+
+```js
+// 1) web-push 설치 안 했으면 온라인 도구 사용:
+// https://www.attheminute.com/vapid-key-generator
+// 2) 또는 Node.js 있으면: npx web-push generate-vapid-keys
+```
+
+발급되는 두 키 메모:
+- **Public Key** (긴 문자열)
+- **Private Key** (긴 문자열)
+
+#### B) Vercel 환경변수 추가
+
+| Name | Value |
+|---|---|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 발급받은 Public Key |
+| `VAPID_PRIVATE_KEY` | 발급받은 Private Key |
+| `VAPID_SUBJECT` | `mailto:본인이메일@gmail.com` |
+
+저장 후 **Redeploy**.
+
+#### C) 앱에서 알림 켜기
+
+- [ ] 앱 → **할일** → 우상단 ⚙️ (설정)
+- [ ] **🔔 앱 알림 (PWA 푸시)** 섹션에서 **알림 켜기** 클릭
+- [ ] 브라우저 권한 허용
+- [ ] **🧪 테스트 알림 보내기** 클릭 → 알림 와야 정상
+
+#### 모바일 주의사항
+
+- **iOS**: 16.4+ 에서만 PWA 푸시 지원. 반드시 Safari → 공유 → "홈 화면에 추가" 한 후 그 아이콘으로 진입한 상태에서 알림 켜기
+- **Android**: Chrome 으로 홈 화면 추가 → 권한 허용 → 정상 동작
+
 ### 텔레그램 봇 (10분, 무료)
 
 할일 알림을 텔레그램으로 받거나, AI 와 텔레그램에서 대화 가능.

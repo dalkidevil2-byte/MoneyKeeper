@@ -6,6 +6,7 @@ import 'dayjs/locale/ko';
 import { Plus, Trash2, RefreshCw, ExternalLink, X, Settings as SettingsIcon } from 'lucide-react';
 import type { TodoNotionSource } from '@/types';
 import GoogleCalendarSection from '@/components/todo/GoogleCalendarSection';
+import PushNotificationSetup from '@/components/PushNotificationSetup';
 
 dayjs.locale('ko');
 
@@ -36,6 +37,10 @@ export default function TodoSettingsPage() {
       </div>
 
       <div className="px-5 space-y-5">
+        <section>
+          <h2 className="text-sm font-bold text-gray-700 mb-2">🔔 앱 알림 (PWA 푸시)</h2>
+          <PushNotificationSetup />
+        </section>
         <GoogleCalendarSection />
         <NotificationSettingsSection />
         <TelegramSettingsSection />
