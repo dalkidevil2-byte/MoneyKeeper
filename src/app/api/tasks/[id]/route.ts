@@ -101,6 +101,7 @@ export async function PATCH(
       'type',
       'estimated_minutes',
       'archive_links',
+      'transaction_links',
       'reminders',
     ] as const;
 

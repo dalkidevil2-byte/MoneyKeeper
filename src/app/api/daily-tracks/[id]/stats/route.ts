@@ -2,6 +2,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const KST = 'Asia/Seoul';
 
 // GET /api/daily-tracks/[id]/stats?days=84
 // 최근 N일 일별 카운트 + streak / total / 평균 통계
@@ -23,7 +29,7 @@ export async function GET(
       return NextResponse.json({ error: '트랙을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const today = dayjs();
+    const today = dayjs().tz(KST);
     const startDate = today.subtract(days - 1, 'day').format('YYYY-MM-DD');
 
     // 전체 로그 조회 (streak 계산을 위해 days 보다 더 길게)

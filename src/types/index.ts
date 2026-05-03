@@ -367,6 +367,8 @@ export interface Task {
   estimated_minutes?: number | null;
   /** 아카이브 컬렉션 항목 연결 (Phase A — 양방향 relation) */
   archive_links?: Array<{ collection_id: string; entry_id: string }>;
+  /** 가계부 거래 연결 (M:N) — expense_* inline 필드 대체 */
+  transaction_links?: Array<{ transaction_id: string }>;
   /** 다중 알림 — 분 전. 0=정시, 30=30분전, 1440=1일전 등 */
   reminders?: Array<{ min: number }>;
   /** 중복 발송 방지용 — 어떤 알림을 어느 날짜에 보냈는지 */
@@ -467,6 +469,7 @@ export interface CreateTaskInput {
   expense_payment_method_id?: string | null;
   estimated_minutes?: number | null;
   archive_links?: Array<{ collection_id: string; entry_id: string }>;
+  transaction_links?: Array<{ transaction_id: string }>;
   reminders?: Array<{ min: number }>;
 }
 

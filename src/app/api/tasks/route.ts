@@ -94,10 +94,48 @@ export async function GET(req: NextRequest) {
         sessionMap[tid] = (sessionMap[tid] ?? 0) + minutes;
       }
     }
+    // 연결된 가계부 거래 합산 (transaction_links → 총액 / 건수)
+    const txTotalMap: Record<string, { total: number; count: number }> = {};
+    {
+      const txIds = new Set<string>();
+      for (const t of tasksData) {
+        const links = (t.transaction_links as Array<{ transaction_id: string }> | undefined) ?? [];
+        for (const l of links) if (l?.transaction_id) txIds.add(l.transaction_id);
+      }
+      if (txIds.size > 0) {
+        const { data: txs } = await supabase
+          .from('transactions')
+          .select('id, amount, type')
+          .in('id', Array.from(txIds));
+        const txMap: Record<string, { amount: number; type: string }> = {};
+        for (const tx of txs ?? []) {
+          txMap[tx.id as string] = {
+            amount: Number(tx.amount) || 0,
+            type: tx.type as string,
+          };
+        }
+        for (const t of tasksData) {
+          const links = (t.transaction_links as Array<{ transaction_id: string }> | undefined) ?? [];
+          if (links.length === 0) continue;
+          let total = 0;
+          let count = 0;
+          for (const l of links) {
+            const tx = txMap[l.transaction_id];
+            if (!tx) continue;
+            // 지출은 양수, 수입은 음수로 합산해서 "순지출" 표현
+            total += tx.type === 'expense' ? tx.amount : -tx.amount;
+            count++;
+          }
+          txTotalMap[t.id as string] = { total, count };
+        }
+      }
+    }
+
     const enriched = tasksData.map((t) => ({
       ...t,
       checklist_summary: checklistMap[t.id as string] ?? null,
       session_total_minutes: sessionMap[t.id as string] ?? 0,
+      transaction_summary: txTotalMap[t.id as string] ?? null,
     }));
 
     return NextResponse.json({ tasks: enriched });
@@ -165,6 +203,7 @@ export async function POST(req: NextRequest) {
       expense_payment_method_id: body.expense_payment_method_id ?? null,
       estimated_minutes: body.estimated_minutes ?? null,
       archive_links: Array.isArray(body.archive_links) ? body.archive_links : [],
+      transaction_links: Array.isArray(body.transaction_links) ? body.transaction_links : [],
       reminders: Array.isArray(body.reminders) ? body.reminders : [],
       status: 'pending' as const,
       is_active: true,

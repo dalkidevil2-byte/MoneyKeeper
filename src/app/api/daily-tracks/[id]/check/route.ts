@@ -2,6 +2,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const KST = 'Asia/Seoul';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -14,7 +20,7 @@ export async function POST(
   const supabase = createServerSupabaseClient();
   try {
     const body = await req.json().catch(() => ({}));
-    const doneOn: string = body.done_on ?? dayjs().format('YYYY-MM-DD');
+    const doneOn: string = body.done_on ?? dayjs().tz(KST).format('YYYY-MM-DD');
     const memberId: string | null = body.member_id ?? null;
 
     const { data: track } = await supabase
@@ -77,7 +83,7 @@ export async function DELETE(
     if (!track) {
       return NextResponse.json({ error: '트랙 없음' }, { status: 404 });
     }
-    const today = dayjs();
+    const today = dayjs().tz(KST);
     const periodStart =
       track.period_unit === 'week'
         ? today.startOf('week').format('YYYY-MM-DD')

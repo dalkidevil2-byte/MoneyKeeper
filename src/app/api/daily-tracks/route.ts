@@ -2,7 +2,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import type { CreateDailyTrackInput, DailyTrack } from '@/types';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const KST = 'Asia/Seoul';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -35,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (trackIds.length === 0) return NextResponse.json({ tracks: [] });
 
     // 각 track 의 현재 주기 시작 일자 결정
-    const today = dayjs();
+    const today = dayjs().tz(KST);
     const periodStart = (period: string): string => {
       if (period === 'week') return today.startOf('week').format('YYYY-MM-DD');
       if (period === 'month') return today.startOf('month').format('YYYY-MM-DD');
