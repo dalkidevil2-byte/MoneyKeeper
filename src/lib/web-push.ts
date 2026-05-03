@@ -70,7 +70,10 @@ export async function sendPushToHousehold(
             keys: { p256dh: s.p256dh as string, auth: s.auth as string },
           },
           data,
-          { TTL: 60 * 60 * 24 }, // 24시간
+          {
+            TTL: 60 * 60 * 24, // 24시간
+            urgency: 'high', // iOS 즉시 전달 (저전력 상태에서도 깨움)
+          },
         );
         sent += 1;
       } catch (e) {
