@@ -170,6 +170,7 @@
     animation: glow 1.5s ease-in-out infinite;
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
   <div class="stage">
@@ -366,7 +367,8 @@
   <div class="controls">
     <button id="play">▶ 재생</button>
     <button id="restart">⟲ 처음부터</button>
-    <button id="record" title="이 버튼 누르면 컨트롤 바가 사라져서 깔끔하게 녹화 가능">🎥 녹화 모드</button>
+    <button id="record" title="화면녹화로 영상 만들기">🎥 녹화 모드</button>
+    <button id="downloadAll" title="8개 슬라이드를 PNG로 한 번에 다운로드 — Vrew에 업로드용" style="background:linear-gradient(135deg,#fbbf24,#ec4899);color:#0f172a;font-weight:800;">📸 PNG 8장 다운로드</button>
     <span id="time" style="font-variant-numeric:tabular-nums;opacity:.7;">0 / 55s</span>
   </div>
 
@@ -501,6 +503,55 @@
   const readyScreen = document.getElementById('readyScreen');
   const startNowBtn = document.getElementById('startNow');
   const countdown = document.getElementById('countdown');
+
+  // 📸 8개 슬라이드를 PNG로 일괄 다운로드 — Vrew 업로드용
+  const downloadAllBtn = document.getElementById('downloadAll');
+  downloadAllBtn.onclick = async () => {
+    if (typeof html2canvas === 'undefined') {
+      alert('html2canvas 라이브러리 로딩 실패. 새로고침 후 다시 시도해주세요.');
+      return;
+    }
+    downloadAllBtn.disabled = true;
+    downloadAllBtn.textContent = '📸 변환 중... (잠시만요)';
+    stop();
+    try {
+      for (let idx = 0; idx < scenes.length; idx++) {
+        // 그 씬만 보이게
+        scenes.forEach((s, si) => {
+          s.classList.toggle('active', si === idx);
+        });
+        // DOM rendering 시간 확보
+        await new Promise(r => setTimeout(r, 600));
+        // 캡처
+        const canvas = await html2canvas(stage, {
+          width: 1080,
+          height: 1920,
+          windowWidth: 1080,
+          windowHeight: 1920,
+          scale: 1,
+          useCORS: true,
+          backgroundColor: null,
+        });
+        // 다운로드
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `moneykeeper-scene-${String(idx + 1).padStart(2, '0')}.png`;
+        a.click();
+        downloadAllBtn.textContent = `📸 ${idx + 1} / ${scenes.length}`;
+        await new Promise(r => setTimeout(r, 200));
+      }
+      downloadAllBtn.textContent = '✅ 완료! 다운로드 폴더 확인';
+      setTimeout(() => {
+        downloadAllBtn.textContent = '📸 PNG 8장 다운로드';
+        downloadAllBtn.disabled = false;
+      }, 3000);
+    } catch (e) {
+      console.error(e);
+      alert('변환 실패: ' + e.message);
+      downloadAllBtn.textContent = '📸 PNG 8장 다운로드';
+      downloadAllBtn.disabled = false;
+    }
+  };
 
   recordBtn.onclick = async () => {
     document.body.classList.add('record-mode');
