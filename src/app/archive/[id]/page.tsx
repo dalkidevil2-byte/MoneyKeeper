@@ -25,6 +25,7 @@ import ArchiveTableView from '@/components/archive/ArchiveTableView';
 import ArchiveBoardView from '@/components/archive/ArchiveBoardView';
 import LinkedTasksList from '@/components/archive/LinkedTasksList';
 import FilterPanel from '@/components/archive/FilterPanel';
+import AnalyzeModal from '@/components/archive/AnalyzeModal';
 import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon, Columns3, Filter } from 'lucide-react';
 
 type Params = { id: string };
@@ -52,6 +53,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [filters, setFilters] = useState<Record<string, unknown>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortBy, setSortBy] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const [reorderMode, setReorderMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [aiFillBusy, setAiFillBusy] = useState(false);
@@ -700,6 +702,15 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               <><Sparkles size={14} /> AI 추가</>
             )}
           </button>
+          {entries.length >= 3 && (
+            <button
+              onClick={() => setAnalyzeOpen(true)}
+              className="px-3 py-3 rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500 text-white text-sm font-semibold inline-flex items-center gap-1 active:opacity-80"
+              title="AI 분석 — 차트 + 인사이트"
+            >
+              <Sparkles size={14} /> 분석
+            </button>
+          )}
           {entries.length > 1 && (
             <button
               onClick={() => setReorderMode((v) => !v)}
@@ -1677,6 +1688,14 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
           onDelete={deleteCollection}
         />
       )}
+
+      {/* AI 분석 모달 */}
+      <AnalyzeModal
+        open={analyzeOpen}
+        onClose={() => setAnalyzeOpen(false)}
+        collectionId={collection?.id ?? ''}
+        collectionName={collection?.name ?? ''}
+      />
     </div>
   );
 }
