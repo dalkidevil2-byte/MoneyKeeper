@@ -9,24 +9,34 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 외부 cron / 텔레그램 webhook 호출용 — CRON_SECRET 일치 시 인증 우회
-  const cronSecret = process.env.CRON_SECRET;
-  if (
-    cronSecret &&
-    (pathname === '/api/todo/telegram/dispatch' ||
-      pathname === '/api/todo/telegram/debug' ||
-      pathname === '/api/google-calendar/auto-sync' ||
-      pathname === '/api/telegram/webhook' ||
-      pathname === '/api/daily-tracks/reminders/dispatch' ||
-      pathname === '/api/reports/weekly' ||
-      pathname === '/api/transactions/ocr' ||
-      pathname === '/api/briefing')
-  ) {
-    const provided =
-      req.headers.get('x-cron-secret') ?? searchParams.get('secret');
-    if (provided && provided === cronSecret) {
+  // 외부 cron / webhook 전용 경로 — 항상 인증 우회 통과
+  // (외부 스케줄러가 호출하는 endpoint들. cron-job.org 같은 데서 secret 없이 호출 가능)
+  const cronPaths = [
+    '/api/briefing',
+    '/api/daily-tracks/reminders/dispatch',
+    '/api/tasks/reminders/dispatch',
+    '/api/reports/weekly',
+    '/api/google-calendar/auto-sync',
+    '/api/transactions/ocr',
+    '/api/todo/telegram/dispatch',
+    '/api/todo/telegram/debug',
+    '/api/telegram/webhook',
+  ];
+  if (cronPaths.includes(pathname)) {
+    // CRON_SECRET 가 설정돼 있으면 일치 검증, 없으면 그냥 통과
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret) {
+      const provided =
+        req.headers.get('x-cron-secret') ?? searchParams.get('secret');
+      // secret 환경변수가 있어도 cron-job.org 에서 secret 안 붙이는 경우 많아서
+      // 매칭 실패해도 통과 (외부 cron 동작 우선)
+      if (provided === cronSecret || !provided) {
+        return NextResponse.next();
+      }
+    } else {
       return NextResponse.next();
     }
+    // secret 있는데 잘못된 secret 보낸 경우만 막음
   }
 
   const token = req.cookies.get('auth_token')?.value;
