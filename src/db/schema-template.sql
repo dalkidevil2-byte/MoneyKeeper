@@ -352,6 +352,7 @@ CREATE TABLE IF NOT EXISTS daily_tracks (
   member_id UUID REFERENCES members(id) ON DELETE SET NULL,
   goal_id UUID REFERENCES goals(id) ON DELETE SET NULL,
   reminder_time TIME,
+  condition_text TEXT NOT NULL DEFAULT '',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now(),

@@ -225,6 +225,7 @@ function TrackFormSheet({
     initial?.reminder_time ?? '',
   );
   const [goalId, setGoalId] = useState<string>(initial?.goal_id ?? '');
+  const [conditionText, setConditionText] = useState<string>(initial?.condition_text ?? '');
   const [goals, setGoals] = useState<Array<{ id: string; title: string; emoji?: string }>>([]);
   useEffect(() => {
     fetch(`/api/goals?household_id=${HOUSEHOLD_ID}`)
@@ -263,6 +264,7 @@ function TrackFormSheet({
         until_count: untilCount === '' ? null : untilCount,
         reminder_time: reminderTime || null,
         goal_id: goalId || null,
+        condition_text: conditionText.trim(),
       };
       const res = isEdit
         ? await fetch(`/api/daily-tracks/${initial.id}`, {
@@ -417,6 +419,24 @@ function TrackFormSheet({
             </select>
             <div className="text-[11px] text-gray-400 mt-1">
               연결하면 체크할 때마다 목표 진행이 자동 +1 됩니다.
+            </div>
+          </div>
+
+          {/* AI 자동 체크 조건 (선택) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              ✨ AI 자동 체크 조건 (선택)
+            </label>
+            <input
+              type="text"
+              value={conditionText}
+              onChange={(e) => setConditionText(e.target.value)}
+              placeholder='예) "12시 전 취침", "30분 이상 운동"'
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+            />
+            <div className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+              연결된 활동을 정지할 때 AI 가 조건 충족 여부를 판단해서 자동으로 체크해줍니다.
+              조건 비워두면 활동 시작 즉시 체크 (기존 동작).
             </div>
           </div>
 

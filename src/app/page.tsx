@@ -9,6 +9,7 @@ import StockSummary from '@/components/home/StockSummary';
 import TodoSummary from '@/components/home/TodoSummary';
 import NotificationBell from '@/components/todo/NotificationBell';
 import ActivityChips from '@/components/todo/ActivityChips';
+import BriefingCard from '@/components/home/BriefingCard';
 import { STOCKS_DISABLED } from '@/lib/app-flags';
 
 dayjs.locale('ko');
@@ -31,6 +32,11 @@ export default function HubPage() {
           </p>
         </div>
         <NotificationBell />
+      </div>
+
+      {/* AI 브리핑 카드 */}
+      <div className="px-5 mb-3">
+        <BriefingCard />
       </div>
 
       {/* 활동 추적 — 빠른 시작/정지 */}

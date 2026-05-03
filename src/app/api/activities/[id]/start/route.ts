@@ -44,32 +44,45 @@ export async function POST(
 
     const todayKey = dayjs().tz(TZ).format('YYYY-MM-DD');
 
-    // Daily Track 자동 체크 (있으면)
+    // Daily Track 자동 체크
+    // - condition_text 있으면 시작 시점엔 체크 X (정지 시 AI 평가)
+    // - 없으면 기존 동작 (시작 즉시 체크)
     let dailyTrackLogId: string | null = null;
     if (act.daily_track_id) {
-      // 오늘 이미 체크돼있으면 skip
-      const { data: existingLog } = await supabase
-        .from('daily_track_logs')
-        .select('id')
-        .eq('track_id', act.daily_track_id)
-        .eq('done_on', todayKey)
-        .limit(1)
+      const { data: track } = await supabase
+        .from('daily_tracks')
+        .select('condition_text')
+        .eq('id', act.daily_track_id)
         .maybeSingle();
-      if (existingLog) {
-        dailyTrackLogId = existingLog.id as string;
-      } else {
-        const { data: log } = await supabase
+      const hasCondition =
+        track?.condition_text && String(track.condition_text).trim().length > 0;
+
+      if (!hasCondition) {
+        // 기존 동작 — 시작 시 체크
+        const { data: existingLog } = await supabase
           .from('daily_track_logs')
-          .insert({
-            track_id: act.daily_track_id,
-            household_id: act.household_id,
-            done_on: todayKey,
-            member_id: act.member_id,
-          })
           .select('id')
-          .single();
-        if (log) dailyTrackLogId = log.id as string;
+          .eq('track_id', act.daily_track_id)
+          .eq('done_on', todayKey)
+          .limit(1)
+          .maybeSingle();
+        if (existingLog) {
+          dailyTrackLogId = existingLog.id as string;
+        } else {
+          const { data: log } = await supabase
+            .from('daily_track_logs')
+            .insert({
+              track_id: act.daily_track_id,
+              household_id: act.household_id,
+              done_on: todayKey,
+              member_id: act.member_id,
+            })
+            .select('id')
+            .single();
+          if (log) dailyTrackLogId = log.id as string;
+        }
       }
+      // condition_text 있으면 정지 시 평가에서 처리
     }
 
     // 세션 생성

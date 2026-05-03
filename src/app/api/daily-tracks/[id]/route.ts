@@ -16,7 +16,7 @@ export async function PATCH(
       'target_count', 'period_unit',
       'start_date', 'end_date',
       'weekdays', 'until_count', 'reminder_time', 'goal_id',
-      'is_active', 'position',
+      'is_active', 'position', 'condition_text',
     ] as const;
     const update: Record<string, unknown> = {};
     for (const k of allowed) {

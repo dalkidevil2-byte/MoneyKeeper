@@ -480,6 +480,7 @@ export interface DailyTrack {
   weekdays: number[] | null;    // 활성 요일 (0=일, 6=토). null/빈 배열이면 매일
   until_count: number | null;   // 총 N회 완료까지만 (도달 시 자동 비활성)
   reminder_time: string | null; // 알림 시간 HH:MM (체크 안 됐으면 텔레그램 알림)
+  condition_text?: string;       // AI 자동 체크 조건 (자연어 — 예: "12시 전 취침")
   goal_id: string | null;       // 연결된 목표 (체크 시 자동 +1)
   is_active: boolean;
   position: number;
@@ -508,6 +509,7 @@ export interface CreateDailyTrackInput {
   weekdays?: number[] | null;
   until_count?: number | null;
   reminder_time?: string | null;
+  condition_text?: string;
   goal_id?: string | null;
 }
 

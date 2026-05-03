@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { evaluateCondition } from '@/lib/daily-track-condition';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -27,7 +28,7 @@ export async function POST(
   try {
     const { data: act } = await supabase
       .from('activities')
-      .select('id, household_id, goal_id, goal_count_mode')
+      .select('id, name, household_id, member_id, goal_id, goal_count_mode, daily_track_id')
       .eq('id', id)
       .maybeSingle();
     if (!act) {
@@ -146,11 +147,72 @@ export async function POST(
       }
     }
 
+    // Daily Track 자동 체크 — condition_text 가 있으면 AI 평가, 없으면 기존 동작
+    let trackResult: { met: boolean; reason: string } | null = null;
+    if (act.daily_track_id) {
+      try {
+        const { data: track } = await supabase
+          .from('daily_tracks')
+          .select('id, condition_text')
+          .eq('id', act.daily_track_id)
+          .maybeSingle();
+        const conditionText = (track?.condition_text as string | undefined) ?? '';
+        const trackedDate = startedDateKey; // 시작일 기준 체크 (수면 등 자정 넘는 케이스)
+
+        // 이미 그 날짜에 체크돼있는지 확인
+        const { data: existingLog } = await supabase
+          .from('daily_track_logs')
+          .select('id')
+          .eq('track_id', act.daily_track_id)
+          .eq('done_on', trackedDate)
+          .limit(1)
+          .maybeSingle();
+
+        if (conditionText.trim()) {
+          // AI 평가
+          trackResult = await evaluateCondition(conditionText, {
+            activityName: act.name as string,
+            startAtIso: running.start_at as string,
+            endAtIso: now.toISOString(),
+            durationMinutes: totalDurationMin,
+          });
+          if (trackResult.met) {
+            if (!existingLog) {
+              await supabase.from('daily_track_logs').insert({
+                track_id: act.daily_track_id,
+                household_id: act.household_id,
+                done_on: trackedDate,
+                member_id: act.member_id,
+                note: `자동: ${trackResult.reason}`,
+              });
+            }
+          } else if (existingLog) {
+            // 조건 미충족인데 이미 체크돼있으면 (start 시 잘못 체크된 경우 등) 제거
+            await supabase
+              .from('daily_track_logs')
+              .delete()
+              .eq('id', existingLog.id);
+          }
+        } else if (!existingLog) {
+          // 조건 없으면 기존 동작 — 시작일 기준 체크 (start 라우트에서 미체크였을 수 있음)
+          await supabase.from('daily_track_logs').insert({
+            track_id: act.daily_track_id,
+            household_id: act.household_id,
+            done_on: trackedDate,
+            member_id: act.member_id,
+          });
+        }
+      } catch (e) {
+        console.warn('[stop] daily track condition eval fail', e);
+      }
+    }
+
     return NextResponse.json({
       session: lastSession,
       stopped: true,
       total_duration_min: totalDurationMin,
       split: startedDateKey !== nowDateKey,
+      track_evaluated: trackResult,
     });
   } catch (e) {
     return NextResponse.json(

@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
           : null,
       until_count: body.until_count ?? null,
       reminder_time: body.reminder_time ?? null,
+      condition_text: body.condition_text ?? '',
       goal_id: body.goal_id ?? null,
       is_active: true,
     };

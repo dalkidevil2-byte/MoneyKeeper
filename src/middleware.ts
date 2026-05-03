@@ -19,7 +19,8 @@ export function middleware(req: NextRequest) {
       pathname === '/api/telegram/webhook' ||
       pathname === '/api/daily-tracks/reminders/dispatch' ||
       pathname === '/api/reports/weekly' ||
-      pathname === '/api/transactions/ocr')
+      pathname === '/api/transactions/ocr' ||
+      pathname === '/api/briefing')
   ) {
     const provided =
       req.headers.get('x-cron-secret') ?? searchParams.get('secret');
