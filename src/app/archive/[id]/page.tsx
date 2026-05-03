@@ -21,7 +21,8 @@ import {
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
 import ArchiveCalendarView from '@/components/archive/ArchiveCalendarView';
-import { List, LayoutGrid, Calendar as CalendarIcon } from 'lucide-react';
+import ArchiveTableView from '@/components/archive/ArchiveTableView';
+import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon } from 'lucide-react';
 
 type Params = { id: string };
 
@@ -42,7 +43,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [busy, setBusy] = useState(false);
   const [aiFillBusy, setAiFillBusy] = useState(false);
   const [aiFillError, setAiFillError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar' | 'table'>('list');
   const [calendarDateKey, setCalendarDateKey] = useState<string>('');
   const [aiFillResult, setAiFillResult] = useState<{
     data: Record<string, unknown>;
@@ -271,7 +272,12 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     if (!collection) return;
     try {
       const saved = localStorage.getItem(`archive:view:${collection.id}`);
-      if (saved === 'list' || saved === 'gallery' || saved === 'calendar') {
+      if (
+        saved === 'list' ||
+        saved === 'gallery' ||
+        saved === 'calendar' ||
+        saved === 'table'
+      ) {
         setViewMode(saved);
       } else {
         setViewMode(collection.card_layout === 'gallery' ? 'gallery' : 'list');
@@ -287,7 +293,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   }, [collection]);
 
   // viewMode 변경 시 localStorage 저장
-  const changeViewMode = (mode: 'list' | 'gallery' | 'calendar') => {
+  const changeViewMode = (mode: 'list' | 'gallery' | 'calendar' | 'table') => {
     setViewMode(mode);
     if (collection) {
       try {
@@ -546,6 +552,14 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               <LayoutGrid size={12} /> 갤러리
             </button>
             <button
+              onClick={() => changeViewMode('table')}
+              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                viewMode === 'table' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              <TableIcon size={12} /> 표
+            </button>
+            <button
               onClick={() => {
                 if (dateProps.length === 0) {
                   alert('날짜 속성이 있어야 캘린더 뷰를 사용할 수 있어요. 컬렉션 설정에서 date 타입 속성을 추가해주세요.');
@@ -579,8 +593,34 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 space-y-2 pt-3">
-        {viewMode === 'calendar' && calendarDateKey ? (
+      <div className={`mx-auto px-4 space-y-2 pt-3 ${viewMode === 'table' ? 'max-w-full' : 'max-w-lg'}`}>
+        {viewMode === 'table' ? (
+          <ArchiveTableView
+            entries={filteredEntries}
+            schema={(collection?.schema ?? []) as ArchiveProperty[]}
+            onSelectEntry={(eid) => {
+              const found = entries.find((x) => x.id === eid);
+              if (found) setEditingEntry(found);
+            }}
+            onCellSave={async (entryId, propKey, value) => {
+              const target = entries.find((x) => x.id === entryId);
+              if (!target) return;
+              const newData = {
+                ...((target.data ?? {}) as Record<string, unknown>),
+                [propKey]: value,
+              };
+              const res = await fetch(`/api/archive/entries/${entryId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: newData }),
+              });
+              if (!res.ok) throw new Error('저장 실패');
+              setEntries((prev) =>
+                prev.map((x) => (x.id === entryId ? { ...x, data: newData } : x)),
+              );
+            }}
+          />
+        ) : viewMode === 'calendar' && calendarDateKey ? (
           <ArchiveCalendarView
             entries={filteredEntries}
             schema={(collection?.schema ?? []) as ArchiveProperty[]}
