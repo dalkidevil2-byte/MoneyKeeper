@@ -84,6 +84,7 @@ export default function TaskFormSheet({
   const [expensePaymentMethodId, setExpensePaymentMethodId] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>('');
   const [archiveLinks, setArchiveLinks] = useState<Array<{ collection_id: string; entry_id: string }>>([]);
+  const [reminderMins, setReminderMins] = useState<number[]>([]);
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
   const [saving, setSaving] = useState(false);
@@ -135,6 +136,11 @@ export default function TaskFormSheet({
       setArchiveLinks(
         Array.isArray(initial.archive_links) ? initial.archive_links : [],
       );
+      setReminderMins(
+        Array.isArray(initial.reminders)
+          ? initial.reminders.map((r) => r.min).filter((n) => typeof n === 'number')
+          : [],
+      );
     } else {
       const d = defaults ?? {};
       setKind((d.kind as TaskKind) ?? 'event');
@@ -170,6 +176,7 @@ export default function TaskFormSheet({
       setExpensePaymentMethodId(d.expense_payment_method_id ?? '');
       setEstimatedMinutes('');
       setArchiveLinks([]);
+      setReminderMins([]);
     }
     setErr(null);
   }, [open, initial, defaultDate, defaultStartTime, defaultEndTime, defaults]);
@@ -280,6 +287,7 @@ export default function TaskFormSheet({
     expense_payment_method_id: expensePaymentMethodId || null,
     estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
     archive_links: archiveLinks,
+    reminders: reminderMins.map((min) => ({ min })),
   });
 
   // 실제 저장 실행 — scope 가 routine 수정에서만 의미 있음
@@ -928,6 +936,55 @@ export default function TaskFormSheet({
 
           {/* 체크리스트 (수정 모드 전용) */}
           {isEdit && initial && <ChecklistSection taskId={initial.id} />}
+
+          {/* 알림 설정 (다중) */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+              <span>🔔</span> 알림 (여러 개 선택 가능)
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { min: 0, label: '정시' },
+                { min: 5, label: '5분 전' },
+                { min: 15, label: '15분 전' },
+                { min: 30, label: '30분 전' },
+                { min: 60, label: '1시간 전' },
+                { min: 120, label: '2시간 전' },
+                { min: 360, label: '6시간 전' },
+                { min: 1440, label: '1일 전' },
+                { min: 2880, label: '2일 전' },
+                { min: 10080, label: '1주 전' },
+              ].map((opt) => {
+                const active = reminderMins.includes(opt.min);
+                return (
+                  <button
+                    key={opt.min}
+                    type="button"
+                    onClick={() => {
+                      setReminderMins((prev) =>
+                        prev.includes(opt.min)
+                          ? prev.filter((m) => m !== opt.min)
+                          : [...prev, opt.min].sort((a, b) => a - b),
+                      );
+                    }}
+                    className={`text-[11px] px-2.5 py-1.5 rounded-full font-semibold transition-colors ${
+                      active
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {active ? '✓ ' : ''}
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1.5">
+              {reminderMins.length === 0
+                ? '알림 설정 없음 — 칩 클릭해서 추가'
+                : `${reminderMins.length}개 알림 — 약속 시간 기준 분 전 PWA 푸시`}
+            </p>
+          </div>
 
           {/* 관련 아카이브 항목 */}
           <div>

@@ -165,6 +165,7 @@ export async function POST(req: NextRequest) {
       expense_payment_method_id: body.expense_payment_method_id ?? null,
       estimated_minutes: body.estimated_minutes ?? null,
       archive_links: Array.isArray(body.archive_links) ? body.archive_links : [],
+      reminders: Array.isArray(body.reminders) ? body.reminders : [],
       status: 'pending' as const,
       is_active: true,
     };
