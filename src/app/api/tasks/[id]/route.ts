@@ -113,12 +113,30 @@ export async function PATCH(
       return NextResponse.json({ error: '수정할 내용이 없습니다.' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .update(update)
-      .eq('id', id)
-      .select(`*, member:members!member_id(id, name, color)`)
-      .single();
+    // 알 수 없는 컬럼 (마이그레이션 미적용) 시 한번 더 재시도 — 실패한 컬럼 제거
+    const tryUpdate = async (patch: Record<string, unknown>) =>
+      supabase
+        .from('tasks')
+        .update(patch)
+        .eq('id', id)
+        .select(`*, member:members!member_id(id, name, color)`)
+        .single();
+
+    let { data, error } = await tryUpdate(update);
+
+    if (error && /column .* does not exist/i.test(error.message ?? '')) {
+      // 에러 메시지에서 누락 컬럼 추출 → 그 컬럼 빼고 재시도
+      const m = (error.message ?? '').match(/column "?([\w.]+)"? does not exist/i);
+      const missingCol = m?.[1]?.replace(/^tasks\./, '');
+      if (missingCol && missingCol in update) {
+        const reduced = { ...update };
+        delete reduced[missingCol];
+        console.warn('[PATCH /tasks/:id] 누락 컬럼 무시 후 재시도:', missingCol);
+        const retry = await tryUpdate(reduced);
+        data = retry.data;
+        error = retry.error;
+      }
+    }
 
     if (error) throw error;
 

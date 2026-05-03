@@ -244,7 +244,10 @@ export default function TaskFormSheet({
     household_id: HOUSEHOLD_ID,
     kind,
     start_date: kind === 'todo' ? startDateTodo || null : null,
-    start_time: kind === 'todo' ? (startTimeTodo ? `${startTimeTodo}:00` : null) : null,
+    // start_time 은 값 있을 때만 포함 (마이그레이션 038 미적용 환경 대비)
+    ...(kind === 'todo' && startTimeTodo
+      ? { start_time: `${startTimeTodo}:00` }
+      : {}),
     deadline_date: kind === 'todo' ? deadlineDate || null : null,
     deadline_time: kind === 'todo' ? (deadlineTime ? `${deadlineTime}:00` : null) : null,
     type,
@@ -1184,10 +1187,11 @@ function ChecklistSection({ taskId }: { taskId: string }) {
             <button
               type="button"
               onClick={() => remove(it)}
-              className="text-gray-300 hover:text-rose-500 p-1"
+              className="shrink-0 text-gray-400 hover:text-rose-500 active:text-rose-600 p-2 -mr-1 rounded touch-manipulation"
               aria-label="삭제"
+              title="삭제"
             >
-              <Trash2Icon size={13} />
+              <Trash2Icon size={16} />
             </button>
           </div>
         ))}
