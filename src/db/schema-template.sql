@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'bank'
-    CHECK (type IN ('bank', 'cash', 'easy_pay_balance', 'investment', 'virtual_balance')),
+    CHECK (type IN ('bank', 'cash', 'easy_pay_balance', 'investment', 'virtual_balance', 'points')),
   balance BIGINT DEFAULT 0,
   is_budget_account BOOLEAN DEFAULT false,
   is_active BOOLEAN DEFAULT true,
@@ -623,6 +623,58 @@ INSERT INTO accounts (household_id, name, type, balance, is_budget_account) VALU
   ('00000000-0000-0000-0000-000000000001', '생활비 통장', 'bank', 0, true),
   ('00000000-0000-0000-0000-000000000001', '현금', 'cash', 0, false)
 ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- AI 사용량 / 비용 추적 (선택 — 설정에서 비용 확인용)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID REFERENCES households(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  model TEXT NOT NULL,
+  feature TEXT NOT NULL,
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  audio_chars INTEGER DEFAULT 0,
+  audio_seconds NUMERIC DEFAULT 0,
+  cost_usd NUMERIC(10, 6) DEFAULT 0,
+  cost_krw NUMERIC(10, 2) DEFAULT 0,
+  meta JSONB DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_household_date
+  ON ai_usage(household_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_feature
+  ON ai_usage(household_id, feature, created_at DESC);
+
+-- ============================================================
+-- 카드 청구서 / 결제 대금 관리
+-- ============================================================
+CREATE TABLE IF NOT EXISTS card_statements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  payment_method_id UUID NOT NULL REFERENCES payment_methods(id) ON DELETE CASCADE,
+  billing_period_start DATE NOT NULL,
+  billing_period_end   DATE NOT NULL,
+  payment_due_date DATE NOT NULL,
+  billed_amount BIGINT NOT NULL DEFAULT 0,
+  account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'paid', 'cancelled')),
+  paid_transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL,
+  paid_at TIMESTAMPTZ,
+  memo TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_card_stmt_household_due
+  ON card_statements(household_id, payment_due_date DESC);
+CREATE INDEX IF NOT EXISTS idx_card_stmt_pm
+  ON card_statements(payment_method_id, billing_period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_card_stmt_status
+  ON card_statements(household_id, status);
+CREATE TRIGGER trg_card_stmt_updated_at
+  BEFORE UPDATE ON card_statements
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
 -- ✅ 완료! 'Success. No rows returned' 가 보이면 정상.
