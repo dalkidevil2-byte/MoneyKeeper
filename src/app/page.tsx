@@ -39,11 +39,6 @@ export default function HubPage() {
         <BriefingCard />
       </div>
 
-      {/* 활동 추적 — 빠른 시작/정지 */}
-      <div className="px-5 mb-3">
-        <ActivityChips />
-      </div>
-
       {/* 앱 카드들 */}
       <div className="px-5 space-y-3">
         {/* AI 어시스턴트 카드 */}
@@ -62,6 +57,9 @@ export default function HubPage() {
             <ChevronRight size={20} className="text-gray-300" />
           </div>
         </Link>
+
+        {/* 활동 추적 — 빠른 시작/정지 */}
+        <ActivityChips />
 
         {/* 할일 카드 */}
         <Link
