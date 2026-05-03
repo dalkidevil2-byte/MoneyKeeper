@@ -2080,6 +2080,13 @@ function CollectionSettingsSheet({
                     <input
                       value={(p.options ?? []).join(',')}
                       onChange={(e) =>
+                        // 타이핑 중에는 trim/filter 하지 않음 → 콤마 입력 가능
+                        updateProp(i, {
+                          options: e.target.value.split(','),
+                        })
+                      }
+                      onBlur={(e) =>
+                        // 포커스 빠질 때만 정리
                         updateProp(i, {
                           options: e.target.value
                             .split(',')
