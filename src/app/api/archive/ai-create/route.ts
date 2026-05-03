@@ -12,6 +12,7 @@ const ALLOWED_TYPES = [
   'text', 'longtext', 'number', 'currency',
   'date', 'url', 'select', 'multiselect',
   'rating', 'checkbox', 'files', 'checklist',
+  'relation', 'rollup', 'formula',
 ] as const;
 
 /**
@@ -51,6 +52,8 @@ export async function POST(req: NextRequest) {
 - 분류는 'select' + options (3~6개)
 - 여러 태그는 'multiselect' + options
 - 긴 메모는 'longtext'
+- 다른 컬렉션과 연결되어야 명확하면 'relation' 추천 (target_collection_id 는 비워두면 사용자가 나중에 설정)
+- relation, rollup, formula 는 일반적으로 처음 만들 때보다 나중에 추가 권장
 
 규칙:
 - key 는 영문 snake_case (예: title, watch_date, watched_with)

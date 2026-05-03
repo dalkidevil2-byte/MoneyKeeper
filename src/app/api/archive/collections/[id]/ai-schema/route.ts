@@ -11,6 +11,7 @@ const ALLOWED_TYPES = [
   'text', 'longtext', 'number', 'currency',
   'date', 'url', 'select', 'multiselect',
   'rating', 'checkbox', 'files', 'checklist',
+  'relation', 'rollup', 'formula',
 ] as const;
 
 /**

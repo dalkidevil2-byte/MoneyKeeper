@@ -2372,34 +2372,59 @@ function CollectionSettingsSheet({
                   )}
                   {/* Relation: 대상 컬렉션 + 다중 허용 */}
                   {p.type === 'relation' && (
-                    <div className="space-y-1">
-                      <select
-                        value={p.target_collection_id ?? ''}
-                        onChange={(e) =>
-                          updateProp(i, { target_collection_id: e.target.value || undefined })
-                        }
-                        className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
-                      >
-                        <option value="">대상 컬렉션 선택</option>
-                        {allCollections
-                          .filter((c) => c.id !== collection.id)
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.emoji} {c.name}
-                            </option>
-                          ))}
-                      </select>
-                      <label className="flex items-center gap-1 text-[11px] text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={p.allow_multiple !== false}
-                          onChange={(e) =>
-                            updateProp(i, { allow_multiple: e.target.checked })
-                          }
-                          className="accent-violet-600"
-                        />
-                        여러 항목 연결 허용
-                      </label>
+                    <div className="space-y-1.5 bg-violet-50/50 rounded-lg p-2 border border-violet-100">
+                      <p className="text-[10px] font-bold text-violet-700">
+                        🔗 어떤 컬렉션과 연결할까요?
+                      </p>
+                      {allCollections.length <= 1 ? (
+                        <div className="text-[10px] text-rose-500 bg-white rounded px-2 py-1.5">
+                          연결할 다른 컬렉션이 아직 없어요. 다른 컬렉션을 먼저 만들어주세요.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1">
+                          {allCollections
+                            .filter((c) => c.id !== collection.id)
+                            .map((c) => {
+                              const isSelected = p.target_collection_id === c.id;
+                              return (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() =>
+                                    updateProp(i, { target_collection_id: c.id })
+                                  }
+                                  className={`text-left text-[11px] px-2 py-1.5 rounded-lg border transition-colors ${
+                                    isSelected
+                                      ? 'bg-violet-600 text-white border-violet-600'
+                                      : 'bg-white border-gray-200 hover:border-violet-300'
+                                  }`}
+                                >
+                                  <span className="mr-1">{c.emoji}</span>
+                                  <span className="truncate">{c.name}</span>
+                                  <span className={`text-[9px] block mt-0.5 ${isSelected ? 'text-violet-200' : 'text-gray-400'}`}>
+                                    속성 {c.schema.length}개
+                                  </span>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
+                      {p.target_collection_id && (
+                        <label className="flex items-center gap-1 text-[11px] text-gray-700 pt-1">
+                          <input
+                            type="checkbox"
+                            checked={p.allow_multiple !== false}
+                            onChange={(e) =>
+                              updateProp(i, { allow_multiple: e.target.checked })
+                            }
+                            className="accent-violet-600"
+                          />
+                          여러 항목 연결 허용 (켜두면 한 항목에 여러 개 묶을 수 있음)
+                        </label>
+                      )}
+                      <p className="text-[9px] text-gray-400 leading-tight">
+                        예: 여행 → 준비물 / 책 → 저자 / 영화 → 감독
+                      </p>
                     </div>
                   )}
                   {/* Rollup: 어느 relation 통해 + 어느 속성 + 집계 */}
