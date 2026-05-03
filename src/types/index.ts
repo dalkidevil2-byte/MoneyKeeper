@@ -489,8 +489,9 @@ export interface DailyTrack {
   member?: Member;
   current_count?: number;       // 현재 주기 안의 완료 수
   total_count?: number;         // 누적 총 횟수
-  is_done_today?: boolean;      // (current_count >= target_count)
-  is_active_today?: boolean;    // 오늘 활성화 (요일/기간 만족)
+  is_done_today?: boolean;      // 주기 목표 달성 (current_count >= target_count)
+  done_today?: boolean;          // 오늘 체크된 로그 존재 여부 (취소선 표시 용)
+  is_active_today?: boolean;    // 오늘 활성화 (요일/기간/달성 후 숨김 종합)
 }
 
 export interface CreateDailyTrackInput {

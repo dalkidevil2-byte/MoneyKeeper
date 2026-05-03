@@ -60,8 +60,11 @@ export async function GET(req: NextRequest) {
     const enriched = tracks.map((t) => {
       const ps = periodStart(t.period_unit);
       const trackLogs = (logs ?? []).filter((l) => l.track_id === t.id);
-      const count = trackLogs.filter((l) => (l.done_on as string) >= ps).length;
+      const periodLogs = trackLogs.filter((l) => (l.done_on as string) >= ps);
+      const count = periodLogs.length;
       const totalCount = trackLogs.length;
+      // 오늘 체크된 적 있는지
+      const doneToday = periodLogs.some((l) => l.done_on === todayStr);
 
       // 오늘 활성화 여부 — 요일 / 시작일 / 종료일 / until_count 종합
       let isActiveToday = true;
@@ -74,12 +77,22 @@ export async function GET(req: NextRequest) {
       if (t.until_count != null && totalCount >= (t.until_count as number)) {
         isActiveToday = false;
       }
+      // 주/월 트래커가 이미 목표 달성했고, 오늘 체크된 게 아니면 → 숨김
+      // (오늘 체크되면 그 날만 취소선으로 보이고, 다음날부터는 안 보임)
+      if (
+        (t.period_unit === 'week' || t.period_unit === 'month') &&
+        count >= t.target_count &&
+        !doneToday
+      ) {
+        isActiveToday = false;
+      }
 
       return {
         ...t,
         current_count: count,
         total_count: totalCount,
         is_done_today: count >= t.target_count,
+        done_today: doneToday,
         is_active_today: isActiveToday,
       };
     });
