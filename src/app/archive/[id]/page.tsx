@@ -23,6 +23,7 @@ import PropertyInput, { formatPropertyDisplay } from '@/components/archive/Prope
 import ArchiveCalendarView from '@/components/archive/ArchiveCalendarView';
 import ArchiveTableView from '@/components/archive/ArchiveTableView';
 import ArchiveBoardView from '@/components/archive/ArchiveBoardView';
+import LinkedTasksList from '@/components/archive/LinkedTasksList';
 import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon, Columns3 } from 'lucide-react';
 
 type Params = { id: string };
@@ -1837,6 +1838,16 @@ function EntryFormSheet({
                   </div>
                 );
               })}
+
+              {/* 연결된 할일/일정 (양방향 relation) */}
+              {entry && (
+                <div className="pt-2">
+                  <div className="text-[11px] text-gray-400 mb-1.5 inline-flex items-center gap-1">
+                    <span>🔗</span> 연결된 할일/일정
+                  </div>
+                  <LinkedTasksList entryId={entry.id} />
+                </div>
+              )}
             </div>
           ) : (
             schema.map((p) => (

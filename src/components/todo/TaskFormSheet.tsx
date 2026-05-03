@@ -10,6 +10,7 @@ import CategoryCombobox from '@/components/CategoryCombobox';
 import RoutineFrequencyPicker from './RoutineFrequencyPicker';
 import RoutineEndPicker from './RoutineEndPicker';
 import RoutineScopeDialog, { type RoutineScope } from './RoutineScopeDialog';
+import ArchiveLinksPicker from './ArchiveLinksPicker';
 import type { Task, RecurrenceRule, TaskPriority, TaskKind } from '@/types';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 
@@ -82,6 +83,7 @@ export default function TaskFormSheet({
   const [expenseAccountId, setExpenseAccountId] = useState<string>('');
   const [expensePaymentMethodId, setExpensePaymentMethodId] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>('');
+  const [archiveLinks, setArchiveLinks] = useState<Array<{ collection_id: string; entry_id: string }>>([]);
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
   const [saving, setSaving] = useState(false);
@@ -130,6 +132,9 @@ export default function TaskFormSheet({
       setEstimatedMinutes(
         initial.estimated_minutes != null ? String(initial.estimated_minutes) : ''
       );
+      setArchiveLinks(
+        Array.isArray(initial.archive_links) ? initial.archive_links : [],
+      );
     } else {
       const d = defaults ?? {};
       setKind((d.kind as TaskKind) ?? 'event');
@@ -164,6 +169,7 @@ export default function TaskFormSheet({
       setExpenseAccountId(d.expense_account_id ?? '');
       setExpensePaymentMethodId(d.expense_payment_method_id ?? '');
       setEstimatedMinutes('');
+      setArchiveLinks([]);
     }
     setErr(null);
   }, [open, initial, defaultDate, defaultStartTime, defaultEndTime, defaults]);
@@ -273,6 +279,7 @@ export default function TaskFormSheet({
     expense_account_id: expenseAccountId || null,
     expense_payment_method_id: expensePaymentMethodId || null,
     estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
+    archive_links: archiveLinks,
   });
 
   // 실제 저장 실행 — scope 가 routine 수정에서만 의미 있음
@@ -921,6 +928,17 @@ export default function TaskFormSheet({
 
           {/* 체크리스트 (수정 모드 전용) */}
           {isEdit && initial && <ChecklistSection taskId={initial.id} />}
+
+          {/* 관련 아카이브 항목 */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+              <span>🔗</span> 관련 아카이브
+            </label>
+            <ArchiveLinksPicker value={archiveLinks} onChange={setArchiveLinks} />
+            <p className="text-[10px] text-gray-400 mt-1">
+              예: 드라마 → 그 회차 시청 / 책 → 읽은 부분 / 여행 → 준비 할일
+            </p>
+          </div>
 
           {/* 예상 소요시간 — 계획 단계 입력 (todo 전용) */}
           {kind === 'todo' && (

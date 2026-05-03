@@ -100,6 +100,7 @@ export async function PATCH(
       'is_active',
       'type',
       'estimated_minutes',
+      'archive_links',
     ] as const;
 
     const update: Record<string, unknown> = {};

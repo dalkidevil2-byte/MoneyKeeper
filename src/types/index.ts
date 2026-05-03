@@ -365,6 +365,8 @@ export interface Task {
   expense_transaction_id: string | null;
   /** 할일 자체의 예상 소요시간 (분) — 계획 단계에서 입력. 실제 합산(session_total_minutes)와 비교 */
   estimated_minutes?: number | null;
+  /** 아카이브 컬렉션 항목 연결 (Phase A — 양방향 relation) */
+  archive_links?: Array<{ collection_id: string; entry_id: string }>;
   /** 구글 캘린더 동기화 — 매핑된 이벤트 ID */
   google_event_id?: string | null;
   google_calendar_id?: string | null;
@@ -460,6 +462,7 @@ export interface CreateTaskInput {
   expense_account_id?: string | null;
   expense_payment_method_id?: string | null;
   estimated_minutes?: number | null;
+  archive_links?: Array<{ collection_id: string; entry_id: string }>;
 }
 
 // 오늘의 할일 통합 응답 (one_time + routine 인스턴스)
