@@ -559,7 +559,67 @@ A. Supabase 대시보드 → Database → Backups 에서 다운로드 가능. Pr
 A. URL + 비밀번호만 알면 어디서든 접속. 가족과 공유하려면 비밀번호 알려주면 됨 (단 SOLO_MODE 라 사용자 구분은 안 됨).
 
 **Q. 코드 업데이트는 어떻게 받나요?**
-A. GitHub fork 페이지 → **Sync fork** 버튼으로 원본 변경사항 받기. Vercel 은 자동 재배포됨.
+A. GitHub fork 페이지 → **Sync fork** 버튼으로 원본 변경사항 받기. Vercel 은 자동 재배포됨. 다만 가끔 새 DB 컬럼이 추가되니 아래 "기존 설치자 업데이트 SQL" 한 번씩 실행해주세요.
+
+---
+
+## 🔄 기존 설치자 업데이트 SQL
+
+이미 설치한 후에 사용자가 새 기능 추가했을 때 — 그 새 기능들이 동작하려면 DB 스키마도 같이 따라가야 합니다. 아래 SQL 한 번 Supabase SQL Editor 에서 실행하세요. 이미 적용된 부분은 자동으로 건너뜁니다.
+
+```sql
+-- 안전한 통합본 — 여러 번 실행해도 무탈
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_minutes INTEGER;
+ALTER TABLE task_checklist_items ADD COLUMN IF NOT EXISTS estimated_minutes INTEGER;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_time TIME;
+ALTER TABLE daily_tracks ADD COLUMN IF NOT EXISTS condition_text TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archive_links JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE activity_sessions ADD COLUMN IF NOT EXISTS archive_links JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS link_collection_id UUID REFERENCES archive_collections(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_archive_links_gin ON tasks USING GIN (archive_links);
+CREATE INDEX IF NOT EXISTS idx_activity_sessions_archive_links_gin ON activity_sessions USING GIN (archive_links);
+CREATE INDEX IF NOT EXISTS idx_activities_link_collection ON activities(link_collection_id) WHERE link_collection_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID REFERENCES households(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  model TEXT NOT NULL,
+  feature TEXT NOT NULL,
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  audio_chars INTEGER DEFAULT 0,
+  audio_seconds NUMERIC DEFAULT 0,
+  cost_usd NUMERIC(10, 6) DEFAULT 0,
+  cost_krw NUMERIC(10, 2) DEFAULT 0,
+  meta JSONB DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_household_date ON ai_usage(household_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS card_statements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  payment_method_id UUID NOT NULL REFERENCES payment_methods(id) ON DELETE CASCADE,
+  billing_period_start DATE NOT NULL,
+  billing_period_end DATE NOT NULL,
+  payment_due_date DATE NOT NULL,
+  billed_amount BIGINT NOT NULL DEFAULT 0,
+  account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'cancelled')),
+  paid_transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL,
+  paid_at TIMESTAMPTZ,
+  memo TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_type_check;
+ALTER TABLE accounts ADD CONSTRAINT accounts_type_check
+  CHECK (type IN ('bank', 'cash', 'easy_pay_balance', 'investment', 'virtual_balance', 'points'));
+```
+
+> 💡 친구가 이미 설치한 후라면 위 SQL 한 번 실행 → Sync Fork → 끝.
 
 ---
 

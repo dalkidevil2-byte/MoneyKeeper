@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     CHECK (priority IN ('low','normal','high')),
   recurrence JSONB,
   estimated_minutes INTEGER,
+  archive_links JSONB NOT NULL DEFAULT '[]'::jsonb,
   is_active BOOLEAN NOT NULL DEFAULT true,
   google_event_id TEXT,
   notion_page_id TEXT,
@@ -235,6 +236,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_tasks_archive_links_gin
+  ON tasks USING GIN (archive_links);
 CREATE INDEX IF NOT EXISTS idx_tasks_household_due ON tasks(household_id, due_date);
 CREATE INDEX IF NOT EXISTS idx_tasks_household_deadline ON tasks(household_id, deadline_date);
 CREATE INDEX IF NOT EXISTS idx_tasks_household_status ON tasks(household_id, status);
@@ -388,9 +391,12 @@ CREATE TABLE IF NOT EXISTS activities (
     CHECK (goal_count_mode IN ('session','hours')),
   is_active BOOLEAN DEFAULT TRUE,
   position INTEGER NOT NULL DEFAULT 0,
+  link_collection_id UUID REFERENCES archive_collections(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_activities_link_collection
+  ON activities(link_collection_id) WHERE link_collection_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS activity_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -404,9 +410,12 @@ CREATE TABLE IF NOT EXISTS activity_sessions (
   daily_track_log_id UUID REFERENCES daily_track_logs(id) ON DELETE SET NULL,
   member_id UUID REFERENCES members(id) ON DELETE SET NULL,
   note TEXT DEFAULT '',
+  archive_links JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_activity_sessions_archive_links_gin
+  ON activity_sessions USING GIN (archive_links);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_sessions_one_running
   ON activity_sessions(activity_id) WHERE end_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_activity_sessions_date ON activity_sessions(household_id, session_date);
@@ -678,11 +687,11 @@ CREATE TRIGGER trg_card_stmt_updated_at
 
 -- ARCHIVE_TEMPLATE_START
 -- 자동 생성됨 — scripts/dump-archive-template.mjs 로 갱신하세요.
--- 마지막 dump: 2026-05-03T07:53:57.999Z
+-- 마지막 dump: 2026-05-03T10:21:07.476Z
 -- 컬렉션 16개
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
-SELECT '00000000-0000-0000-0000-000000000001', '3줄일기', '📔', '#f59e0b', '하루 3줄로 짧게 기록', '[{"key":"date","type":"date","label":"날짜","required":true},{"key":"__","type":"text","label":"오늘은 무슨일이?"},{"key":"tomorrow","type":"longtext","label":"오늘의 인사이트"},{"key":"gratitude_diary","type":"longtext","label":"감사일기"}]'::jsonb, 0, 'list', true
+SELECT '00000000-0000-0000-0000-000000000001', '3줄일기', '📔', '#f59e0b', '하루 3줄로 짧게 기록', '[{"key":"__","type":"text","label":"오늘은 무슨일이?"},{"key":"date","type":"date","label":"날짜","required":true},{"key":"tomorrow","type":"longtext","label":"오늘의 인사이트"},{"key":"gratitude_diary","type":"longtext","label":"감사일기"}]'::jsonb, 0, 'list', true
 WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='3줄일기' AND is_active=true);
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
@@ -698,11 +707,11 @@ SELECT '00000000-0000-0000-0000-000000000001', '운동 따라하기', '🏋️',
 WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='운동 따라하기' AND is_active=true);
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
-SELECT '00000000-0000-0000-0000-000000000001', '백대명산', '🏔️', '#4caf50', '등산 기록을 관리하는 컬렉션', '[{"key":"challenge_number","type":"number","label":"챌린지 번호"},{"key":"title","type":"text","label":"산 이름","required":true},{"key":"hike_date","type":"date","label":"등산 날짜","required":true},{"key":"difficulty","type":"select","label":"난이도","options":["쉬움","보통","어려움"]},{"key":"duration","type":"number","label":"소요 시간 (시간)","required":true},{"key":"companions","type":"multiselect","label":"동행자","options":["혼자","친구","가족","동호회"]},{"key":"notes","type":"longtext","label":"메모"},{"key":"field_7","type":"files","label":"사진"}]'::jsonb, 0, 'gallery', true
+SELECT '00000000-0000-0000-0000-000000000001', '백대명산', '🏔️', '#4caf50', '등산 기록을 관리하는 컬렉션', '[{"key":"challenge_number","type":"text","label":"산"},{"key":"field8","type":"number","label":"챌린지 번호"},{"key":"hike_date","type":"date","label":"등산 날짜","required":true},{"key":"difficulty","type":"select","label":"난이도","options":["쉬움","보통","어려움"]},{"key":"duration","type":"number","label":"소요 시간 (시간)","required":true},{"key":"companions","type":"multiselect","label":"동행자","options":["혼자","친구","가족","동호회"]},{"key":"field_7","type":"files","label":"사진"},{"key":"notes","type":"longtext","label":"메모"}]'::jsonb, 0, 'gallery', true
 WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='백대명산' AND is_active=true);
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
-SELECT '00000000-0000-0000-0000-000000000001', '여행 준비물 리스트', '🧳', '#4a90e2', '여행에 필요한 준비물을 체크할 수 있는 리스트', '[{"key":"title","type":"text","label":"여행 제목","required":true},{"key":"travel_type","type":"select","label":"여행 종류","options":["국내 장기 여행","국내 단기 여행","해외 여행","출장","등산","다낭 여행"]},{"key":"departure_date","type":"date","label":"출발 날짜","required":true},{"key":"return_date","type":"date","label":"귀환 날짜"},{"key":"checklist","type":"checklist","label":"필수 리스트"},{"key":"toiletries","type":"checklist","label":"세면도구"},{"key":"clothing","type":"checklist","label":"의류"},{"key":"electronics","type":"checklist","label":"전자기기"},{"key":"documents","type":"checklist","label":"서류"},{"key":"snacks","type":"checklist","label":"간식"},{"key":"first_aid_kit","type":"checklist","label":"의약품"},{"key":"other_items","type":"checklist","label":"기타항목"}]'::jsonb, 0, 'list', true
+SELECT '00000000-0000-0000-0000-000000000001', '여행 준비물 리스트', '🧳', '#4a90e2', '여행에 필요한 준비물을 체크할 수 있는 리스트', '[{"key":"title","type":"text","label":"여행 제목","required":true},{"key":"travel_type","type":"select","label":"여행 종류","options":["국내 장기 여행","국내 단기 여행","해외 여행","출장","등산","다낭 여행"]},{"key":"departure_date","type":"date","label":"출발 날짜","required":true},{"key":"return_date","type":"date","label":"귀환 날짜"},{"key":"checklist","type":"checklist","label":"필수 리스트"},{"key":"toiletries","type":"checklist","label":"세면도구"},{"key":"clothing","type":"checklist","label":"의류"},{"key":"electronics","type":"checklist","label":"전자기기"},{"key":"documents","type":"checklist","label":"서류"},{"key":"snacks","type":"checklist","label":"간식"},{"key":"first_aid_kit","type":"checklist","label":"의약품"},{"key":"other_items","type":"checklist","label":"기타항목"},{"key":"_","type":"relation","label":"여행 관계형"}]'::jsonb, 0, 'list', true
 WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='여행 준비물 리스트' AND is_active=true);
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
@@ -734,7 +743,7 @@ SELECT '00000000-0000-0000-0000-000000000001', '레시피', '🍳', '#ef4444', '
 WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='레시피' AND is_active=true);
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
-SELECT '00000000-0000-0000-0000-000000000001', '드라마/영화', '🎬', '#8b5cf6', '본 드라마, 영화 기록', '[{"key":"title","type":"text","label":"제목","required":true},{"key":"kind","type":"select","label":"종류","options":["드라마","영화","예능","다큐","애니"]},{"key":"status","type":"select","label":"상태","options":["보고 싶은","보는 중","완료","중단"]},{"key":"rating","type":"rating","label":"별점"},{"key":"genre","type":"multiselect","label":"장르","options":["로맨스","액션","스릴러","코미디","판타지","SF","드라마"]},{"key":"platform","type":"text","label":"플랫폼"},{"key":"review","type":"longtext","label":"한줄평"},{"key":"watch_start_date","type":"date","label":"시청 시작일"},{"key":"watch_end_date","type":"date","label":"시청 종료일"},{"key":"watch_day","type":"multiselect","label":"시청 요일","options":["월","화","수","목","금","토","일"]},{"key":"watch_time","type":"text","label":"시청 시간"},{"key":"main_actor","type":"text","label":"주연배우"}]'::jsonb, 6, 'list', true
+SELECT '00000000-0000-0000-0000-000000000001', '드라마/영화', '🎬', '#8b5cf6', '본 드라마, 영화 기록', '[{"key":"title","type":"text","label":"제목","required":true},{"key":"kind","type":"select","label":"종류","options":["드라마","영화","예능","다큐","애니"]},{"key":"status","type":"select","label":"상태","options":["보고 싶은","보는 중","완료","중단"]},{"key":"rating","type":"rating","label":"별점"},{"key":"genre","type":"multiselect","label":"장르","options":["로맨스","액션","스릴러","코미디","판타지","SF","드라마"]},{"key":"platform","type":"text","label":"플랫폼"},{"key":"review","type":"longtext","label":"한줄평"},{"key":"watch_start_date","type":"date","label":"시청 시작일"},{"key":"watch_end_date","type":"date","label":"시청 종료일"},{"key":"watch_day","type":"multiselect","label":"시청 요일","options":["월","화","수","목","금","토","일"]},{"key":"watch_time","type":"text","label":"방송 시간"},{"key":"main_actor","type":"text","label":"주연배우"},{"key":"quote","type":"longtext","label":"명대사"}]'::jsonb, 6, 'list', true
 WHERE NOT EXISTS (SELECT 1 FROM archive_collections WHERE household_id='00000000-0000-0000-0000-000000000001' AND name='드라마/영화' AND is_active=true);
 
 INSERT INTO archive_collections (household_id, name, emoji, color, description, schema, position, card_layout, is_active)
