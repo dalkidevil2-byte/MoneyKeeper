@@ -54,6 +54,7 @@ export default function TaskFormSheet({
 
   const [kind, setKind] = useState<TaskKind>('event');
   const [startDateTodo, setStartDateTodo] = useState<string>('');
+  const [startTimeTodo, setStartTimeTodo] = useState<string>('');
   const [deadlineDate, setDeadlineDate] = useState<string>('');
   const [deadlineTime, setDeadlineTime] = useState<string>('');
   const [type, setType] = useState<'one_time' | 'routine'>('one_time');
@@ -95,6 +96,7 @@ export default function TaskFormSheet({
     if (initial) {
       setKind(initial.kind ?? 'event');
       setStartDateTodo(initial.start_date ?? '');
+      setStartTimeTodo(initial.start_time?.slice(0, 5) ?? '');
       setDeadlineDate(initial.deadline_date ?? '');
       setDeadlineTime(initial.deadline_time?.slice(0, 5) ?? '');
       setType(initial.type);
@@ -132,6 +134,7 @@ export default function TaskFormSheet({
       const d = defaults ?? {};
       setKind((d.kind as TaskKind) ?? 'event');
       setStartDateTodo(d.start_date ?? '');
+      setStartTimeTodo(d.start_time?.slice(0, 5) ?? '');
       setDeadlineDate(d.deadline_date ?? '');
       setDeadlineTime(d.deadline_time?.slice(0, 5) ?? '');
       setType((d.type as 'one_time' | 'routine') ?? 'one_time');
@@ -241,6 +244,7 @@ export default function TaskFormSheet({
     household_id: HOUSEHOLD_ID,
     kind,
     start_date: kind === 'todo' ? startDateTodo || null : null,
+    start_time: kind === 'todo' ? (startTimeTodo ? `${startTimeTodo}:00` : null) : null,
     deadline_date: kind === 'todo' ? deadlineDate || null : null,
     deadline_time: kind === 'todo' ? (deadlineTime ? `${deadlineTime}:00` : null) : null,
     type,
@@ -505,6 +509,15 @@ export default function TaskFormSheet({
                   }}
                   placeholder="(선택)"
                   className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
+                />
+                <input
+                  type="time"
+                  value={startTimeTodo}
+                  onChange={(e) => setStartTimeTodo(e.target.value)}
+                  disabled={!startDateTodo}
+                  placeholder="(선택)"
+                  title="시작 시간 (선택) — 시작일이 도래해도 이 시간 이전엔 숨김"
+                  className="w-28 px-3 py-2 border border-gray-200 rounded-xl text-sm disabled:opacity-40 disabled:bg-gray-50"
                 />
               </div>
               <div className="flex items-center gap-2">

@@ -300,6 +300,8 @@ export interface Task {
   kind: TaskKind;
   /** kind='todo' 일 때 시작일 (이 날부터 리스트 노출) */
   start_date: string | null;
+  /** kind='todo' 일 때 시작 시간 (선택) — 시작일이 도래해도 이 시간 이후부터 노출 */
+  start_time: string | null;
   /** kind='todo' 일 때 기한일 (event 는 due_date 그대로 사용) */
   deadline_date: string | null;
   deadline_time: string | null;
@@ -404,6 +406,7 @@ export interface CreateTaskInput {
   household_id: string;
   kind?: TaskKind;
   start_date?: string | null;
+  start_time?: string | null;
   deadline_date?: string | null;
   deadline_time?: string | null;
   type: TaskType;

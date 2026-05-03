@@ -94,6 +94,7 @@ export async function PATCH(
       'expense_transaction_id',
       'kind',
       'start_date',
+      'start_time',
       'deadline_date',
       'deadline_time',
       'is_active',

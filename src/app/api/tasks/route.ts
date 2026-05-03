@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
       household_id: body.household_id ?? DEFAULT_HOUSEHOLD_ID,
       kind: body.kind ?? 'event',
       start_date: body.start_date ?? null,
+      start_time: body.start_time ?? null,
       deadline_date: body.deadline_date ?? null,
       deadline_time: body.deadline_time ?? null,
       type: body.type ?? 'one_time',
