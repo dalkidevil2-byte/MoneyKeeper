@@ -88,7 +88,7 @@
     transform: scaleX(0);
   }
   .progress-bar span.done::after { transform: scaleX(1); }
-  .progress-bar span.active::after { animation: bar 3s linear forwards; }
+  .progress-bar span.active::after { animation: bar var(--dur, 4s) linear forwards; }
   @keyframes bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
   .brand-mark {
@@ -180,7 +180,7 @@
     </div>
 
     <!-- 씬 1: Hook — 정신없죠? -->
-    <div class="scene bg1" data-i="0">
+    <div class="scene bg1" data-i="0" data-dur="8">
       <div class="pop-emoji">😵‍💫</div>
       <div class="big" style="margin-top:40px;">
         요즘 진짜<br>
@@ -194,7 +194,7 @@
     </div>
 
     <!-- 씬 2: 비서가 필요해 -->
-    <div class="scene bg2" data-i="1">
+    <div class="scene bg2" data-i="1" data-dur="6">
       <div class="big">
         내 정신 챙겨줄<br>
         <span class="accent">누군가</span><br>
@@ -207,7 +207,7 @@
     </div>
 
     <!-- 씬 3: 직접 만드는 시대 -->
-    <div class="scene bg3" data-i="2">
+    <div class="scene bg3" data-i="2" data-dur="5">
       <div class="pop-emoji">✨</div>
       <div class="big" style="margin-top:40px;">
         AI 시대잖아요.<br>
@@ -220,7 +220,7 @@
     </div>
 
     <!-- 씬 4: 비서가 챙길 영역 — 다양성 -->
-    <div class="scene bg4" data-i="3">
+    <div class="scene bg4" data-i="3" data-dur="7">
       <div class="mid" style="margin-bottom:30px;">
         내가 챙기고 싶은<br>
         <span class="accent">모든 것</span>을
@@ -236,7 +236,7 @@
     </div>
 
     <!-- 씬 5: 한 마디면 처리 (AI 비서 화면) -->
-    <div class="scene bg5" data-i="4">
+    <div class="scene bg5" data-i="4" data-dur="8">
       <span class="label">💬 비서한테 시키기</span>
       <div class="mid">
         <span class="accent">한 마디면</span> 다 처리
@@ -272,7 +272,7 @@
     </div>
 
     <!-- 씬 6: 알아서 정리 -->
-    <div class="scene bg7" data-i="5">
+    <div class="scene bg7" data-i="5" data-dur="9">
       <span class="label">📈 알아서 정리</span>
       <div class="mid">
         기록은 내가,<br>
@@ -316,7 +316,7 @@
     </div>
 
     <!-- 씬 7: 매일 챙겨주는 비서 -->
-    <div class="scene bg6" data-i="6">
+    <div class="scene bg6" data-i="6" data-dur="7">
       <span class="label">🌅 매일 챙김</span>
       <div class="mid">
         매일 아침 · 저녁<br>
@@ -349,7 +349,7 @@
     </div>
 
     <!-- 씬 8: 마무리 + CTA -->
-    <div class="scene bg10" data-i="7">
+    <div class="scene bg10" data-i="7" data-dur="5">
       <div class="logo-big">💎</div>
       <div class="big" style="margin-top:40px;font-size:90px;color:#0f172a;">
         내 비서,<br>
@@ -367,7 +367,7 @@
     <button id="play">▶ 재생</button>
     <button id="restart">⟲ 처음부터</button>
     <button id="record" title="이 버튼 누르면 컨트롤 바가 사라져서 깔끔하게 녹화 가능">🎥 녹화 모드</button>
-    <span id="time" style="font-variant-numeric:tabular-nums;opacity:.7;">0 / 32s</span>
+    <span id="time" style="font-variant-numeric:tabular-nums;opacity:.7;">0 / 55s</span>
   </div>
 
   <!-- (구) exitTip 자리 — 재생 시작 후엔 어떤 안내도 띄우지 않음 -->
@@ -416,7 +416,9 @@
   const restartBtn = document.getElementById('restart');
   const timeEl = document.getElementById('time');
   const TOTAL = scenes.length;
-  const SCENE_MS = 4000; // 각 씬 4초 → 8씬 × 4 = 32초
+  // 각 씬별 시간 (초) — data-dur 속성에서 읽음. 없으면 4초.
+  const DURS = Array.from(scenes).map(s => parseFloat(s.dataset.dur || 4) * 1000);
+  const TOTAL_SEC = DURS.reduce((a, b) => a + b, 0) / 1000;
   let i = -1;
   let timer = null;
   let startTs = 0;
@@ -427,7 +429,11 @@
     bars.forEach((b, bi) => {
       b.classList.remove('active', 'done');
       if (bi < idx) b.classList.add('done');
-      if (bi === idx) b.classList.add('active');
+      if (bi === idx) {
+        b.classList.add('active');
+        // 진행 바 애니메이션 시간을 그 씬 시간에 맞춤
+        b.style.setProperty('--dur', (DURS[idx] / 1000) + 's');
+      }
     });
     if (idx < 0 || idx >= TOTAL) return;
     scenes[idx].classList.add('active');
@@ -440,27 +446,32 @@
       return;
     }
     show(i);
+    if (timer) clearTimeout(timer);
+    if (i < TOTAL - 1) {
+      timer = setTimeout(next, DURS[i]);
+    } else {
+      // 마지막 씬: 그 씬 시간 후 정지
+      timer = setTimeout(() => stop(), DURS[i]);
+    }
   }
 
   function play() {
     if (timer) return;
     if (i >= TOTAL - 1) i = -1;
+    startTs = Date.now();
     next();
-    startTs = Date.now() - i * SCENE_MS;
-    timer = setInterval(next, SCENE_MS);
     playBtn.textContent = '⏸ 일시정지';
     tick();
   }
   function stop() {
-    if (timer) { clearInterval(timer); timer = null; }
+    if (timer) { clearTimeout(timer); timer = null; }
     if (raf) { cancelAnimationFrame(raf); raf = null; }
     playBtn.textContent = '▶ 재생';
   }
   function tick() {
     const elapsed = (Date.now() - startTs) / 1000;
-    const total = TOTAL * SCENE_MS / 1000;
-    timeEl.textContent = Math.min(elapsed, total).toFixed(1) + ' / ' + total + 's';
-    if (timer) raf = requestAnimationFrame(tick);
+    timeEl.textContent = Math.min(elapsed, TOTAL_SEC).toFixed(1) + ' / ' + TOTAL_SEC.toFixed(0) + 's';
+    if (timer || i >= 0) raf = requestAnimationFrame(tick);
   }
 
   playBtn.onclick = () => {
@@ -470,7 +481,7 @@
     stop();
     i = -1;
     show(-1);
-    timeEl.textContent = '0 / ' + (TOTAL * SCENE_MS / 1000) + 's';
+    timeEl.textContent = '0 / ' + TOTAL_SEC.toFixed(0) + 's';
   };
 
   // 시작은 첫 씬 미리 보여주기
