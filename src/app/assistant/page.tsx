@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Send, Sparkles, Loader2, Mic, MicOff, Paperclip, X as CloseIcon } from 'lucide-react';
 import MessageContent from '@/components/assistant/MessageContent';
+import TtsButton from '@/components/TtsButton';
 
 type Msg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 

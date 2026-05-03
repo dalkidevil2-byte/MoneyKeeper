@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import TtsButton from '@/components/TtsButton';
 
 const STORAGE_KEY = 'home:briefing_cache';
+const COLLAPSED_KEY = 'home:briefing_collapsed';
 
 type Mode = 'morning' | 'evening';
 type Cached = {
@@ -27,22 +29,36 @@ export default function BriefingCard() {
   const [data, setData] = useState<Cached | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hidden, setHidden] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   // 캐시 불러오기 (오늘 날짜 + 같은 mode 면 재사용)
   useEffect(() => {
     try {
+      const c = localStorage.getItem(COLLAPSED_KEY);
+      if (c === '1') setCollapsed(true);
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const c = JSON.parse(raw) as Cached;
-        if (c.date === todayKey() && c.mode === nowMode()) {
-          setData(c);
+        const cached = JSON.parse(raw) as Cached;
+        if (cached.date === todayKey() && cached.mode === nowMode()) {
+          setData(cached);
         }
       }
     } catch {
       /* ignore */
     }
   }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const fetchBriefing = async () => {
     setLoading(true);
@@ -70,16 +86,19 @@ export default function BriefingCard() {
     }
   };
 
-  if (hidden) return null;
-
   return (
     <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-2xl p-4 border border-violet-100">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-bold text-violet-900 inline-flex items-center gap-1">
+        <button
+          onClick={toggleCollapsed}
+          className="text-sm font-bold text-violet-900 inline-flex items-center gap-1"
+          title={collapsed ? '펼치기' : '접기'}
+        >
           <Sparkles size={14} /> AI 브리핑
-        </h2>
+          {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+        </button>
         <div className="flex items-center gap-2">
-          {data && (
+          {data && !collapsed && (
             <button
               onClick={fetchBriefing}
               disabled={loading}
@@ -94,41 +113,52 @@ export default function BriefingCard() {
             </button>
           )}
           <button
-            onClick={() => setHidden(true)}
+            onClick={toggleCollapsed}
             className="text-xs text-violet-400"
           >
-            숨김
+            {collapsed ? '펼치기' : '접기'}
           </button>
         </div>
       </div>
 
-      {!data && !loading && (
-        <button
-          onClick={fetchBriefing}
-          className="w-full py-3 rounded-xl bg-white border border-violet-200 text-sm text-violet-700 font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-50"
-        >
-          <Sparkles size={14} />
-          {nowMode() === 'morning' ? '오늘의 브리핑 받기' : '오늘 회고 받기'}
-        </button>
-      )}
-
-      {loading && !data && (
-        <div className="flex items-center gap-2 py-3 text-sm text-violet-600">
-          <Loader2 size={14} className="animate-spin" /> AI 가 정리 중…
-        </div>
-      )}
-
-      {data && (
+      {!collapsed && (
         <>
-          <div className="text-sm font-bold text-gray-900 mb-1">{data.title}</div>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {data.body}
-          </p>
-        </>
-      )}
+          {!data && !loading && (
+            <button
+              onClick={fetchBriefing}
+              className="w-full py-3 rounded-xl bg-white border border-violet-200 text-sm text-violet-700 font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-50"
+            >
+              <Sparkles size={14} />
+              {nowMode() === 'morning' ? '오늘의 브리핑 받기' : '오늘 회고 받기'}
+            </button>
+          )}
 
-      {error && (
-        <div className="text-[11px] text-rose-500 mt-1">{error}</div>
+          {loading && !data && (
+            <div className="flex items-center gap-2 py-3 text-sm text-violet-600">
+              <Loader2 size={14} className="animate-spin" /> AI 가 정리 중…
+            </div>
+          )}
+
+          {data && (
+            <>
+              <div className="text-sm font-bold text-gray-900 mb-1">{data.title}</div>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {data.body}
+              </p>
+              <div className="mt-3 pt-3 border-t border-violet-100 flex justify-end">
+                <TtsButton
+                  text={`${data.title}. ${data.body}`}
+                  label="음성으로 듣기"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-sm active:bg-violet-700 disabled:opacity-50"
+                />
+              </div>
+            </>
+          )}
+
+          {error && (
+            <div className="text-[11px] text-rose-500 mt-1">{error}</div>
+          )}
+        </>
       )}
     </div>
   );
