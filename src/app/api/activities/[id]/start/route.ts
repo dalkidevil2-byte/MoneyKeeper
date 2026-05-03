@@ -16,11 +16,18 @@ const TZ = 'Asia/Seoul';
  * - daily_track_id 있으면 오늘 daily_track_logs 자동 추가 (없을 때만)
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const supabase = createServerSupabaseClient();
+  let archiveLinks: Array<{ collection_id: string; entry_id: string }> = [];
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (Array.isArray(body.archive_links)) archiveLinks = body.archive_links;
+  } catch {
+    /* ignore */
+  }
   try {
     const { data: act } = await supabase
       .from('activities')
@@ -85,18 +92,36 @@ export async function POST(
       // condition_text 있으면 정지 시 평가에서 처리
     }
 
-    // 세션 생성
-    const { data: session, error } = await supabase
-      .from('activity_sessions')
-      .insert({
+    // 세션 생성 — archive_links 컬럼 미적용 환경 대비 자동 폴백
+    const buildInsert = (withLinks: boolean) => {
+      const payload: Record<string, unknown> = {
         household_id: act.household_id,
         activity_id: id,
         member_id: act.member_id,
         session_date: todayKey,
         daily_track_log_id: dailyTrackLogId,
-      })
+      };
+      if (withLinks) payload.archive_links = archiveLinks;
+      return payload;
+    };
+    let { data: session, error } = await supabase
+      .from('activity_sessions')
+      .insert(buildInsert(archiveLinks.length > 0))
       .select('*')
       .single();
+    if (
+      error &&
+      /column .* does not exist/i.test(error.message ?? '') &&
+      archiveLinks.length > 0
+    ) {
+      const retry = await supabase
+        .from('activity_sessions')
+        .insert(buildInsert(false))
+        .select('*')
+        .single();
+      session = retry.data;
+      error = retry.error;
+    }
     if (error) throw error;
 
     return NextResponse.json({ session, started: true });

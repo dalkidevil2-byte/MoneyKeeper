@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Play, Square, Plus, Settings as SettingsIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Activity } from '@/types';
 import ActivityFormSheet from './ActivityFormSheet';
+import ArchiveLinksPicker, { type ArchiveLink } from './ArchiveLinksPicker';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -18,6 +19,8 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
   const [editing, setEditing] = useState<Activity | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [linkDialog, setLinkDialog] = useState<null | { activity: Activity }>(null);
+  const [pendingLinks, setPendingLinks] = useState<ArchiveLink[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,7 +44,8 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
     return () => clearInterval(id);
   }, [activities]);
 
-  const start = async (a: Activity) => {
+  // 진짜 시작 호출 (선택적으로 archive_links 함께)
+  const doStart = async (a: Activity, links: ArchiveLink[]) => {
     if (busyId) return;
     setBusyId(a.id);
     try {
@@ -49,12 +53,24 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
       for (const o of others) {
         await fetch(`/api/activities/${o.id}/stop`, { method: 'POST' });
       }
-      await fetch(`/api/activities/${a.id}/start`, { method: 'POST' });
+      await fetch(`/api/activities/${a.id}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archive_links: links }),
+      });
       await load();
       onChange?.();
     } finally {
       setBusyId(null);
     }
+  };
+
+  // 활동에 link_collection_id 가 설정돼 있으면 시작 전 항목 선택 모달 열기
+  // (없으면 바로 시작)
+  const start = async (a: Activity) => {
+    // 단축: shift/ctrl + 클릭 등은 바로 시작 — 향후 옵션화
+    setLinkDialog({ activity: a });
+    setPendingLinks([]);
   };
 
   const stop = async (a: Activity) => {
@@ -257,6 +273,60 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
             void load();
           }}
         />
+      )}
+
+      {/* 활동 시작 시 아카이브 항목 선택 다이얼로그 */}
+      {linkDialog && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
+          onClick={() => setLinkDialog(null)}
+        >
+          <div
+            className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 space-y-3 max-h-[80vh] overflow-y-auto"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">
+                ▶ {linkDialog.activity.emoji} {linkDialog.activity.name}
+              </h3>
+              <button
+                onClick={() => setLinkDialog(null)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              관련 아카이브 항목을 선택하면 끝났을 때 그 항목에 시간이 자동
+              기록돼요. (선택)
+            </p>
+            <ArchiveLinksPicker value={pendingLinks} onChange={setPendingLinks} />
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => {
+                  const a = linkDialog.activity;
+                  setLinkDialog(null);
+                  void doStart(a, []);
+                }}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm"
+              >
+                연결 없이 시작
+              </button>
+              <button
+                onClick={() => {
+                  const a = linkDialog.activity;
+                  const links = pendingLinks;
+                  setLinkDialog(null);
+                  void doStart(a, links);
+                }}
+                disabled={pendingLinks.length === 0}
+                className="flex-1 py-3 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:opacity-40"
+              >
+                시작 ({pendingLinks.length})
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );
