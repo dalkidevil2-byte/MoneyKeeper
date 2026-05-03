@@ -1171,6 +1171,31 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400 px-1 mt-1.5">기본 카테고리는 변경할 수 없어요</p>
         </CollapsibleSection>
 
+        {/* 사용 설명서 */}
+        <section>
+          <a
+            href="https://github.com/dalkidevil2-byte/MoneyKeeper/blob/main/docs/USER-GUIDE.md"
+            target="_blank"
+            rel="noreferrer"
+            className="block bg-white rounded-2xl border border-gray-100 p-4 hover:bg-gray-50 active:bg-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                  <span className="text-base">📖</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">사용 설명서</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    전체 기능 가이드 · 단축 동작 · FAQ
+                  </p>
+                </div>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </div>
+          </a>
+        </section>
+
         {/* AI 사용량 / 비용 */}
         <AiUsageCard />
 
