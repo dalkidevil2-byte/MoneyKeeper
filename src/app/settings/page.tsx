@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useAccounts, usePaymentMethods, useBudgets, useMembers, useCustomCategories, useFixedExpenseTemplates } from '@/hooks/useAccounts';
 import AiUsageCard from '@/components/AiUsageCard';
 import CollapsibleSection from '@/components/CollapsibleSection';
+import AccountActions from '@/components/AccountActions';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
@@ -427,6 +428,7 @@ export default function SettingsPage() {
                   <option value="cash">현금</option>
                   <option value="easy_pay_balance">간편결제</option>
                   <option value="investment">투자</option>
+                  <option value="points">포인트</option>
                 </select>
                 <input
                   type="text"
@@ -482,17 +484,27 @@ export default function SettingsPage() {
                     </div>
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                       {group.map((acc, idx) => (
-                        <div key={acc.id} className={`flex items-center justify-between px-4 py-3.5 ${idx < group.length - 1 ? 'border-b border-gray-50' : ''}`}>
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center">
-                              <Wallet size={15} className="text-indigo-600" />
+                        <div key={acc.id} className={`px-4 py-3.5 ${idx < group.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${acc.type === 'points' ? 'bg-amber-50' : 'bg-indigo-50'}`}>
+                                {acc.type === 'points' ? (
+                                  <span className="text-base">🎁</span>
+                                ) : (
+                                  <Wallet size={15} className="text-indigo-600" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{acc.name}</p>
+                                <p className="text-xs text-gray-400">{acc.type === 'bank' ? '은행' : acc.type === 'cash' ? '현금' : acc.type === 'easy_pay_balance' ? '간편결제' : acc.type === 'points' ? '포인트' : acc.type === 'investment' ? '투자' : acc.type}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-800">{acc.name}</p>
-                              <p className="text-xs text-gray-400">{acc.type === 'bank' ? '은행' : acc.type === 'cash' ? '현금' : acc.type === 'easy_pay_balance' ? '간편결제' : acc.type}</p>
-                            </div>
+                            <p className="font-semibold text-gray-800 text-sm">
+                              {Number(acc.balance ?? 0).toLocaleString('ko-KR')}
+                              {acc.type === 'points' ? 'P' : '원'}
+                            </p>
                           </div>
-                          <p className="font-semibold text-gray-800 text-sm">{formatAmount(acc.balance)}</p>
+                          <AccountActions account={acc} accounts={accounts} onDone={() => window.location.reload()} />
                         </div>
                       ))}
                     </div>
@@ -778,6 +790,29 @@ export default function SettingsPage() {
                     {ftLoading
                       ? '로딩 중…'
                       : `${fixedTemplates.length}건 등록됨 · 매월 자동 알림`}
+                  </p>
+                </div>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </div>
+          </Link>
+        </section>
+
+        {/* 카드 청구서 관리 — 전용 페이지 */}
+        <section>
+          <Link
+            href="/budget/card-statements"
+            className="block bg-white rounded-2xl border border-gray-100 p-4 hover:bg-gray-50 active:bg-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <CreditCard size={18} className="text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">카드 청구서</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    실제 청구액 등록 · 누락 검증 · 결제일 자동 처리
                   </p>
                 </div>
               </div>

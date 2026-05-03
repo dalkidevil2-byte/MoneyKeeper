@@ -20,7 +20,34 @@ export type SyncStatus = 'pending' | 'synced' | 'failed' | 'skipped';
 // ─────────────────────────────────────────
 // 계좌 타입
 // ─────────────────────────────────────────
-export type AccountType = 'bank' | 'cash' | 'easy_pay_balance' | 'investment' | 'virtual_balance';
+export type AccountType = 'bank' | 'cash' | 'easy_pay_balance' | 'investment' | 'virtual_balance' | 'points';
+
+// ─────────────────────────────────────────
+// 카드 청구서
+// ─────────────────────────────────────────
+export type CardStatementStatus = 'pending' | 'paid' | 'cancelled';
+export interface CardStatement {
+  id: string;
+  household_id: string;
+  payment_method_id: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  payment_due_date: string;
+  billed_amount: number;
+  account_id: string | null;
+  status: CardStatementStatus;
+  paid_transaction_id: string | null;
+  paid_at: string | null;
+  memo: string;
+  created_at: string;
+  updated_at: string;
+  // join
+  payment_method?: { id: string; name: string; type: string };
+  account?: { id: string; name: string };
+  // 계산 필드 (서버에서 채워줌)
+  recorded_amount?: number;
+  diff?: number;
+}
 
 // ─────────────────────────────────────────
 // 결제수단 타입
@@ -267,6 +294,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   easy_pay_balance: '간편결제',
   investment: '투자',
   virtual_balance: '가상',
+  points: '포인트',
 };
 
 // 결제수단 타입 한글
