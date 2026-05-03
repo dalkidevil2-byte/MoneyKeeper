@@ -256,11 +256,13 @@ export const ASSISTANT_TOOLS = [
               properties: {
                 ticker_name: {
                   type: 'string',
-                  description: '한국명 또는 영문명 (예: SNT에너지, 만도, 포스코DX, AAPL)',
+                  description:
+                    '**반드시 회사명**으로 입력 (예: SNT에너지, 만도, 포스코DX, 삼성전자, AAPL). 종목코드(005930 같은 6자리 숫자)나 티커(005930.KS)를 여기 넣지 말 것 — 그건 ticker 필드에 별도로 적기. 사용자 메시지에 코드만 있으면 코드를 ticker 에 넣고 ticker_name 은 비워두면 서버가 자동 매칭함.',
                 },
                 ticker: {
                   type: 'string',
-                  description: '6자리 코드 또는 .KS/.KQ 티커 (알면 적기, 모르면 생략)',
+                  description:
+                    '6자리 코드(005930) 또는 .KS/.KQ 티커(005930.KS). 알면 꼭 적기. 모르면 생략 (서버가 ticker_name 으로 KRX 매칭).',
                 },
                 action: {
                   type: 'string',
@@ -814,24 +816,55 @@ export async function executeTool(
         for (const e of entries) {
           let ticker = e.ticker?.trim() || '';
           let code: string | null = null;
-          let resolvedName = e.ticker_name;
+          let resolvedName = e.ticker_name?.trim() ?? '';
 
-          // ticker 미지정이거나 한글일 때 → KRX 매칭
-          if (!ticker || /[가-힣]/.test(ticker)) {
-            const q = e.ticker_name.trim();
-            const isCode = /^\d+$/.test(q);
-            const { data: matches } = await supabase
-              .from('stock_krx_stocks')
-              .select('code, ticker, name, market')
-              .or(isCode ? `code.like.${q}%` : `name.ilike.%${q}%`)
-              .limit(5);
-            if (matches && matches.length > 0) {
-              // 정확히 일치 우선, 없으면 첫 번째
-              const exact = matches.find((m) => m.name === q);
+          // 종목명이 코드/티커처럼 보이거나 비어있는지 — 그러면 정식 한글명으로 변환 필요
+          const nameLooksLikeCode =
+            !!resolvedName &&
+            (/^\d{4,6}(\.\w+)?$/.test(resolvedName) || // 005930, 005930.KS
+              /^[A-Z]{1,5}(\.\w+)?$/.test(resolvedName)); // AAPL, AAPL.US
+
+          const tickerIsKorean = /[가-힣]/.test(ticker);
+          const needLookup =
+            !ticker || tickerIsKorean || nameLooksLikeCode || !resolvedName;
+
+          if (needLookup) {
+            // 검색 키 결정: ticker 코드 우선, 없으면 이름
+            const codeQuery = ticker && /^\d+$/.test(ticker)
+              ? ticker
+              : /^\d+$/.test(resolvedName)
+                ? resolvedName
+                : '';
+            const nameQuery = resolvedName && !/^[\d]+$/.test(resolvedName)
+              ? resolvedName
+              : '';
+
+            type KrxRow = { code: string; ticker: string; name: string; market: string };
+            let matches: KrxRow[] = [];
+            if (codeQuery) {
+              const { data } = await supabase
+                .from('stock_krx_stocks')
+                .select('code, ticker, name, market')
+                .like('code', `${codeQuery}%`)
+                .limit(5);
+              matches = (data ?? []) as KrxRow[];
+            } else if (nameQuery && /[가-힣A-Za-z]/.test(nameQuery)) {
+              const { data } = await supabase
+                .from('stock_krx_stocks')
+                .select('code, ticker, name, market')
+                .ilike('name', `%${nameQuery}%`)
+                .limit(5);
+              matches = (data ?? []) as KrxRow[];
+            }
+
+            if (matches.length > 0) {
+              const exact =
+                matches.find((m) => m.name === nameQuery) ??
+                matches.find((m) => m.code === codeQuery);
               const pick = exact ?? matches[0];
-              ticker = pick.ticker as string;
-              code = pick.code as string;
-              resolvedName = pick.name as string;
+              ticker = pick.ticker;
+              code = pick.code;
+              resolvedName = pick.name; // 한글명으로 항상 덮어쓰기
             }
           }
 
