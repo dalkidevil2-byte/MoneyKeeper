@@ -229,6 +229,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   recurrence JSONB,
   estimated_minutes INTEGER,
   archive_links JSONB NOT NULL DEFAULT '[]'::jsonb,
+  transaction_links JSONB NOT NULL DEFAULT '[]'::jsonb,
+  reminders JSONB NOT NULL DEFAULT '[]'::jsonb,
+  sent_reminders JSONB NOT NULL DEFAULT '[]'::jsonb,
   is_active BOOLEAN NOT NULL DEFAULT true,
   google_event_id TEXT,
   notion_page_id TEXT,
@@ -238,6 +241,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_archive_links_gin
   ON tasks USING GIN (archive_links);
+CREATE INDEX IF NOT EXISTS idx_tasks_transaction_links_gin
+  ON tasks USING GIN (transaction_links);
 CREATE INDEX IF NOT EXISTS idx_tasks_household_due ON tasks(household_id, due_date);
 CREATE INDEX IF NOT EXISTS idx_tasks_household_deadline ON tasks(household_id, deadline_date);
 CREATE INDEX IF NOT EXISTS idx_tasks_household_status ON tasks(household_id, status);
