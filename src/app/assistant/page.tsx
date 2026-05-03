@@ -7,7 +7,35 @@ import MessageContent from '@/components/assistant/MessageContent';
 import TtsButton from '@/components/TtsButton';
 import AiUsageCard from '@/components/AiUsageCard';
 
-type Msg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
+type ToolCall = { name: string; args: unknown };
+type Msg = {
+  role: 'user' | 'assistant';
+  content: string;
+  imageUrl?: string;
+  toolCalls?: ToolCall[];
+};
+
+// 도구 → 바로가기 링크 매핑
+const TOOL_SHORTCUTS: Record<string, { label: string; href: string; emoji: string }> = {
+  create_task: { label: '할일 보기', href: '/todo', emoji: '✅' },
+  create_transaction: { label: '거래내역 보기', href: '/transactions', emoji: '💰' },
+  create_archive_collection: { label: '아카이브 보기', href: '/archive', emoji: '📚' },
+  save_stock_recommendation: { label: '주식 추천 보기', href: '/stocks', emoji: '📈' },
+};
+
+function shortcutsFromToolCalls(toolCalls?: ToolCall[]) {
+  if (!toolCalls?.length) return [];
+  const seen = new Set<string>();
+  const out: Array<{ label: string; href: string; emoji: string }> = [];
+  for (const tc of toolCalls) {
+    const cfg = TOOL_SHORTCUTS[tc.name];
+    if (cfg && !seen.has(cfg.href)) {
+      seen.add(cfg.href);
+      out.push(cfg);
+    }
+  }
+  return out;
+}
 
 const SUGGESTIONS = [
   '오늘 일정 알려줘',
@@ -161,7 +189,11 @@ export default function AssistantPage() {
       }
       const j = await res.json();
       const reply = j.content ?? '답변을 생성하지 못했어요.';
-      setMessages([...newMessages, { role: 'assistant', content: reply }]);
+      const toolCalls = (j.tool_calls ?? []) as ToolCall[];
+      setMessages([
+        ...newMessages,
+        { role: 'assistant', content: reply, toolCalls },
+      ]);
     } catch {
       setMessages([
         ...newMessages,
@@ -284,6 +316,19 @@ export default function AssistantPage() {
                           : 'underline underline-offset-2 break-all text-violet-600 hover:text-violet-700'
                       }
                     />
+                  )}
+                  {m.role === 'assistant' && shortcutsFromToolCalls(m.toolCalls).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {shortcutsFromToolCalls(m.toolCalls).map((s) => (
+                        <Link
+                          key={s.href}
+                          href={s.href}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold bg-violet-100 text-violet-700 px-2.5 py-1 rounded-full hover:bg-violet-200 active:bg-violet-300"
+                        >
+                          <span>{s.emoji}</span> {s.label} →
+                        </Link>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
