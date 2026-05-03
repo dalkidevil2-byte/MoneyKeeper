@@ -46,6 +46,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [aiFillError, setAiFillError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar' | 'table' | 'board'>('list');
   const [calendarDateKey, setCalendarDateKey] = useState<string>('');
+  const [calendarEndDateKey, setCalendarEndDateKey] = useState<string>('');
   const [boardGroupKey, setBoardGroupKey] = useState<string>('');
   const [aiFillResult, setAiFillResult] = useState<{
     data: Record<string, unknown>;
@@ -293,6 +294,16 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
       (p: ArchiveProperty) => p.type === 'date',
     );
     if (firstDate) setCalendarDateKey(firstDate.key);
+    // date 속성이 2개 이상이면 두 번째를 자동으로 종료일로
+    const dates = (collection.schema ?? []).filter(
+      (p: ArchiveProperty) => p.type === 'date',
+    );
+    // 흔한 패턴 매칭: 'end_date', 'end', '종료', '마감' 같은 이름이 있으면 우선
+    const endHints = ['end', '종료', '마감', '~', 'until', 'finish'];
+    const guessEnd = dates.find((p, i) =>
+      i > 0 && endHints.some((h) => (p.key.toLowerCase().includes(h)) || (p.label ?? '').toLowerCase().includes(h)),
+    );
+    setCalendarEndDateKey(guessEnd?.key ?? '');
     // 첫 select 속성을 보드 기준으로 자동 선택
     const firstSelect = (collection.schema ?? []).find(
       (p: ArchiveProperty) => p.type === 'select',
@@ -611,17 +622,34 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
           </div>
           {/* 캘린더 모드일 때 date 속성 선택 (여러 개일 때) */}
           {viewMode === 'calendar' && dateProps.length > 1 && (
-            <select
-              value={calendarDateKey}
-              onChange={(e) => setCalendarDateKey(e.target.value)}
-              className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white"
-            >
-              {dateProps.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label} 기준
-                </option>
-              ))}
-            </select>
+            <>
+              <select
+                value={calendarDateKey}
+                onChange={(e) => setCalendarDateKey(e.target.value)}
+                className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white"
+              >
+                {dateProps.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    시작: {p.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={calendarEndDateKey}
+                onChange={(e) => setCalendarEndDateKey(e.target.value)}
+                className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white"
+                title="기간 표시용 종료일 (선택)"
+              >
+                <option value="">종료일 없음</option>
+                {dateProps
+                  .filter((p) => p.key !== calendarDateKey)
+                  .map((p) => (
+                    <option key={p.key} value={p.key}>
+                      종료: {p.label}
+                    </option>
+                  ))}
+              </select>
+            </>
           )}
           {/* 보드 모드일 때 select 속성 선택 (여러 개일 때) */}
           {viewMode === 'board' && selectProps.length > 1 && (
@@ -689,6 +717,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             entries={filteredEntries}
             schema={(collection?.schema ?? []) as ArchiveProperty[]}
             dateKey={calendarDateKey}
+            endDateKey={calendarEndDateKey || undefined}
             onSelectDate={(entryId, date) => {
               if (entryId) {
                 const found = entries.find((e) => e.id === entryId);

@@ -8,7 +8,8 @@ import type { ArchiveEntry, ArchiveProperty } from '@/types';
 interface Props {
   entries: ArchiveEntry[];
   schema: ArchiveProperty[];
-  dateKey: string; // 어느 date 속성 기준으로 배치할지
+  dateKey: string; // 시작 date 속성 (또는 단일 date 속성)
+  endDateKey?: string; // 종료 date 속성 (있으면 range 모드)
   onSelectDate: (entryId: string | null, date?: string) => void;
 }
 
@@ -18,6 +19,7 @@ export default function ArchiveCalendarView({
   entries,
   schema,
   dateKey,
+  endDateKey,
   onSelectDate,
 }: Props) {
   const [cursor, setCursor] = useState(dayjs());
@@ -29,20 +31,51 @@ export default function ArchiveCalendarView({
   const calStart = monthStart.startOf('week');
   const calEnd = monthEnd.endOf('week');
 
-  // 날짜별 항목 매핑
+  // 날짜별 항목 매핑 — endDateKey 가 있으면 시작~종료 범위 내 모든 날짜에 표시
+  // 각 항목이 "이 날에 있다 + 시작/종료 위치" 정보를 함께 들고 다님
+  type DayEntry = {
+    entry: ArchiveEntry;
+    isStart: boolean; // 이 셀이 시작 날
+    isEnd: boolean; // 이 셀이 종료 날
+    isRange: boolean; // 다일짜 range 여부
+  };
   const entriesByDate = useMemo(() => {
-    const map = new Map<string, ArchiveEntry[]>();
+    const map = new Map<string, DayEntry[]>();
+    const norm = (v: unknown): string | null => {
+      if (!v) return null;
+      const s = String(v).slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+    };
     for (const e of entries) {
       const d = (e.data ?? {}) as Record<string, unknown>;
-      const raw = d[dateKey];
-      if (!raw) continue;
-      const dateStr = String(raw).slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
-      if (!map.has(dateStr)) map.set(dateStr, []);
-      map.get(dateStr)!.push(e);
+      const start = norm(d[dateKey]);
+      if (!start) continue;
+      const end = endDateKey ? norm(d[endDateKey]) : null;
+      // end 가 start 보다 빠르면 무시 (잘못된 데이터)
+      const validEnd = end && end >= start ? end : null;
+      const isRange = !!validEnd && validEnd !== start;
+      if (!isRange) {
+        if (!map.has(start)) map.set(start, []);
+        map.get(start)!.push({ entry: e, isStart: true, isEnd: true, isRange: false });
+        continue;
+      }
+      // range — 시작~종료 사이 모든 날짜에 push
+      let cur = dayjs(start);
+      const last = dayjs(validEnd!);
+      while (cur.isBefore(last) || cur.isSame(last, 'day')) {
+        const k = cur.format('YYYY-MM-DD');
+        if (!map.has(k)) map.set(k, []);
+        map.get(k)!.push({
+          entry: e,
+          isStart: cur.isSame(dayjs(start), 'day'),
+          isEnd: cur.isSame(last, 'day'),
+          isRange: true,
+        });
+        cur = cur.add(1, 'day');
+      }
     }
     return map;
-  }, [entries, dateKey]);
+  }, [entries, dateKey, endDateKey]);
 
   // 격자 채우기
   const days: dayjs.Dayjs[] = [];
@@ -113,10 +146,9 @@ export default function ArchiveCalendarView({
                 if (dayEntries.length === 0) {
                   onSelectDate(null, key);
                 } else if (dayEntries.length === 1) {
-                  onSelectDate(dayEntries[0].id, key);
+                  onSelectDate(dayEntries[0].entry.id, key);
                 } else {
-                  // 여러 개면 첫 번째 열어주고, 사용자가 카드를 직접 누르면 거기로
-                  onSelectDate(dayEntries[0].id, key);
+                  onSelectDate(dayEntries[0].entry.id, key);
                 }
               }}
               className={`min-h-[64px] border-b border-r border-gray-50 p-1 text-left flex flex-col gap-0.5 transition-colors ${
@@ -140,19 +172,36 @@ export default function ArchiveCalendarView({
               </div>
               {/* 항목 미리보기 — 최대 3개, 더 있으면 +N */}
               <div className="space-y-0.5 overflow-hidden">
-                {dayEntries.slice(0, 3).map((e) => {
-                  const dt = (e.data ?? {}) as Record<string, unknown>;
+                {dayEntries.slice(0, 3).map((de, di) => {
+                  const dt = (de.entry.data ?? {}) as Record<string, unknown>;
                   const title = titleKey ? String(dt[titleKey] ?? '') : '';
+                  // range 표시: 시작은 둥근 좌측, 끝은 둥근 우측, 중간은 직각
+                  const radius = de.isRange
+                    ? `${de.isStart ? 'rounded-l ' : ''}${de.isEnd ? 'rounded-r ' : ''}${!de.isStart && !de.isEnd ? '' : ''}`
+                    : 'rounded';
+                  // 중간 칸은 음각/짙은 색으로 연결 표시 (margin 으로 살짝 밀착)
+                  const mx = de.isRange
+                    ? `${!de.isStart ? '-ml-1 ' : ''}${!de.isEnd ? '-mr-1 ' : ''}`
+                    : '';
+                  // 시작 셀에만 제목 표시, 그 외엔 "→" 빈 띠
+                  const label = de.isRange && !de.isStart
+                    ? ' ' // 비-breaking space, 띠만 표시
+                    : title || '(제목 없음)';
                   return (
                     <div
-                      key={e.id}
+                      key={`${de.entry.id}-${di}`}
                       onClick={(ev) => {
                         ev.stopPropagation();
-                        onSelectDate(e.id, key);
+                        onSelectDate(de.entry.id, key);
                       }}
-                      className="text-[9px] leading-tight bg-violet-100 text-violet-700 rounded px-1 py-0.5 truncate"
+                      className={`text-[9px] leading-tight px-1 py-0.5 truncate ${radius} ${mx} ${
+                        de.isRange
+                          ? 'bg-violet-500 text-white'
+                          : 'bg-violet-100 text-violet-700'
+                      }`}
+                      title={title}
                     >
-                      {title || '(제목 없음)'}
+                      {label}
                     </div>
                   );
                 })}
