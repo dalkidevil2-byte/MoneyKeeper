@@ -1,9 +1,19 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ArchiveEntry, ArchiveProperty } from '@/types';
+
+interface SessionRow {
+  id: string;
+  archive_links: Array<{ collection_id: string; entry_id: string }>;
+  session_date: string;
+  start_at: string;
+  end_at: string | null;
+  duration_minutes: number | null;
+  activity: { id: string; name: string; emoji: string; color?: string } | null;
+}
 
 interface Props {
   entries: ArchiveEntry[];
@@ -11,6 +21,9 @@ interface Props {
   dateKey: string; // 시작 date 속성 (또는 단일 date 속성)
   endDateKey?: string; // 종료 date 속성 (있으면 range 모드)
   onSelectDate: (entryId: string | null, date?: string) => void;
+  /** 활동 세션 layer 활성화 — 컬렉션 ID 주면 자동 fetch */
+  collectionId?: string;
+  showSessions?: boolean;
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -21,8 +34,34 @@ export default function ArchiveCalendarView({
   dateKey,
   endDateKey,
   onSelectDate,
+  collectionId,
+  showSessions = true,
 }: Props) {
   const [cursor, setCursor] = useState(dayjs());
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+
+  // 보고 있는 월의 세션 fetch
+  useEffect(() => {
+    if (!collectionId || !showSessions) {
+      setSessions([]);
+      return;
+    }
+    const from = cursor.startOf('month').format('YYYY-MM-DD');
+    const to = cursor.endOf('month').format('YYYY-MM-DD');
+    let cancelled = false;
+    fetch(
+      `/api/archive/collections/${collectionId}/sessions?from=${from}&to=${to}`,
+    )
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return;
+        setSessions((j.sessions ?? []) as SessionRow[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionId, showSessions, cursor]);
   const [swipeDx, setSwipeDx] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -114,6 +153,32 @@ export default function ArchiveCalendarView({
     }
     return map;
   }, [entries, dateKey, endDateKey]);
+
+  // 세션을 날짜별로 매핑 — entry 제목으로 표시
+  const sessionsByDate = useMemo(() => {
+    const map = new Map<
+      string,
+      Array<{ session: SessionRow; entryTitle: string; entryId: string }>
+    >();
+    if (!showSessions) return map;
+    for (const s of sessions) {
+      const d = String(s.session_date).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+      // 이 컬렉션 ID 와 매칭되는 link 들 (자기 컬렉션 entry id 만)
+      for (const link of s.archive_links ?? []) {
+        if (collectionId && link.collection_id !== collectionId) continue;
+        const entry = entries.find((e) => e.id === link.entry_id);
+        if (!entry) continue;
+        const t = titleKey
+          ? String((entry.data as Record<string, unknown> | undefined)?.[titleKey] ?? '')
+          : '';
+        const list = map.get(d) ?? [];
+        list.push({ session: s, entryTitle: t || '(제목 없음)', entryId: link.entry_id });
+        map.set(d, list);
+      }
+    }
+    return map;
+  }, [sessions, entries, titleKey, collectionId, showSessions]);
 
   // 격자 채우기
   const days: dayjs.Dayjs[] = [];
@@ -262,6 +327,43 @@ export default function ArchiveCalendarView({
                     +{dayEntries.length - 3}
                   </div>
                 )}
+                {/* 활동 세션 layer (주황색) */}
+                {(() => {
+                  const sList = sessionsByDate.get(key) ?? [];
+                  if (sList.length === 0) return null;
+                  return (
+                    <>
+                      {sList.slice(0, 2).map((it, idx) => {
+                        const dur = it.session.duration_minutes ?? 0;
+                        const durLabel = dur > 0 ? `${dur}분` : '';
+                        return (
+                          <div
+                            key={`s-${it.session.id}-${idx}`}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              onSelectDate(it.entryId, key);
+                            }}
+                            className="text-[9px] leading-tight rounded px-1 py-0.5 truncate bg-amber-100 text-amber-700 border border-amber-200"
+                            title={`${it.entryTitle} ${durLabel}`}
+                          >
+                            <span className="opacity-60 mr-0.5">
+                              {it.session.activity?.emoji ?? '⏱'}
+                            </span>
+                            {it.entryTitle}
+                            {durLabel && (
+                              <span className="ml-1 opacity-70">{durLabel}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {sList.length > 2 && (
+                        <div className="text-[9px] text-amber-500 px-1">
+                          +{sList.length - 2}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </button>
           );

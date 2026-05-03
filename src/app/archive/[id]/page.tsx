@@ -48,6 +48,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar' | 'table' | 'board'>('list');
   const [calendarDateKey, setCalendarDateKey] = useState<string>('');
   const [calendarEndDateKey, setCalendarEndDateKey] = useState<string>('');
+  const [calendarShowSessions, setCalendarShowSessions] = useState<boolean>(true);
   const [boardGroupKey, setBoardGroupKey] = useState<string>('');
   const [aiFillResult, setAiFillResult] = useState<{
     data: Record<string, unknown>;
@@ -605,18 +606,11 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               <Columns3 size={12} /> 보드
             </button>
             <button
-              onClick={() => {
-                if (dateProps.length === 0) {
-                  alert('날짜 속성이 있어야 캘린더 뷰를 사용할 수 있어요. 컬렉션 설정에서 date 타입 속성을 추가해주세요.');
-                  return;
-                }
-                changeViewMode('calendar');
-              }}
-              disabled={dateProps.length === 0}
-              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors disabled:opacity-40 ${
+              onClick={() => changeViewMode('calendar')}
+              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${
                 viewMode === 'calendar' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500'
               }`}
-              title={dateProps.length === 0 ? '날짜 속성이 필요해요' : ''}
+              title={dateProps.length === 0 ? '활동 세션만 표시 (date 속성 추가 시 더 풍부)' : ''}
             >
               <CalendarIcon size={12} /> 캘린더
             </button>
@@ -651,6 +645,18 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
                   ))}
               </select>
             </>
+          )}
+          {/* 캘린더 모드일 때 세션 표시 토글 */}
+          {viewMode === 'calendar' && (
+            <label className="text-[11px] inline-flex items-center gap-1 text-gray-600">
+              <input
+                type="checkbox"
+                checked={calendarShowSessions}
+                onChange={(e) => setCalendarShowSessions(e.target.checked)}
+                className="accent-amber-500"
+              />
+              ⏱ 활동 세션
+            </label>
           )}
           {/* 보드 모드일 때 select 속성 선택 (여러 개일 때) */}
           {viewMode === 'board' && selectProps.length > 1 && (
@@ -713,22 +719,27 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               );
             }}
           />
-        ) : viewMode === 'calendar' && calendarDateKey ? (
+        ) : viewMode === 'calendar' ? (
           <ArchiveCalendarView
             entries={filteredEntries}
             schema={(collection?.schema ?? []) as ArchiveProperty[]}
             dateKey={calendarDateKey}
             endDateKey={calendarEndDateKey || undefined}
+            collectionId={collection?.id}
+            showSessions={calendarShowSessions}
             onSelectDate={(entryId, date) => {
               if (entryId) {
                 const found = entries.find((e) => e.id === entryId);
                 if (found) setEditingEntry(found);
-              } else if (date) {
-                // 빈 날짜 — 새 항목 만들면서 그 날짜 prefill
+              } else if (date && calendarDateKey) {
+                // 빈 날짜 — 새 항목 만들면서 그 날짜 prefill (date 속성 있을 때만)
                 setDuplicateData({
                   data: { [calendarDateKey]: date },
                   sourceTitle: '',
                 });
+                setEditingEntry('new');
+              } else if (date) {
+                // date 속성 없으면 그냥 새 항목
                 setEditingEntry('new');
               }
             }}
