@@ -601,9 +601,49 @@ export async function executeTool(
       }
 
       case 'create_archive_collection': {
+        const requestedName = String(args.name ?? '새 컬렉션').trim();
+
+        // ─── 중복/유사 컬렉션 가드 ───
+        // 같은 키워드 컬렉션이 이미 있으면 새로 만들지 않고 안내
+        const { data: existing } = await supabase
+          .from('archive_collections')
+          .select('id, name, emoji, schema')
+          .eq('household_id', householdId)
+          .eq('is_active', true);
+
+        const norm = (s: string) =>
+          s.toLowerCase().replace(/[\s/·\-_]/g, '');
+        const reqNorm = norm(requestedName);
+
+        // 토큰 기반 유사도 — 한 쪽이 다른 쪽의 핵심 토큰 포함하면 중복으로 봄
+        const tokens = (s: string) =>
+          s
+            .toLowerCase()
+            .split(/[\s/·\-_,]+/)
+            .filter((t) => t.length >= 2);
+        const reqTokens = new Set(tokens(requestedName));
+
+        const similar = (existing ?? []).find((c) => {
+          const cName = c.name as string;
+          const cNorm = norm(cName);
+          if (cNorm === reqNorm) return true;
+          if (cNorm.includes(reqNorm) || reqNorm.includes(cNorm)) return true;
+          // 핵심 단어 (드라마, 영화, 책, 와인 등) 매칭
+          const cTokens = tokens(cName);
+          const overlap = cTokens.filter((t) => reqTokens.has(t)).length;
+          return overlap >= 1 && cTokens.length <= 4;
+        });
+
+        if (similar) {
+          return {
+            ok: false,
+            error: `이미 비슷한 컬렉션이 있어요 → "${similar.emoji ?? '📦'} ${similar.name}". 새로 만드는 대신 거기에 항목을 추가하세요 (create_archive_entry 사용). 사용자에게 "기존 ${similar.name} 에 추가할까요, 아니면 정말 새로 만들까요?" 라고 물어볼 것.`,
+          };
+        }
+
         const insert = {
           household_id: householdId,
-          name: (args.name as string) ?? '새 컬렉션',
+          name: requestedName,
           emoji: (args.emoji as string) ?? '📦',
           color: (args.color as string) ?? '#6366f1',
           description: (args.description as string) ?? '',
