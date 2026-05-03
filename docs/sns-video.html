@@ -106,19 +106,20 @@
 
   /* 모킹 폰 */
   .phone-mini {
-    width: 400px; height: 560px;
+    width: 480px; height: 980px;
     background: white;
-    border-radius: 42px;
-    border: 10px solid #0f172a;
+    border-radius: 60px;
+    border: 14px solid #0f172a;
     color: #1f2937;
     overflow: hidden;
     position: relative;
-    margin-top: 16px;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+    margin-top: 24px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
     text-align: left;
   }
-  .phone-mini .notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 120px; height: 20px; background: #0f172a; border-radius: 12px; z-index: 5; }
-  .phone-mini .screen { padding: 50px 20px 20px; height: 100%; font-size: 18px; }
+  .phone-mini .notch { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); width: 160px; height: 26px; background: #0f172a; border-radius: 14px; z-index: 5; }
+  .phone-mini .statusbar { position: absolute; top: 22px; left: 36px; right: 36px; display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; color: #1f2937; z-index: 4; letter-spacing: 0; }
+  .phone-mini .screen { padding: 70px 28px 28px; height: 100%; font-size: 20px; }
 
   /* 컨트롤 */
   .controls {
@@ -242,25 +243,26 @@
       </div>
       <div class="phone-mini">
         <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
         <div class="screen" style="background:linear-gradient(180deg,#faf5ff,#fff);">
-          <div style="padding:6px 0 12px;border-bottom:1px solid #f1f5f9;font-weight:800;font-size:16px;">✨ AI 어시스턴트</div>
-          <div style="display:flex;justify-content:flex-end;margin:14px 0;">
-            <div style="background:#7c3aed;color:white;padding:10px 16px;border-radius:18px 18px 4px 18px;max-width:80%;font-size:16px;font-weight:600;">
+          <div style="padding:8px 0 16px;border-bottom:1px solid #f1f5f9;font-weight:800;font-size:24px;">✨ AI 어시스턴트</div>
+          <div style="display:flex;justify-content:flex-end;margin:24px 0;">
+            <div style="background:#7c3aed;color:white;padding:14px 22px;border-radius:24px 24px 6px 24px;max-width:80%;font-size:22px;font-weight:600;">
               점심 1만원 카드로
             </div>
           </div>
-          <div style="display:flex;margin-bottom:12px;">
-            <div style="background:white;color:#1f2937;padding:10px 16px;border-radius:18px 18px 18px 4px;border:1px solid #e5e7eb;font-size:15px;">
+          <div style="display:flex;margin-bottom:18px;">
+            <div style="background:white;color:#1f2937;padding:14px 22px;border-radius:24px 24px 24px 6px;border:1px solid #e5e7eb;font-size:22px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
               등록했어요 ✓
             </div>
           </div>
-          <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
-            <div style="background:#7c3aed;color:white;padding:10px 16px;border-radius:18px 18px 4px 18px;max-width:80%;font-size:16px;font-weight:600;">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:18px;">
+            <div style="background:#7c3aed;color:white;padding:14px 22px;border-radius:24px 24px 6px 24px;max-width:80%;font-size:22px;font-weight:600;">
               운동 시작
             </div>
           </div>
           <div style="display:flex;">
-            <div style="background:white;color:#1f2937;padding:10px 16px;border-radius:18px 18px 18px 4px;border:1px solid #e5e7eb;font-size:15px;">
+            <div style="background:white;color:#1f2937;padding:14px 22px;border-radius:24px 24px 24px 6px;border:1px solid #e5e7eb;font-size:22px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
               타이머 시작 ⏱
             </div>
           </div>
@@ -278,33 +280,34 @@
       </div>
       <div class="phone-mini">
         <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
         <div class="screen">
-          <div style="text-align:center;padding:6px 0;">
-            <div style="font-size:42px;">📚</div>
-            <div style="font-size:18px;font-weight:900;margin-top:2px;">달러구트 꿈 백화점</div>
+          <div style="text-align:center;padding:10px 0 14px;">
+            <div style="font-size:64px;">📚</div>
+            <div style="font-size:24px;font-weight:900;margin-top:6px;letter-spacing:-0.02em;">달러구트 꿈 백화점</div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
-            <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);padding:10px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:#1e40af;font-weight:700;">읽은 시간</div>
-              <div style="font-size:18px;font-weight:900;color:#1e3a8a;">4시간 32분</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+            <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);padding:18px;border-radius:14px;text-align:center;">
+              <div style="font-size:14px;color:#1e40af;font-weight:700;">읽은 시간</div>
+              <div style="font-size:24px;font-weight:900;color:#1e3a8a;margin-top:4px;letter-spacing:-0.02em;">4시간 32분</div>
             </div>
-            <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);padding:10px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:#1e40af;font-weight:700;">횟수</div>
-              <div style="font-size:22px;font-weight:900;color:#1e3a8a;">8회</div>
+            <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);padding:18px;border-radius:14px;text-align:center;">
+              <div style="font-size:14px;color:#1e40af;font-weight:700;">횟수</div>
+              <div style="font-size:30px;font-weight:900;color:#1e3a8a;margin-top:4px;">8회</div>
             </div>
           </div>
-          <div style="margin-top:10px;text-align:center;">
-            <div style="font-size:42px;">💪</div>
-            <div style="font-size:18px;font-weight:900;margin-top:2px;">데드리프트</div>
+          <div style="margin-top:24px;text-align:center;">
+            <div style="font-size:64px;">💪</div>
+            <div style="font-size:24px;font-weight:900;margin-top:6px;letter-spacing:-0.02em;">데드리프트</div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
-            <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:10px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:#a16207;font-weight:700;">총 시간</div>
-              <div style="font-size:18px;font-weight:900;color:#854d0e;">18시간</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+            <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:18px;border-radius:14px;text-align:center;">
+              <div style="font-size:14px;color:#a16207;font-weight:700;">총 시간</div>
+              <div style="font-size:24px;font-weight:900;color:#854d0e;margin-top:4px;letter-spacing:-0.02em;">18시간</div>
             </div>
-            <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:10px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:#a16207;font-weight:700;">횟수</div>
-              <div style="font-size:22px;font-weight:900;color:#854d0e;">12회</div>
+            <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:18px;border-radius:14px;text-align:center;">
+              <div style="font-size:14px;color:#a16207;font-weight:700;">횟수</div>
+              <div style="font-size:30px;font-weight:900;color:#854d0e;margin-top:4px;">12회</div>
             </div>
           </div>
         </div>
@@ -321,19 +324,23 @@
       </div>
       <div class="phone-mini">
         <div class="notch"></div>
+        <div class="statusbar"><span>7:30</span><span>📶 100%</span></div>
         <div class="screen">
-          <div style="background:linear-gradient(135deg,#ddd6fe,#e0e7ff);border-radius:18px;padding:18px;">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-              <span style="font-size:16px;">✨</span>
-              <span style="font-size:13px;font-weight:800;color:#5b21b6;">AI 브리핑</span>
-              <span style="margin-left:auto;font-size:11px;color:#6d28d9;">🌅 7:30</span>
+          <div style="background:linear-gradient(135deg,#ddd6fe,#e0e7ff);border-radius:24px;padding:28px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+              <span style="font-size:22px;">✨</span>
+              <span style="font-size:18px;font-weight:800;color:#5b21b6;">AI 브리핑</span>
+              <span style="margin-left:auto;font-size:14px;color:#6d28d9;font-weight:600;">🌅 아침</span>
             </div>
-            <div style="font-size:18px;font-weight:800;color:#1f2937;margin-bottom:10px;">☀️ 좋은 아침이에요!</div>
-            <div style="font-size:14px;line-height:1.6;color:#4b5563;">
+            <div style="font-size:26px;font-weight:800;color:#1f2937;margin-bottom:18px;letter-spacing:-0.02em;">☀️ 좋은 아침이에요!</div>
+            <div style="font-size:20px;line-height:1.7;color:#4b5563;">
               오늘 일정 <b>3건</b>이네요.<br>
               치과 예약 잊지 마세요.<br><br>
               점심엔 든든하게,<br>
-              저녁엔 가볍게 산책 어떨까요?
+              저녁엔 가볍게 산책 어떨까요? 🌿
+            </div>
+            <div style="margin-top:24px;display:flex;justify-content:flex-end;">
+              <span style="background:#7c3aed;color:white;padding:10px 18px;border-radius:14px;font-size:16px;font-weight:700;">🔊 듣기</span>
             </div>
           </div>
         </div>
