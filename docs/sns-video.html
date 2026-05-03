@@ -28,14 +28,15 @@
   .scene {
     position: absolute; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 120px 80px;
+    padding: 60px 80px 140px;
     opacity: 0;
     transition: opacity 0.18s;
+    overflow: hidden;
   }
   .scene.active { opacity: 1; }
-  .scene .big { font-size: 130px; font-weight: 900; line-height: 1.05; letter-spacing: -0.05em; text-align: center; }
-  .scene .mid { font-size: 90px; font-weight: 800; line-height: 1.15; letter-spacing: -0.04em; text-align: center; }
-  .scene .small { font-size: 56px; font-weight: 600; line-height: 1.4; opacity: 0.92; text-align: center; margin-top: 30px; }
+  .scene .big { font-size: 120px; font-weight: 900; line-height: 1.05; letter-spacing: -0.05em; text-align: center; }
+  .scene .mid { font-size: 80px; font-weight: 800; line-height: 1.15; letter-spacing: -0.04em; text-align: center; }
+  .scene .small { font-size: 50px; font-weight: 600; line-height: 1.4; opacity: 0.92; text-align: center; margin-top: 24px; }
   .scene .accent { background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900; }
   .scene .strike { opacity: 0.5; text-decoration: line-through; text-decoration-thickness: 8px; }
 
@@ -48,12 +49,12 @@
   }
 
   .label {
-    display: inline-block; padding: 14px 32px;
+    display: inline-block; padding: 10px 26px;
     background: rgba(255,255,255,0.15);
     border: 1px solid rgba(255,255,255,0.25);
     border-radius: 999px;
-    font-size: 36px; font-weight: 700;
-    margin-bottom: 40px;
+    font-size: 30px; font-weight: 700;
+    margin-bottom: 28px;
     backdrop-filter: blur(10px);
   }
 
@@ -105,14 +106,14 @@
 
   /* 모킹 폰 */
   .phone-mini {
-    width: 480px; height: 700px;
+    width: 440px; height: 640px;
     background: white;
-    border-radius: 50px;
-    border: 14px solid #0f172a;
+    border-radius: 46px;
+    border: 12px solid #0f172a;
     color: #1f2937;
     overflow: hidden;
     position: relative;
-    margin-top: 40px;
+    margin-top: 28px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.4);
     text-align: left;
   }
@@ -137,7 +138,7 @@
 
   /* 효과 */
   .pop-emoji {
-    font-size: 200px; line-height: 1;
+    font-size: 160px; line-height: 1;
     filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3));
     animation-delay: 0.1s;
   }
