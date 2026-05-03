@@ -28,12 +28,29 @@ export default function PushNotificationSetup() {
       'PushManager' in window &&
       'Notification' in window;
     setSupported(ok);
-    if (ok) {
-      setPermission(Notification.permission);
-      navigator.serviceWorker.ready.then((reg) =>
-        reg.pushManager.getSubscription().then((s) => setSubscribed(!!s)),
-      ).catch(() => setSubscribed(false));
+    if (!ok) {
+      setSubscribed(false);
+      return;
     }
+    setPermission(Notification.permission);
+
+    // ⚠️ ready 는 SW 가 등록돼야 resolve 됨. 등록 안 된 상태면 무한 대기됨.
+    // → getRegistration 으로 먼저 확인. 없으면 즉시 subscribed=false
+    navigator.serviceWorker
+      .getRegistration('/sw.js')
+      .then(async (reg) => {
+        if (!reg) {
+          setSubscribed(false);
+          return;
+        }
+        try {
+          const s = await reg.pushManager.getSubscription();
+          setSubscribed(!!s);
+        } catch {
+          setSubscribed(false);
+        }
+      })
+      .catch(() => setSubscribed(false));
   }, []);
 
   const subscribe = async () => {
