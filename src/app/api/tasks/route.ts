@@ -168,11 +168,29 @@ export async function POST(req: NextRequest) {
       is_active: true,
     };
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert(insertData)
-      .select(`*, member:members!member_id(id, name, color)`)
-      .single();
+    const tryInsert = async (payload: Record<string, unknown>) =>
+      supabase
+        .from('tasks')
+        .insert(payload)
+        .select(`*, member:members!member_id(id, name, color)`)
+        .single();
+
+    let { data, error } = await tryInsert(insertData as unknown as Record<string, unknown>);
+
+    // 마이그레이션 미적용 컬럼 자동 제외 후 재시도 (최대 3회 = 누락 가능 컬럼 수만큼)
+    let attempts = 0;
+    while (error && attempts < 4 && /column .* does not exist/i.test(error.message ?? '')) {
+      const m = (error.message ?? '').match(/column "?([\w.]+)"? does not exist/i);
+      const missingCol = m?.[1]?.replace(/^tasks\./, '');
+      if (!missingCol) break;
+      const reduced = { ...(insertData as Record<string, unknown>) };
+      delete reduced[missingCol];
+      console.warn(`[POST /tasks] retry without column "${missingCol}"`);
+      const retry = await tryInsert(reduced);
+      data = retry.data;
+      error = retry.error;
+      attempts++;
+    }
 
     if (error) throw error;
 
@@ -195,6 +213,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ task: data }, { status: 201 });
   } catch (error) {
     console.error('[POST /tasks]', error);
-    return NextResponse.json({ error: '할일 저장 중 오류가 발생했습니다.' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: `할일 저장 실패: ${msg}` },
+      { status: 500 },
+    );
   }
 }
