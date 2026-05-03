@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_time TIME,
   end_time TIME,
   start_date DATE,
+  start_time TIME,
   until_date DATE,
   excluded_dates DATE[] DEFAULT '{}',
   deadline_date DATE,
@@ -514,6 +515,24 @@ CREATE TABLE IF NOT EXISTS app_secrets (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (household_id, key)
 );
+
+-- ─────────────────────────────────────────
+-- 22. Push Subscriptions (PWA 웹 푸시 알림 구독 — 디바이스별)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  ua TEXT DEFAULT '',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_household
+  ON push_subscriptions(household_id, is_active);
 
 -- ─────────────────────────────────────────
 -- 인덱스 (transactions / budgets / accounts / payment_methods)
