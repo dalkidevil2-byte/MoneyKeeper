@@ -94,8 +94,21 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const favorites = activities.filter((a) => a.is_favorite);
-  const running = activities.filter((a) => a.running_session);
+  // 정렬 우선순위:
+  // 1) 즐겨찾기(is_favorite) 우선
+  // 2) 같으면 최근 30일 사용 횟수 desc
+  // 3) 같으면 position asc
+  const sorted = [...activities].sort((a, b) => {
+    const aFav = a.is_favorite ? 0 : 1;
+    const bFav = b.is_favorite ? 0 : 1;
+    if (aFav !== bFav) return aFav - bFav;
+    const aRc = a.recent_count ?? 0;
+    const bRc = b.recent_count ?? 0;
+    if (aRc !== bRc) return bRc - aRc;
+    return (a.position ?? 0) - (b.position ?? 0);
+  });
+  const favorites = sorted.filter((a) => a.is_favorite);
+  const running = sorted.filter((a) => a.running_session);
 
   if (loading && activities.length === 0) return null;
 

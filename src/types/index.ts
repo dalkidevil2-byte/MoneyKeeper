@@ -637,6 +637,7 @@ export interface Activity {
   running_session?: ActivitySession | null;
   today_minutes?: number;
   week_minutes?: number;
+  recent_count?: number; // 최근 30일 세션 수 (자주 쓰는 거 정렬용)
 }
 
 export interface ActivitySession {

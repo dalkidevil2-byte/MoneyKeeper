@@ -48,20 +48,26 @@ export async function GET(req: NextRequest) {
     // 오늘/이번주 합계
     const todayKey = dayjs().tz(TZ).format('YYYY-MM-DD');
     const weekStartKey = dayjs().tz(TZ).startOf('week').format('YYYY-MM-DD');
-    const { data: weekSessions } = await supabase
+    const recent30Key = dayjs().tz(TZ).subtract(30, 'day').format('YYYY-MM-DD');
+    // 정렬용 — 최근 30일 세션 카운트도 함께 집계
+    const { data: recentSessions } = await supabase
       .from('activity_sessions')
       .select('activity_id, session_date, duration_minutes')
       .in('activity_id', activityIds)
-      .gte('session_date', weekStartKey)
-      .not('duration_minutes', 'is', null);
+      .gte('session_date', recent30Key);
     const todayMin = new Map<string, number>();
     const weekMin = new Map<string, number>();
-    for (const s of weekSessions ?? []) {
+    const recentCount = new Map<string, number>();
+    for (const s of recentSessions ?? []) {
       const aid = s.activity_id as string;
+      recentCount.set(aid, (recentCount.get(aid) ?? 0) + 1);
       const d = (s.duration_minutes as number) ?? 0;
-      weekMin.set(aid, (weekMin.get(aid) ?? 0) + d);
-      if (s.session_date === todayKey) {
-        todayMin.set(aid, (todayMin.get(aid) ?? 0) + d);
+      const sd = s.session_date as string;
+      if (sd >= weekStartKey) {
+        weekMin.set(aid, (weekMin.get(aid) ?? 0) + d);
+        if (sd === todayKey) {
+          todayMin.set(aid, (todayMin.get(aid) ?? 0) + d);
+        }
       }
     }
 
@@ -70,6 +76,7 @@ export async function GET(req: NextRequest) {
       running_session: runningMap.get(a.id as string) ?? null,
       today_minutes: todayMin.get(a.id as string) ?? 0,
       week_minutes: weekMin.get(a.id as string) ?? 0,
+      recent_count: recentCount.get(a.id as string) ?? 0,
     }));
 
     return NextResponse.json({ activities: enriched });
