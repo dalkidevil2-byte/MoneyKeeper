@@ -288,6 +288,156 @@ function ChecklistInput({
   );
 }
 
+// ────────────────────────────────────────────
+// Relation 입력 — 다른 컬렉션의 항목 다중 선택
+// ────────────────────────────────────────────
+type RelEntry = { id: string; data: Record<string, unknown> };
+
+function RelationInput({
+  prop,
+  value,
+  onChange,
+}: {
+  prop: ArchiveProperty;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const targetId = prop.target_collection_id;
+  const allowMultiple = prop.allow_multiple !== false;
+  const [entries, setEntries] = useState<RelEntry[] | null>(null);
+  const [titleKey, setTitleKey] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const ids: string[] = Array.isArray(value)
+    ? (value as unknown[]).filter((x): x is string => typeof x === 'string')
+    : typeof value === 'string'
+      ? [value]
+      : [];
+
+  // 대상 컬렉션 + entries 조회
+  useEffect(() => {
+    if (!targetId) return;
+    let cancel = false;
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/archive/collections/${targetId}`).then((r) => r.json()),
+      fetch(`/api/archive/collections/${targetId}/entries`).then((r) => r.json()),
+    ])
+      .then(([c, e]) => {
+        if (cancel) return;
+        const schema = (c.collection?.schema ?? []) as ArchiveProperty[];
+        setTitleKey(schema[0]?.key ?? '');
+        setEntries((e.entries ?? []) as RelEntry[]);
+      })
+      .finally(() => !cancel && setLoading(false));
+    return () => {
+      cancel = true;
+    };
+  }, [targetId]);
+
+  if (!targetId) {
+    return (
+      <div className="text-xs text-rose-500 italic">
+        대상 컬렉션이 설정되지 않았어요.
+      </div>
+    );
+  }
+
+  const titleOf = (e: RelEntry) =>
+    titleKey ? String(e.data?.[titleKey] ?? '(제목 없음)') : '(제목 없음)';
+
+  const selected = (entries ?? []).filter((e) => ids.includes(e.id));
+  const filtered = (entries ?? []).filter((e) => {
+    if (ids.includes(e.id)) return false;
+    if (!search.trim()) return true;
+    return titleOf(e).toLowerCase().includes(search.toLowerCase());
+  });
+
+  const addOne = (id: string) => {
+    if (allowMultiple) {
+      onChange([...ids, id]);
+    } else {
+      onChange([id]);
+      setOpen(false);
+    }
+    setSearch('');
+  };
+  const removeOne = (id: string) => {
+    onChange(ids.filter((x) => x !== id));
+  };
+
+  return (
+    <div className="space-y-1">
+      {/* 선택된 항목 칩 */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((e) => (
+            <span
+              key={e.id}
+              className="inline-flex items-center gap-1 bg-violet-100 text-violet-700 text-xs px-2 py-1 rounded-full"
+            >
+              <span className="truncate max-w-[160px]">{titleOf(e)}</span>
+              <button
+                type="button"
+                onClick={() => removeOne(e.id)}
+                className="text-violet-400 hover:text-violet-700"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {/* 추가 버튼 / 검색 박스 */}
+      {!open ? (
+        (allowMultiple || selected.length === 0) && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="text-xs text-violet-600 inline-flex items-center gap-1 px-2 py-1 border border-dashed border-violet-200 rounded-lg hover:bg-violet-50"
+          >
+            <Plus size={11} /> {allowMultiple ? '연결 추가' : '연결 선택'}
+          </button>
+        )
+      ) : (
+        <div className="border border-violet-200 rounded-lg bg-white">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onBlur={() => setTimeout(() => setOpen(false), 200)}
+            placeholder="검색..."
+            className="w-full px-2 py-1.5 text-xs focus:outline-none"
+          />
+          <div className="max-h-48 overflow-y-auto border-t border-gray-100">
+            {loading ? (
+              <div className="text-xs text-gray-400 px-2 py-2">불러오는 중…</div>
+            ) : filtered.length === 0 ? (
+              <div className="text-xs text-gray-400 px-2 py-2">
+                {search ? '결과 없음' : '항목 없음'}
+              </div>
+            ) : (
+              filtered.slice(0, 30).map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onMouseDown={(ev) => ev.preventDefault()}
+                  onClick={() => addOne(e.id)}
+                  className="w-full text-left text-xs px-2 py-1.5 hover:bg-violet-50 truncate"
+                >
+                  {titleOf(e)}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   prop: ArchiveProperty;
   value: unknown;
@@ -431,6 +581,15 @@ export default function PropertyInput({ prop, value, onChange }: Props) {
       return <FilesInput value={v} onChange={onChange} />;
     case 'checklist':
       return <ChecklistInput value={v} onChange={onChange} />;
+    case 'relation':
+      return <RelationInput prop={prop} value={v} onChange={onChange} />;
+    case 'rollup':
+    case 'formula':
+      return (
+        <div className="text-xs text-gray-400 italic">
+          {prop.type === 'rollup' ? '집계 (자동 계산)' : '수식 (자동 계산)'}
+        </div>
+      );
     default:
       return (
         <input
@@ -472,6 +631,14 @@ export function formatPropertyDisplay(prop: ArchiveProperty, value: unknown): st
       const done = arr.filter((x) => x.done).length;
       return `☑ ${done}/${arr.length}`;
     }
+    case 'relation': {
+      const arr = Array.isArray(value) ? (value as unknown[]) : [];
+      if (arr.length === 0) return '';
+      return `🔗 ${arr.length}건 연결`;
+    }
+    case 'rollup':
+    case 'formula':
+      return value == null ? '' : String(value);
     default:
       return String(value);
   }

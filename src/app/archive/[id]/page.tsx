@@ -1946,6 +1946,9 @@ function EntryFormSheet({
                     <option value="checkbox">체크박스</option>
                     <option value="files">파일/사진</option>
                     <option value="checklist">체크리스트</option>
+                    <option value="relation">🔗 관계 (다른 컬렉션)</option>
+                    <option value="rollup">∑ Rollup (집계)</option>
+                    <option value="formula">ƒ Formula (수식)</option>
                   </select>
                   <div className="flex gap-2">
                     <button
@@ -2063,6 +2066,26 @@ function CollectionSettingsSheet({
     collection.card_layout === 'gallery' ? 'gallery' : 'list',
   );
   const [busy, setBusy] = useState(false);
+
+  // 다른 컬렉션 목록 (relation/rollup 용)
+  const [allCollections, setAllCollections] = useState<
+    Array<{ id: string; name: string; emoji: string; schema: ArchiveProperty[] }>
+  >([]);
+  useEffect(() => {
+    fetch('/api/archive/collections')
+      .then((r) => r.json())
+      .then((j) => {
+        setAllCollections(
+          (j.collections ?? []).map((c: ArchiveCollection) => ({
+            id: c.id,
+            name: c.name,
+            emoji: c.emoji,
+            schema: (c.schema ?? []) as ArchiveProperty[],
+          })),
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   // AI 편집
   const [aiOpen, setAiOpen] = useState(false);
@@ -2346,6 +2369,132 @@ function CollectionSettingsSheet({
                       placeholder="옵션 (쉼표로 구분)"
                       className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
                     />
+                  )}
+                  {/* Relation: 대상 컬렉션 + 다중 허용 */}
+                  {p.type === 'relation' && (
+                    <div className="space-y-1">
+                      <select
+                        value={p.target_collection_id ?? ''}
+                        onChange={(e) =>
+                          updateProp(i, { target_collection_id: e.target.value || undefined })
+                        }
+                        className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                      >
+                        <option value="">대상 컬렉션 선택</option>
+                        {allCollections
+                          .filter((c) => c.id !== collection.id)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.emoji} {c.name}
+                            </option>
+                          ))}
+                      </select>
+                      <label className="flex items-center gap-1 text-[11px] text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={p.allow_multiple !== false}
+                          onChange={(e) =>
+                            updateProp(i, { allow_multiple: e.target.checked })
+                          }
+                          className="accent-violet-600"
+                        />
+                        여러 항목 연결 허용
+                      </label>
+                    </div>
+                  )}
+                  {/* Rollup: 어느 relation 통해 + 어느 속성 + 집계 */}
+                  {p.type === 'rollup' && (() => {
+                    const relationProps = schema.filter(
+                      (sp) => sp.type === 'relation' && sp.target_collection_id,
+                    );
+                    const sourceRel = relationProps.find(
+                      (sp) => sp.key === p.source_relation_key,
+                    );
+                    const targetCol = sourceRel
+                      ? allCollections.find(
+                          (c) => c.id === sourceRel.target_collection_id,
+                        )
+                      : null;
+                    return (
+                      <div className="space-y-1">
+                        <select
+                          value={p.source_relation_key ?? ''}
+                          onChange={(e) =>
+                            updateProp(i, { source_relation_key: e.target.value || undefined })
+                          }
+                          className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                        >
+                          <option value="">관계 속성 선택</option>
+                          {relationProps.map((sp) => (
+                            <option key={sp.key} value={sp.key}>
+                              🔗 {sp.label}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={p.target_property_key ?? ''}
+                          onChange={(e) =>
+                            updateProp(i, { target_property_key: e.target.value || undefined })
+                          }
+                          disabled={!targetCol}
+                          className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white disabled:opacity-50"
+                        >
+                          <option value="">대상 속성 선택</option>
+                          {(targetCol?.schema ?? []).map((sp) => (
+                            <option key={sp.key} value={sp.key}>
+                              {sp.label} ({sp.type})
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={p.aggregation ?? 'count'}
+                          onChange={(e) =>
+                            updateProp(i, {
+                              aggregation: e.target.value as ArchiveProperty['aggregation'],
+                            })
+                          }
+                          className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                        >
+                          <option value="count">개수 (count)</option>
+                          <option value="count_distinct">고유 개수</option>
+                          <option value="sum">합계</option>
+                          <option value="avg">평균</option>
+                          <option value="min">최소</option>
+                          <option value="max">최대</option>
+                          <option value="show_original">첫 값 그대로</option>
+                          <option value="concat">콤마로 연결</option>
+                        </select>
+                      </div>
+                    );
+                  })()}
+                  {/* Formula: 식 */}
+                  {p.type === 'formula' && (
+                    <div className="space-y-1">
+                      <input
+                        value={p.formula ?? ''}
+                        onChange={(e) =>
+                          updateProp(i, { formula: e.target.value })
+                        }
+                        placeholder="예: {price} * {quantity}"
+                        className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white font-mono"
+                      />
+                      <select
+                        value={p.return_type ?? 'number'}
+                        onChange={(e) =>
+                          updateProp(i, {
+                            return_type: e.target.value as ArchiveProperty['return_type'],
+                          })
+                        }
+                        className="w-full px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                      >
+                        <option value="number">숫자</option>
+                        <option value="text">문자</option>
+                        <option value="date">날짜</option>
+                      </select>
+                      <p className="text-[10px] text-gray-400">
+                        다른 속성은 {'{key}'} 로 참조. +, -, *, /, ()
+                      </p>
+                    </div>
                   )}
                   {p.type === 'checklist' && (
                     <div>

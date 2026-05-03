@@ -699,7 +699,20 @@ export type ArchivePropertyType =
   | 'currency'  // 금액
   | 'member'
   | 'files'    // 첨부파일/이미지 (배열로 URL 저장)
-  | 'checklist'; // 체크리스트 — [{ label, done, note? }] 배열
+  | 'checklist' // 체크리스트 — [{ label, done, note? }] 배열
+  | 'relation' // 다른 컬렉션 항목 참조 (entry id 배열)
+  | 'rollup'   // relation 통해 연결된 항목들의 속성 집계
+  | 'formula'; // 다른 속성 값으로 계산식
+
+export type RollupAggregation =
+  | 'count'
+  | 'count_distinct'
+  | 'sum'
+  | 'avg'
+  | 'min'
+  | 'max'
+  | 'show_original' // 첫 값 그대로
+  | 'concat'; // 모든 값 콤마 연결
 
 export interface ArchiveProperty {
   key: string;          // 내부 key (영문 권장)
@@ -707,6 +720,16 @@ export interface ArchiveProperty {
   type: ArchivePropertyType;
   options?: string[];   // select / multiselect
   required?: boolean;
+  // relation 전용
+  target_collection_id?: string;
+  allow_multiple?: boolean;
+  // rollup 전용
+  source_relation_key?: string;   // 어느 relation 속성 통해
+  target_property_key?: string;   // 어떤 속성을
+  aggregation?: RollupAggregation;
+  // formula 전용
+  formula?: string;               // 예: "{price} * {quantity}"
+  return_type?: 'number' | 'text' | 'date';
 }
 
 export interface ArchiveCollection {
