@@ -6,10 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: #0f172a; color: white; font-family: 'Pretendard', 'Apple SD Gothic Neo', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; height: 100%; overflow: hidden; letter-spacing: -0.03em; }
+  html, body { background: #0f172a; color: white; font-family: 'Pretendard', 'Apple SD Gothic Neo', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; height: 100vh; width: 100vw; overflow: hidden; letter-spacing: -0.03em; margin: 0; padding: 0; }
   body { display: flex; align-items: center; justify-content: center; }
 
-  /* 1080x1920 가상 화면 — viewport 에 맞게 자동 스케일 */
+  /* 1080x1920 가상 화면 — viewport 에 항상 100% 꽉 차게 (잘리지 않음) */
   .stage {
     width: 1080px; height: 1920px;
     background: #0f172a;
@@ -17,15 +17,13 @@
     border-radius: 24px;
     box-shadow: 0 24px 80px rgba(0,0,0,.5);
     transform-origin: center center;
+    /* 가로/세로 중 더 작은 비율로 스케일 → 항상 화면 안에 들어감 */
+    transform: scale(min(calc(100vw / 1080), calc(100vh / 1920)));
   }
 
-  /* 자동 스케일 — 화면에 꽉 차게 */
-  @media (max-aspect-ratio: 9/16) {
-    .stage { transform: scale(calc(100vw / 1080)); }
-  }
-  @media (min-aspect-ratio: 9/16) {
-    .stage { transform: scale(calc(100vh / 1920)); }
-  }
+  /* 녹화 모드 — 그림자/둥근 모서리 X, 정확한 1080x1920 */
+  body.record-mode .stage { border-radius: 0; box-shadow: none; }
+  body.record-mode .toolbar, body.record-mode .controls { display: none !important; }
 
   .scene {
     position: absolute; inset: 0;
@@ -404,9 +402,13 @@
   <div class="controls">
     <button id="play">▶ 재생</button>
     <button id="restart">⟲ 처음부터</button>
+    <button id="record" title="이 버튼 누르면 컨트롤 바가 사라져서 깔끔하게 녹화 가능">🎥 녹화 모드</button>
     <span id="time" style="font-variant-numeric:tabular-nums;opacity:.7;">0 / 36s</span>
-    <span style="opacity:.5;">|</span>
-    <span style="opacity:.7;">F11 → 화면녹화 → SNS</span>
+  </div>
+
+  <!-- 녹화 모드 빠져나가는 안내 -->
+  <div id="exitTip" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:white;padding:10px 18px;border-radius:999px;font-size:13px;z-index:1001;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.15);">
+    💡 ESC 또는 화면 클릭 → 녹화 모드 해제
   </div>
 
 <script>
@@ -483,6 +485,37 @@
       play();
     }
   }, 500);
+
+  // 녹화 모드 토글 — UI 숨기고 풀스크린 + 처음부터 재생
+  const recordBtn = document.getElementById('record');
+  const exitTip = document.getElementById('exitTip');
+  recordBtn.onclick = async () => {
+    document.body.classList.add('record-mode');
+    exitTip.style.display = 'block';
+    // 풀스크린 진입
+    try { await document.documentElement.requestFullscreen(); } catch {}
+    // 처음부터 자동 재생
+    stop();
+    setTimeout(() => {
+      i = -1;
+      play();
+    }, 200);
+    // 3초 뒤 안내 메시지 사라짐
+    setTimeout(() => { exitTip.style.display = 'none'; }, 3000);
+  };
+  // ESC 또는 클릭으로 녹화 모드 해제
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.body.classList.remove('record-mode');
+      exitTip.style.display = 'none';
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+      document.body.classList.remove('record-mode');
+      exitTip.style.display = 'none';
+    }
+  });
 </script>
 </body>
 </html>
