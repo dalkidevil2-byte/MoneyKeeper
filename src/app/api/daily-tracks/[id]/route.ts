@@ -25,12 +25,30 @@ export async function PATCH(
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: '수정할 내용 없음' }, { status: 400 });
     }
-    const { data, error } = await supabase
-      .from('daily_tracks')
-      .update(update)
-      .eq('id', id)
-      .select(`*, member:members!member_id(id, name, color)`)
-      .single();
+
+    const tryUpdate = async (patch: Record<string, unknown>) =>
+      supabase
+        .from('daily_tracks')
+        .update(patch)
+        .eq('id', id)
+        .select(`*, member:members!member_id(id, name, color)`)
+        .single();
+
+    let { data, error } = await tryUpdate(update);
+
+    // 마이그레이션 미적용 컬럼이 있으면 (condition_text 등) 자동 제외 후 재시도
+    if (error && /column .* does not exist/i.test(error.message ?? '')) {
+      const m = (error.message ?? '').match(/column "?([\w.]+)"? does not exist/i);
+      const missingCol = m?.[1]?.replace(/^daily_tracks\./, '');
+      if (missingCol && missingCol in update) {
+        const reduced = { ...update };
+        delete reduced[missingCol];
+        const retry = await tryUpdate(reduced);
+        data = retry.data;
+        error = retry.error;
+      }
+    }
+
     if (error) throw error;
     return NextResponse.json({ track: data });
   } catch (e: any) {

@@ -135,11 +135,27 @@ export async function POST(req: NextRequest) {
       goal_id: body.goal_id ?? null,
       is_active: true,
     };
-    const { data, error } = await supabase
-      .from('daily_tracks')
-      .insert(insert)
-      .select(`*, member:members!member_id(id, name, color)`)
-      .single();
+    const tryInsert = async (data: Record<string, unknown>) =>
+      supabase
+        .from('daily_tracks')
+        .insert(data)
+        .select(`*, member:members!member_id(id, name, color)`)
+        .single();
+    let { data, error } = await tryInsert(insert);
+
+    // 마이그레이션 미적용 컬럼 자동 제외 후 재시도
+    if (error && /column .* does not exist/i.test(error.message ?? '')) {
+      const m = (error.message ?? '').match(/column "?([\w.]+)"? does not exist/i);
+      const missingCol = m?.[1]?.replace(/^daily_tracks\./, '');
+      if (missingCol && missingCol in insert) {
+        const reduced = { ...insert } as Record<string, unknown>;
+        delete reduced[missingCol];
+        const retry = await tryInsert(reduced);
+        data = retry.data;
+        error = retry.error;
+      }
+    }
+
     if (error) throw error;
     return NextResponse.json({ track: data }, { status: 201 });
   } catch (e: any) {
