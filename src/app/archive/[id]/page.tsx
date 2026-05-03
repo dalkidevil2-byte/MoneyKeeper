@@ -24,7 +24,8 @@ import ArchiveCalendarView from '@/components/archive/ArchiveCalendarView';
 import ArchiveTableView from '@/components/archive/ArchiveTableView';
 import ArchiveBoardView from '@/components/archive/ArchiveBoardView';
 import LinkedTasksList from '@/components/archive/LinkedTasksList';
-import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon, Columns3 } from 'lucide-react';
+import FilterPanel from '@/components/archive/FilterPanel';
+import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon, Columns3, Filter } from 'lucide-react';
 
 type Params = { id: string };
 
@@ -41,6 +42,16 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   } | null>(null);
   const [editingSchema, setEditingSchema] = useState(false);
   const [search, setSearch] = useState('');
+  // 컬럼별 필터 — { schemaKey: value }
+  // select: string | undefined
+  // multiselect: string[] (none = 전체)
+  // rating: number (최소 평점, 0=전체)
+  // checkbox: 'on' | 'off' | undefined
+  // date: { from?: string; to?: string }
+  // number/currency: { min?: number; max?: number }
+  const [filters, setFilters] = useState<Record<string, unknown>>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [aiFillBusy, setAiFillBusy] = useState(false);
@@ -349,23 +360,119 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     router.push('/archive');
   };
 
-  // 검색 필터링 (모든 data 값 + 제목 대상으로 부분 일치)
+  // 검색 + 컬럼 필터링 + 정렬
   const filteredEntries = useMemo(() => {
-    if (!search.trim()) return entries;
-    const q = search.toLowerCase();
-    return entries.filter((e) => {
-      const data = (e.data ?? {}) as Record<string, unknown>;
-      for (const v of Object.values(data)) {
-        if (v == null) continue;
-        if (Array.isArray(v)) {
-          if (v.some((x) => String(x).toLowerCase().includes(q))) return true;
-        } else if (String(v).toLowerCase().includes(q)) {
-          return true;
+    const cSchema = (collection?.schema ?? []) as ArchiveProperty[];
+
+    let result = entries;
+
+    // 1) 검색 — 모든 data 값 부분 일치
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((e) => {
+        const data = (e.data ?? {}) as Record<string, unknown>;
+        for (const v of Object.values(data)) {
+          if (v == null) continue;
+          if (Array.isArray(v)) {
+            if (v.some((x) => String(x).toLowerCase().includes(q))) return true;
+          } else if (String(v).toLowerCase().includes(q)) {
+            return true;
+          }
         }
+        return false;
+      });
+    }
+
+    // 2) 컬럼별 필터
+    const activeFilters = Object.entries(filters).filter(([, v]) => {
+      if (v == null) return false;
+      if (typeof v === 'string') return v.length > 0;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'number') return v > 0;
+      if (typeof v === 'object') {
+        const o = v as Record<string, unknown>;
+        return Object.values(o).some((x) => x != null && x !== '');
       }
       return false;
     });
-  }, [entries, search]);
+
+    if (activeFilters.length > 0) {
+      result = result.filter((e) => {
+        const data = (e.data ?? {}) as Record<string, unknown>;
+        for (const [key, fv] of activeFilters) {
+          const prop = cSchema.find((p) => p.key === key);
+          const val = data[key];
+          if (!prop) continue;
+
+          switch (prop.type) {
+            case 'select': {
+              if (val !== fv) return false;
+              break;
+            }
+            case 'multiselect': {
+              const arr = (Array.isArray(val) ? val : []) as string[];
+              const wanted = fv as string[];
+              // OR 매칭 — 선택된 옵션 중 하나라도 항목에 있으면 통과
+              if (!wanted.some((w) => arr.includes(w))) return false;
+              break;
+            }
+            case 'rating': {
+              const n = Number(val) || 0;
+              const min = Number(fv) || 0;
+              if (n < min) return false;
+              break;
+            }
+            case 'checkbox': {
+              const checked = !!val;
+              if (fv === 'on' && !checked) return false;
+              if (fv === 'off' && checked) return false;
+              break;
+            }
+            case 'date': {
+              const d = String(val ?? '');
+              const range = fv as { from?: string; to?: string };
+              if (range.from && (!d || d < range.from)) return false;
+              if (range.to && (!d || d > range.to)) return false;
+              break;
+            }
+            case 'number':
+            case 'currency': {
+              const n = Number(val);
+              const range = fv as { min?: number; max?: number };
+              if (range.min != null && (isNaN(n) || n < range.min)) return false;
+              if (range.max != null && (isNaN(n) || n > range.max)) return false;
+              break;
+            }
+          }
+        }
+        return true;
+      });
+    }
+
+    // 3) 정렬
+    if (sortBy) {
+      const prop = cSchema.find((p) => p.key === sortBy.key);
+      const dir = sortBy.dir === 'asc' ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        const av = (a.data as Record<string, unknown>)?.[sortBy.key];
+        const bv = (b.data as Record<string, unknown>)?.[sortBy.key];
+        // null/undefined 는 항상 뒤로
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (
+          prop?.type === 'number' ||
+          prop?.type === 'currency' ||
+          prop?.type === 'rating'
+        ) {
+          return ((Number(av) || 0) - (Number(bv) || 0)) * dir;
+        }
+        return String(av).localeCompare(String(bv)) * dir;
+      });
+    }
+
+    return result;
+  }, [entries, search, filters, sortBy, collection?.schema]);
 
   // 기존 항목 복제 — 같은 데이터로 새 entry 만들 준비.
   // 체크리스트는 모두 미체크로 리셋, date 는 비움 (새 일정에 맞게)
@@ -506,17 +613,67 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-2 space-y-2">
-        {/* 검색 */}
+        {/* 검색 + 필터 토글 */}
         {entries.length > 0 && (
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="제목/메모/태그 안에서 검색"
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-100 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-violet-200"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="제목/메모/태그 안에서 검색"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-100 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-violet-200"
+              />
+            </div>
+            {(() => {
+              const filterableCount = ((collection?.schema ?? []) as ArchiveProperty[]).filter(
+                (p) => ['select', 'multiselect', 'rating', 'checkbox', 'date', 'number', 'currency'].includes(p.type),
+              ).length;
+              if (filterableCount === 0) return null;
+              const activeCount = Object.entries(filters).filter(([, v]) => {
+                if (v == null) return false;
+                if (typeof v === 'string') return v.length > 0;
+                if (Array.isArray(v)) return v.length > 0;
+                if (typeof v === 'number') return v > 0;
+                if (typeof v === 'object')
+                  return Object.values(v as Record<string, unknown>).some(
+                    (x) => x != null && x !== '',
+                  );
+                return false;
+              }).length;
+              return (
+                <button
+                  onClick={() => setFiltersOpen((p) => !p)}
+                  className={`px-3 py-2.5 rounded-xl text-sm font-medium inline-flex items-center gap-1 ${
+                    activeCount > 0
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                  aria-label="필터"
+                >
+                  <Filter size={15} />
+                  {activeCount > 0 && (
+                    <span className="text-xs font-bold">{activeCount}</span>
+                  )}
+                </button>
+              );
+            })()}
           </div>
+        )}
+
+        {/* 필터 패널 */}
+        {filtersOpen && entries.length > 0 && (
+          <FilterPanel
+            schema={(collection?.schema ?? []) as ArchiveProperty[]}
+            filters={filters}
+            onChange={setFilters}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onClear={() => {
+              setFilters({});
+              setSortBy(null);
+            }}
+          />
         )}
 
         {/* 새 항목 + 사진 추가 + 순서 변경 */}
