@@ -60,7 +60,13 @@ export default function BriefingCard() {
     });
   };
 
-  const fetchBriefing = async () => {
+  const fetchBriefing = async (confirmRefresh = false) => {
+    if (confirmRefresh) {
+      const ok = window.confirm(
+        '브리핑을 새로 받으시겠어요?\nAI 호출 비용이 추가로 발생합니다 (~2원).',
+      );
+      if (!ok) return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -100,10 +106,10 @@ export default function BriefingCard() {
         <div className="flex items-center gap-2">
           {data && !collapsed && (
             <button
-              onClick={fetchBriefing}
+              onClick={() => fetchBriefing(true)}
               disabled={loading}
               className="text-violet-600 disabled:opacity-50"
-              title="새로 받기"
+              title="새로 받기 (AI 재호출, ~2원)"
             >
               {loading ? (
                 <Loader2 size={14} className="animate-spin" />
