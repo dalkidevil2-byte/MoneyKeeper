@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { executeTool } from '@/lib/assistant-tools';
+import { logAiUsage } from '@/lib/ai-usage';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -95,6 +96,12 @@ async function handle(req: NextRequest) {
 
     const reportText =
       completion.choices[0]?.message?.content?.trim() ?? '리포트 생성 실패';
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'weekly_report',
+      inputTokens: completion.usage?.prompt_tokens ?? 0,
+      outputTokens: completion.usage?.completion_tokens ?? 0,
+    });
 
     if (dryRun) {
       return NextResponse.json({ ok: true, report: reportText });

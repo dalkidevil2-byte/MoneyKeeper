@@ -5,6 +5,7 @@ import { sendTelegramMessage } from '@/lib/telegram';
 import { runAssistant, type ChatHistoryItem } from '@/lib/assistant-chat';
 import dayjs from 'dayjs';
 import OpenAI from 'openai';
+import { logAiUsage } from '@/lib/ai-usage';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -188,6 +189,14 @@ async function handleVoiceMessage(
       language: 'ko',
     });
     const text = transcription.text?.trim() ?? '';
+    // Whisper 가격은 분당 — 한국어는 대략 5자/초로 추정
+    const estSeconds = Math.max(1, Math.round(text.length / 5));
+    void logAiUsage({
+      model: 'whisper-1',
+      feature: 'stt',
+      audioSeconds: estSeconds,
+      meta: { source: 'telegram', estimated: true },
+    });
     if (!text) return null;
 
     // 3) 사용자에게 인식 결과 즉시 알려주기

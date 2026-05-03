@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
+import { logAiUsage } from '@/lib/ai-usage';
 
 dayjs.locale('ko');
 
@@ -151,6 +152,12 @@ ${memberLines || '- (등록된 멤버 없음)'}
       temperature: 0.2,
     });
 
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'parse',
+      inputTokens: completion.usage?.prompt_tokens ?? 0,
+      outputTokens: completion.usage?.completion_tokens ?? 0,
+    });
     const raw = completion.choices[0]?.message?.content ?? '{}';
     let draft: ParsedTaskDraft;
     try {

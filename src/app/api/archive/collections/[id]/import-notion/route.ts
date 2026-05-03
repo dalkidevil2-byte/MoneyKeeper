@@ -5,6 +5,7 @@ import { Client } from '@notionhq/client';
 import OpenAI from 'openai';
 import { getSecret } from '@/lib/app-secrets';
 import type { ArchiveProperty } from '@/types';
+import { logAiUsage } from '@/lib/ai-usage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -236,6 +237,13 @@ ${JSON.stringify(archiveList, null, 2)}`;
               { role: 'user', content: userPrompt },
             ],
             temperature: 0.1,
+          });
+          void logAiUsage({
+            model: 'gpt-4o-mini',
+            feature: 'archive_ai',
+            inputTokens: r.usage?.prompt_tokens ?? 0,
+            outputTokens: r.usage?.completion_tokens ?? 0,
+            meta: { op: 'notion_mapping' },
           });
           const raw = r.choices[0]?.message?.content ?? '{}';
           const parsed = JSON.parse(raw) as { mapping?: Record<string, string> };

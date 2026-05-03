@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import dayjs from 'dayjs';
+import { logAiUsage } from '@/lib/ai-usage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -122,6 +123,13 @@ export async function POST(req: NextRequest) {
       ],
     });
 
+    void logAiUsage({
+      model: 'gpt-4o',
+      feature: 'ocr',
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      meta: { kind: 'stocks' },
+    });
     const raw = response.choices[0]?.message?.content ?? '{}';
     const cleaned = extractJSON(raw);
     let parsed: { trades?: Array<{

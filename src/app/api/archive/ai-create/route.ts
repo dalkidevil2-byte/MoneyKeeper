@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import OpenAI from 'openai';
 import type { ArchiveProperty } from '@/types';
+import { logAiUsage } from '@/lib/ai-usage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -66,6 +67,13 @@ export async function POST(req: NextRequest) {
       response_format: { type: 'json_object' },
     });
 
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'archive_ai',
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      meta: { op: 'create' },
+    });
     const content = response.choices[0]?.message?.content ?? '{}';
     let parsed: {
       name?: string;

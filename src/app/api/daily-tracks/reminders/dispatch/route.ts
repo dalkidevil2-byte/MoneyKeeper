@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import OpenAI from 'openai';
+import { logAiUsage } from '@/lib/ai-usage';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -143,6 +144,12 @@ async function handle(req: NextRequest) {
           ],
           temperature: 0.8,
           max_tokens: 80,
+        });
+        void logAiUsage({
+          model: 'gpt-4o-mini',
+          feature: 'reminder',
+          inputTokens: resp.usage?.prompt_tokens ?? 0,
+          outputTokens: resp.usage?.completion_tokens ?? 0,
         });
         message =
           resp.choices[0]?.message?.content?.trim() ??

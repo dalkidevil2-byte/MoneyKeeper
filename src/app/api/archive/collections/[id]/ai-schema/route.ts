@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import OpenAI from 'openai';
 import type { ArchiveProperty } from '@/types';
+import { logAiUsage } from '@/lib/ai-usage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -88,6 +89,13 @@ ${JSON.stringify(currentSchema, null, 2)}
       response_format: { type: 'json_object' },
     });
 
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'archive_ai',
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      meta: { op: 'schema' },
+    });
     const content = response.choices[0]?.message?.content ?? '{}';
     let parsed: { schema?: ArchiveProperty[]; summary?: string };
     try {
