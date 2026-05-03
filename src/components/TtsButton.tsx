@@ -1,16 +1,28 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, Square } from 'lucide-react';
+import { Volume2, Square, Loader2 } from 'lucide-react';
 
 /**
  * 텍스트를 음성으로 읽어주는 버튼.
- * - 브라우저 내장 Web Speech API (speechSynthesis) 사용 → 무료, 오프라인 지원
- * - 한국어 음성이 있으면 우선 선택
- * - voice prop 은 호환성 위해 남겨두지만 무시됨
+ * - 클릭 → /api/tts (OpenAI tts-1, nova) → audio 재생
+ * - 같은 텍스트는 Blob 캐시 (재호출 X)
+ * - 이모지는 읽기 전에 제거
  */
+function stripEmojis(text: string): string {
+  // 이모지/픽토그램/심볼 제거. 한글/영문/숫자/기본 문장부호는 유지
+  return text
+    .replace(
+      /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}\u{1F900}-\u{1F9FF}\u{2700}-\u{27BF}\u{FE0F}\u{200D}]/gu,
+      '',
+    )
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export default function TtsButton({
   text,
+  voice = 'nova',
   className,
   label = '듣기',
 }: {
@@ -19,74 +31,88 @@ export default function TtsButton({
   className?: string;
   label?: string;
 }) {
+  const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const supported =
-    typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cacheUrlRef = useRef<string | null>(null);
+  const cacheKeyRef = useRef<string>('');
 
   useEffect(() => {
     return () => {
-      if (supported) window.speechSynthesis.cancel();
+      if (cacheUrlRef.current) URL.revokeObjectURL(cacheUrlRef.current);
+      audioRef.current?.pause();
     };
-  }, [supported]);
-
-  const pickKoreanVoice = (): SpeechSynthesisVoice | null => {
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices || voices.length === 0) return null;
-    // 한국어 음성 우선 (ko-KR > ko)
-    const ko =
-      voices.find((v) => v.lang === 'ko-KR') ||
-      voices.find((v) => v.lang.startsWith('ko'));
-    return ko ?? null;
-  };
+  }, []);
 
   const play = async () => {
-    if (!supported) {
-      setError('브라우저 미지원');
-      return;
-    }
-    if (!text.trim()) return;
+    if (busy) return;
+    const cleaned = stripEmojis(text);
+    if (!cleaned) return;
     setError(null);
 
-    // voices 가 비동기 로드되는 경우 한 번 기다림
-    let voicesReady = window.speechSynthesis.getVoices().length > 0;
-    if (!voicesReady) {
-      await new Promise<void>((resolve) => {
-        const t = setTimeout(() => resolve(), 500);
-        window.speechSynthesis.onvoiceschanged = () => {
-          clearTimeout(t);
-          resolve();
-        };
-      });
+    const key = `${voice}|${cleaned}`;
+    if (cacheKeyRef.current === key && cacheUrlRef.current) {
+      const a = new Audio(cacheUrlRef.current);
+      audioRef.current = a;
+      a.onended = () => setPlaying(false);
+      a.onerror = () => {
+        setPlaying(false);
+        setError('재생 실패');
+      };
+      setPlaying(true);
+      try {
+        await a.play();
+      } catch {
+        setPlaying(false);
+        setError('재생 실패');
+      }
+      return;
     }
 
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ko-KR';
-    const koVoice = pickKoreanVoice();
-    if (koVoice) u.voice = koVoice;
-    u.rate = 1.0;
-    u.pitch = 1.0;
-    u.onend = () => setPlaying(false);
-    u.onerror = () => {
-      setPlaying(false);
-      setError('재생 실패');
-    };
-    utterRef.current = u;
-    setPlaying(true);
-    window.speechSynthesis.cancel(); // 진행 중인 거 정지
-    window.speechSynthesis.speak(u);
+    setBusy(true);
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleaned, voice }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? '실패');
+      }
+      const blob = await res.blob();
+      if (cacheUrlRef.current) URL.revokeObjectURL(cacheUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      cacheUrlRef.current = url;
+      cacheKeyRef.current = key;
+
+      const a = new Audio(url);
+      audioRef.current = a;
+      a.onended = () => setPlaying(false);
+      a.onerror = () => {
+        setPlaying(false);
+        setError('재생 실패');
+      };
+      setPlaying(true);
+      await a.play();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '실패');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const stop = () => {
-    if (supported) window.speechSynthesis.cancel();
+    audioRef.current?.pause();
+    if (audioRef.current) audioRef.current.currentTime = 0;
     setPlaying(false);
   };
 
   return (
     <button
       onClick={playing ? stop : play}
-      disabled={!supported || !text.trim()}
+      disabled={busy || !text.trim()}
       className={
         className ??
         `inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
@@ -98,7 +124,9 @@ export default function TtsButton({
       title={playing ? '정지' : `${label} (음성)`}
       aria-label={playing ? '정지' : label}
     >
-      {playing ? (
+      {busy ? (
+        <Loader2 size={12} className="animate-spin" />
+      ) : playing ? (
         <Square size={12} fill="currentColor" />
       ) : (
         <Volume2 size={12} />
