@@ -26,7 +26,9 @@ self.addEventListener('push', (event) => {
     tag: data.tag,
     data: { url: data.url || '/' },
     renotify: true,
-    requireInteraction: false,
+    requireInteraction: true,
+    vibrate: [200, 100, 200],
+    silent: false,
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
