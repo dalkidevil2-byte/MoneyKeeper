@@ -8,28 +8,59 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: #1a1a2e; color: white; font-family: 'Pretendard', 'Apple SD Gothic Neo', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
   body { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px; }
-  .toolbar { position: sticky; top: 12px; background: rgba(0,0,0,.7); color: white; padding: 12px 18px; border-radius: 12px; font-size: 14px; z-index: 100; backdrop-filter: blur(8px); }
+  .toolbar { position: sticky; top: 12px; background: rgba(0,0,0,.8); color: white; padding: 12px 18px; border-radius: 12px; font-size: 14px; z-index: 100; backdrop-filter: blur(8px); max-width: 800px; line-height: 1.5; }
   .toolbar code { background: rgba(255,255,255,.15); padding: 2px 6px; border-radius: 4px; }
+
   .card {
     width: 1080px; height: 1920px;
     border-radius: 24px;
-    padding: 100px 90px;
-    display: flex; flex-direction: column;
+    padding: 90px 70px;
+    display: flex; flex-direction: column; align-items: center;
     position: relative; overflow: hidden;
     box-shadow: 0 8px 40px rgba(0,0,0,.4);
+    text-align: center;
   }
-  .num { position: absolute; top: 80px; left: 90px; font-size: 28px; opacity: 0.5; font-weight: 700; letter-spacing: 2px; }
-  .footer { position: absolute; bottom: 80px; left: 90px; right: 90px; display: flex; justify-content: space-between; align-items: center; opacity: 0.6; font-size: 26px; font-weight: 600; }
-  .footer .brand { display: inline-flex; align-items: center; gap: 10px; }
-  .badge { display: inline-block; padding: 14px 28px; background: rgba(255,255,255,.15); backdrop-filter: blur(6px); border-radius: 999px; font-weight: 700; font-size: 32px; margin-bottom: 40px; }
-  .h-emoji { font-size: 200px; line-height: 1; margin-bottom: 60px; filter: drop-shadow(0 6px 20px rgba(0,0,0,.3)); }
-  .title { font-size: 110px; font-weight: 900; line-height: 1.1; letter-spacing: -3px; margin-bottom: 50px; }
-  .sub { font-size: 48px; font-weight: 500; line-height: 1.4; opacity: 0.92; margin-bottom: 60px; }
-  .bullets { font-size: 42px; line-height: 1.6; opacity: 0.9; }
-  .bullets li { margin-bottom: 20px; list-style: none; padding-left: 60px; position: relative; }
-  .bullets li::before { content: '✓'; position: absolute; left: 0; top: 0; font-weight: 900; opacity: 0.7; }
-  .quote { font-size: 56px; font-weight: 600; line-height: 1.4; padding: 50px 60px; background: rgba(255,255,255,.18); border-radius: 32px; backdrop-filter: blur(10px); margin-bottom: 50px; }
-  .quote::before { content: '"'; font-size: 100px; opacity: 0.5; line-height: 0.5; vertical-align: -10px; margin-right: 8px; }
+  .num { position: absolute; top: 80px; left: 90px; font-size: 26px; opacity: 0.5; font-weight: 700; letter-spacing: 2px; }
+  .footer { position: absolute; bottom: 70px; left: 90px; right: 90px; display: flex; justify-content: space-between; align-items: center; opacity: 0.55; font-size: 24px; font-weight: 600; }
+  .badge { display: inline-block; padding: 12px 28px; background: rgba(255,255,255,.18); backdrop-filter: blur(6px); border-radius: 999px; font-weight: 700; font-size: 30px; margin-bottom: 36px; }
+  .title { font-size: 96px; font-weight: 900; line-height: 1.1; letter-spacing: -3px; margin-bottom: 32px; }
+  .sub { font-size: 38px; font-weight: 500; line-height: 1.45; opacity: 0.92; margin-bottom: 50px; max-width: 880px; }
+
+  /* 폰 프레임 — 카드 안의 모킹된 앱 화면 */
+  .phone {
+    width: 560px; height: 1140px;
+    background: #fff;
+    border-radius: 56px;
+    border: 14px solid #1a1a2e;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35), 0 0 0 4px rgba(255,255,255,.1) inset;
+    position: relative;
+    overflow: hidden;
+    color: #1f2937;
+    font-size: 22px;
+    line-height: 1.5;
+    text-align: left;
+  }
+  .phone .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 180px; height: 26px; background: #1a1a2e; border-radius: 14px; z-index: 5; }
+  .phone .statusbar { position: absolute; top: 18px; left: 30px; right: 30px; display: flex; justify-content: space-between; font-size: 18px; font-weight: 700; color: #1f2937; z-index: 4; }
+  .phone .screen { padding: 70px 26px 26px; height: 100%; overflow: hidden; }
+
+  /* 표지 카드 */
+  .cover { justify-content: center; padding: 100px 80px; }
+  .cover .h-emoji { font-size: 280px; margin-bottom: 60px; line-height: 1; filter: drop-shadow(0 8px 30px rgba(0,0,0,.25)); }
+  .cover .title { font-size: 130px; margin-bottom: 50px; }
+  .cover .sub { font-size: 48px; }
+  .cover .badge { font-size: 32px; margin-top: 50px; margin-bottom: 0; }
+
+  /* 마무리 카드 */
+  .closing { justify-content: center; padding: 100px 80px; }
+  .closing .h-emoji { font-size: 240px; margin-bottom: 60px; line-height: 1; }
+  .closing .title { font-size: 100px; }
+  .closing .stamp { font-size: 32px; opacity: 0.85; padding: 14px 36px; border: 3px solid rgba(255,255,255,.4); border-radius: 999px; margin-top: 50px; }
+
+  /* 데코 배경 */
+  .deco { position: absolute; opacity: 0.08; font-weight: 900; font-size: 600px; line-height: 1; pointer-events: none; user-select: none; }
+  .deco.tr { top: -100px; right: -100px; transform: rotate(15deg); }
+  .deco.bl { bottom: -100px; left: -100px; transform: rotate(-15deg); }
 
   /* 카드별 그라디언트 */
   .c1 { background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%); }
@@ -43,34 +74,30 @@
   .c9 { background: linear-gradient(135deg, #f97316 0%, #db2777 50%, #7c2d12 100%); }
   .c10 { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%); }
 
-  /* 표지 카드 (1번) — 가운데 정렬 + 큰 임팩트 */
-  .cover { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-  .cover .h-emoji { font-size: 280px; margin-bottom: 80px; }
-  .cover .title { font-size: 130px; margin-bottom: 60px; }
-  .cover .sub { font-size: 56px; }
-  .cover .badge { font-size: 36px; margin-top: 60px; margin-bottom: 0; }
-
-  /* 마무리 카드 (10번) */
-  .closing { align-items: center; justify-content: center; text-align: center; }
-  .closing .h-emoji { font-size: 240px; margin-bottom: 70px; }
-  .closing .title { font-size: 100px; }
-  .closing .stamp { font-size: 36px; opacity: 0.85; padding: 16px 40px; border: 3px solid rgba(255,255,255,.4); border-radius: 999px; margin-top: 60px; }
-
-  /* 데모 박스 (스크린샷 자리) */
-  .mock {
-    background: rgba(255,255,255,.14);
-    border-radius: 32px;
-    padding: 50px 50px;
-    backdrop-filter: blur(8px);
-    margin-bottom: 50px;
-    border: 2px solid rgba(255,255,255,.2);
-  }
-  .mock-line { font-size: 44px; line-height: 1.5; margin-bottom: 20px; }
-  .mock-line.dim { opacity: 0.6; font-size: 36px; }
-  .arrow { font-size: 70px; opacity: 0.6; margin: 20px 0; }
-  .deco { position: absolute; opacity: 0.1; font-weight: 900; font-size: 600px; line-height: 1; pointer-events: none; user-select: none; }
-  .deco.tr { top: -100px; right: -100px; transform: rotate(15deg); }
-  .deco.bl { bottom: -100px; left: -100px; transform: rotate(-15deg); }
+  /* ── 앱 모킹 공통 컴포넌트 ── */
+  .mock-header { display: flex; align-items: center; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; margin-bottom: 18px; }
+  .mock-header h2 { font-size: 26px; font-weight: 800; color: #111827; flex: 1; }
+  .mock-card { background: #f9fafb; border-radius: 18px; padding: 18px; margin-bottom: 12px; }
+  .mock-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #f1f5f9; }
+  .mock-row:last-child { border-bottom: 0; }
+  .mock-icon { width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .mock-grow { flex: 1; min-width: 0; }
+  .mock-title { font-size: 22px; font-weight: 700; color: #111827; }
+  .mock-sub { font-size: 18px; color: #6b7280; margin-top: 2px; }
+  .mock-amount { font-size: 22px; font-weight: 800; color: #111827; }
+  .mock-amount.spend { color: #ef4444; }
+  .mock-amount.income { color: #10b981; }
+  .pill { display: inline-block; font-size: 16px; padding: 4px 10px; border-radius: 999px; font-weight: 700; }
+  .pill.violet { background: #f5f3ff; color: #7c3aed; }
+  .pill.amber { background: #fef3c7; color: #b45309; }
+  .pill.emerald { background: #d1fae5; color: #047857; }
+  .pill.rose { background: #ffe4e6; color: #be123c; }
+  .pill.blue { background: #dbeafe; color: #1d4ed8; }
+  .check-circle { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #d1d5db; flex-shrink: 0; }
+  .check-circle.done { background: #10b981; border-color: #10b981; position: relative; }
+  .check-circle.done::after { content: '✓'; position: absolute; inset: 0; color: white; font-size: 16px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+  .progress { height: 6px; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+  .progress span { display: block; height: 100%; background: #6366f1; border-radius: 999px; }
 
   @media print {
     body { background: white; gap: 0; padding: 0; }
@@ -85,178 +112,450 @@
     또는 인쇄(Ctrl+P) → "PDF로 저장" → PDF 페이지를 이미지로 추출
   </div>
 
-  <!-- 1. 표지 -->
+  <!-- 1. 표지 (강력한 hook) -->
   <section class="card c1 cover">
-    <span class="num">01 / 10</span>
     <div class="deco tr">✨</div>
-    <div class="h-emoji">🤖</div>
-    <h1 class="title">내가 만든<br>1인 AI 비서 앱</h1>
-    <p class="sub">가계부 · 할일 · 활동추적 · 아카이브<br>모든 걸 한 곳에서</p>
-    <span class="badge">✨ 노션 + Things + 토스 = ?</span>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>스와이프 →</span></div>
+    <div style="font-size:140px;line-height:1;margin-bottom:30px;opacity:0.85;">🤔</div>
+    <h1 class="title" style="font-size:130px;letter-spacing:-4px;line-height:1.05;margin-bottom:20px;">
+      아직도<br>
+      <span style="opacity:0.7;text-decoration:line-through;text-decoration-thickness:8px;">노션</span>만<br>
+      쓰시나요?
+    </h1>
+    <p class="sub" style="font-size:42px;font-weight:600;line-height:1.5;margin-top:30px;margin-bottom:0;">
+      이제는<br>
+      <span style="background:linear-gradient(135deg,#fde68a,#fbbf24);color:#1f2937;padding:10px 24px;border-radius:14px;display:inline-block;margin-top:20px;font-weight:900;font-size:54px;">내가 만든 앱</span>
+      <br>쓰셔야죠
+    </p>
+    <p style="font-size:32px;line-height:1.6;opacity:0.85;margin-top:50px;font-weight:500;max-width:880px;">
+      📱 나에게 최적화 · AI 비서 · 가계부 + 시간 추적<br>
+      <span style="font-size:26px;opacity:0.75;">부족한 기능은 Claude Code 로 그때그때 추가 ✨</span>
+    </p>
+    <span class="badge" style="margin-top:50px;">스와이프해서 더 보기 →</span>
+    <div class="footer"><span>📱 MoneyKeeper · 돈+시간을 같이</span><span>01</span></div>
   </section>
 
   <!-- 2. 가계부 -->
   <section class="card c2">
-    <span class="num">02 / 10</span>
     <div class="deco tr">💰</div>
     <span class="badge">💳 가계부</span>
     <h1 class="title">영수증 사진만<br>찍으면 끝</h1>
-    <p class="sub">AI 가 가맹점 · 금액 · 품목 까지<br>전부 자동 추출해서 등록</p>
-    <div class="mock">
-      <div class="mock-line dim">📷 사진 첨부</div>
-      <div class="arrow">↓</div>
-      <div class="mock-line">스타벅스 · 4,500원</div>
-      <div class="mock-line">아메리카노 1잔 · 카페</div>
+    <p class="sub">AI 가 가맹점 · 금액 · 품목까지<br>전부 자동 추출</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div class="mock-header"><h2>이번 달 지출</h2><span class="pill violet">5월</span></div>
+        <div class="mock-card" style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);padding:22px;">
+          <div style="font-size:18px;color:#6b7280;">예산 사용</div>
+          <div style="font-size:38px;font-weight:900;color:#4f46e5;">428,500<span style="font-size:22px;color:#9ca3af;">/ 700,000</span></div>
+          <div class="progress"><span style="width:61%"></span></div>
+        </div>
+        <div class="mock-row">
+          <span class="mock-icon" style="background:#fef3c7;">☕️</span>
+          <div class="mock-grow">
+            <div class="mock-title">스타벅스</div>
+            <div class="mock-sub">5/3 · 카페 · 카드</div>
+          </div>
+          <div class="mock-amount spend">-4,500</div>
+        </div>
+        <div class="mock-row">
+          <span class="mock-icon" style="background:#d1fae5;">🥗</span>
+          <div class="mock-grow">
+            <div class="mock-title">샐러디</div>
+            <div class="mock-sub">5/3 · 점심 · 카드</div>
+          </div>
+          <div class="mock-amount spend">-9,800</div>
+        </div>
+        <div class="mock-row">
+          <span class="mock-icon" style="background:#dbeafe;">🚇</span>
+          <div class="mock-grow">
+            <div class="mock-title">지하철</div>
+            <div class="mock-sub">5/3 · 교통 · 간편결제</div>
+          </div>
+          <div class="mock-amount spend">-1,500</div>
+        </div>
+        <div class="mock-row">
+          <span class="mock-icon" style="background:#fce7f3;">🎁</span>
+          <div class="mock-grow">
+            <div class="mock-title">생일 케이크</div>
+            <div class="mock-sub">5/2 · 식비 · 카드</div>
+          </div>
+          <div class="mock-amount spend">-32,000</div>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>음성 입력도 가능</li>
-      <li>카드 청구서로 누락 검증</li>
-      <li>예산 자동 추적</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>02</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>02</span></div>
   </section>
 
   <!-- 3. 할일/일정 -->
   <section class="card c3">
-    <span class="num">03 / 10</span>
     <div class="deco bl">📅</div>
     <span class="badge">✅ 할일 · 일정</span>
     <h1 class="title">자연어<br>한 줄로 등록</h1>
-    <p class="sub">"매주 화요일 7시 운동" 처럼 그냥 말하듯 입력하면<br>AI 가 시간 · 반복 · 카테고리 다 분리</p>
-    <div class="mock">
-      <div class="mock-line">"내일 오후 3시 치과"</div>
-      <div class="arrow">↓</div>
-      <div class="mock-line dim">📅 5/4 (일) 15:00</div>
-      <div class="mock-line dim">🏥 카테고리: 의료</div>
+    <p class="sub">"내일 오후 3시 치과" 처럼 그냥 말하듯<br>AI 가 시간 · 반복 · 카테고리 다 분리</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div class="mock-header"><h2>오늘의 할일</h2><span class="pill amber">2/5</span></div>
+        <div style="background:#fff7ed;border-radius:14px;padding:14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">✨</span>
+          <span style="flex:1;color:#9a3412;font-size:18px;font-weight:600;">"내일 오후 3시 치과"</span>
+        </div>
+        <div class="mock-row">
+          <div class="check-circle done"></div>
+          <div class="mock-grow">
+            <div class="mock-title" style="text-decoration:line-through;color:#9ca3af;">아침 운동 30분</div>
+            <div class="mock-sub">07:00 · 완료</div>
+          </div>
+        </div>
+        <div class="mock-row">
+          <div class="check-circle done"></div>
+          <div class="mock-grow">
+            <div class="mock-title" style="text-decoration:line-through;color:#9ca3af;">팀 미팅</div>
+            <div class="mock-sub">10:00 · 완료</div>
+          </div>
+        </div>
+        <div class="mock-row">
+          <div class="check-circle"></div>
+          <div class="mock-grow">
+            <div class="mock-title">치과 예약</div>
+            <div class="mock-sub">15:00 · 🏥 의료</div>
+          </div>
+          <span class="pill rose">2시간 후</span>
+        </div>
+        <div class="mock-row">
+          <div class="check-circle"></div>
+          <div class="mock-grow">
+            <div class="mock-title">마트 장보기</div>
+            <div class="mock-sub">기한 없음 · 🛒 생활</div>
+          </div>
+        </div>
+        <div class="mock-row">
+          <div class="check-circle"></div>
+          <div class="mock-grow">
+            <div class="mock-title">독서 1시간</div>
+            <div class="mock-sub">🔁 매일 · 📚 자기계발</div>
+          </div>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>월간 / 주간 / 일간 뷰</li>
-      <li>스마트 알림 · 음성 입력</li>
-      <li>실제 소요시간 자동 측정</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>03</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>03</span></div>
   </section>
 
   <!-- 4. 활동 추적 -->
   <section class="card c4">
-    <span class="num">04 / 10</span>
     <div class="deco tr">⏱</div>
     <span class="badge">⏱ 활동 추적</span>
     <h1 class="title">▶ 한번 ⏹ 한번<br>그게 전부</h1>
-    <p class="sub">수면 · 공부 · 운동 · 독서… 시작 · 정지로<br>분 단위 시간이 자동 누적</p>
-    <div class="mock">
-      <div class="mock-line">💤 수면 7시간 25분</div>
-      <div class="mock-line">📚 독서 1시간 10분</div>
-      <div class="mock-line">💪 운동 45분</div>
+    <p class="sub">시작 · 정지로 시간이 자동 누적</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div class="mock-header"><h2>⏱ 활동 추적</h2></div>
+
+        <!-- 진행 중 -->
+        <div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:18px;padding:18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;">⏹</div>
+          <div style="flex:1;">
+            <div style="font-size:22px;font-weight:800;">📚 독서<span style="font-size:14px;color:#dc2626;font-weight:800;margin-left:8px;">진행중</span></div>
+            <div style="font-size:30px;color:#dc2626;font-weight:900;">00:42:18</div>
+          </div>
+          <div style="font-size:16px;color:#9ca3af;text-align:right;">오늘<br><b>1시간 12분</b></div>
+        </div>
+
+        <!-- 칩 -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:8px;background:#f9fafb;padding:8px 12px;border-radius:14px;border:1px solid #e5e7eb;">
+            <span style="width:28px;height:28px;border-radius:50%;background:#6366f1;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;">▶</span>
+            <span style="font-size:18px;font-weight:700;">💪 운동</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#f9fafb;padding:8px 12px;border-radius:14px;border:1px solid #e5e7eb;">
+            <span style="width:28px;height:28px;border-radius:50%;background:#10b981;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;">▶</span>
+            <span style="font-size:18px;font-weight:700;">🍳 요리</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#f9fafb;padding:8px 12px;border-radius:14px;border:1px solid #e5e7eb;">
+            <span style="width:28px;height:28px;border-radius:50%;background:#f97316;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;">▶</span>
+            <span style="font-size:18px;font-weight:700;">📺 시청</span>
+          </div>
+        </div>
+
+        <!-- 통계 -->
+        <div class="mock-card" style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);">
+          <div style="font-size:18px;color:#047857;font-weight:700;">이번 주 활동 시간</div>
+          <div style="font-size:36px;color:#065f46;font-weight:900;margin-top:6px;">28시간 45분</div>
+          <div style="font-size:16px;color:#059669;margin-top:4px;">지난 주 대비 +3시간 ⬆</div>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>여러 활동 동시 진행 가능</li>
-      <li>자정 넘어도 자동 분할</li>
-      <li>주간 · 월간 통계</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>04</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>04</span></div>
   </section>
 
   <!-- 5. AI 어시스턴트 -->
   <section class="card c5">
-    <span class="num">05 / 10</span>
     <div class="deco bl">💬</div>
     <span class="badge">💬 AI 어시스턴트</span>
     <h1 class="title">자연어로<br>모든 걸</h1>
-    <p class="sub">물어보고 · 시키고 · 분석받기<br>한 화면에서 다 됨</p>
-    <div class="quote">어제 점심 1만원 카드로</div>
-    <div class="quote">이번 주 운동 몇 번 했어?</div>
-    <div class="quote">내일 빈 시간 알려줘</div>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>05</span></div>
+    <p class="sub">물어보고 · 시키고 · 분석받기</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen" style="background:linear-gradient(180deg,#faf5ff,#fff);">
+        <div class="mock-header"><h2>✨ AI 어시스턴트</h2><span style="font-size:22px;">🪙</span></div>
+
+        <!-- 사용자 -->
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+          <div style="background:#7c3aed;color:white;padding:14px 18px;border-radius:22px 22px 6px 22px;max-width:80%;font-size:20px;line-height:1.5;font-weight:600;">
+            어제 점심 1만원 카드로
+          </div>
+        </div>
+        <!-- 어시스턴트 -->
+        <div style="display:flex;margin-bottom:14px;">
+          <div style="background:white;color:#1f2937;padding:14px 18px;border-radius:22px 22px 22px 6px;max-width:85%;font-size:20px;line-height:1.5;border:1px solid #e5e7eb;">
+            등록했어요. 어제 점심 식비로 1만원 카드 결제 ✓
+            <div style="margin-top:10px;display:inline-flex;gap:6px;">
+              <span class="pill violet" style="font-size:14px;">💰 거래내역 보기 →</span>
+            </div>
+          </div>
+        </div>
+        <!-- 사용자 -->
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+          <div style="background:#7c3aed;color:white;padding:14px 18px;border-radius:22px 22px 6px 22px;max-width:80%;font-size:20px;line-height:1.5;font-weight:600;">
+            이번 주 운동 몇 번 했어?
+          </div>
+        </div>
+        <!-- 어시스턴트 -->
+        <div style="display:flex;">
+          <div style="background:white;color:#1f2937;padding:14px 18px;border-radius:22px 22px 22px 6px;max-width:85%;font-size:20px;line-height:1.5;border:1px solid #e5e7eb;">
+            이번 주 운동 <b>3회 · 총 2시간 15분</b>이에요.
+            지난 주(2회)보다 1회 더 했네요 💪
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>05</span></div>
   </section>
 
   <!-- 6. AI 브리핑 -->
   <section class="card c6">
-    <span class="num">06 / 10</span>
     <div class="deco tr">☀️</div>
     <span class="badge">✨ AI 브리핑</span>
     <h1 class="title">매일 아침 · 저녁<br>AI 가 정리</h1>
-    <p class="sub">상황에 맞는 격려 · 조언 · 회고를<br>지정 시간에 푸시 알림으로</p>
-    <div class="mock">
-      <div class="mock-line dim">🌅 07:30</div>
-      <div class="mock-line">"오늘은 회의 3건이네요.<br>오후 2시 치과 잊지 마세요.<br>천천히 하루 보내요 :)"</div>
+    <p class="sub">상황에 맞는 격려 · 조언 · 회고</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>7:30</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div style="background:linear-gradient(135deg,#ddd6fe,#e0e7ff);border-radius:22px;padding:24px;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+            <span style="font-size:22px;">✨</span>
+            <span style="font-size:18px;font-weight:800;color:#5b21b6;">AI 브리핑</span>
+            <span style="margin-left:auto;font-size:14px;color:#6d28d9;">🌅 아침</span>
+          </div>
+          <div style="font-size:24px;font-weight:800;color:#1f2937;margin-bottom:14px;">☀️ 좋은 아침이에요!</div>
+          <div style="font-size:18px;line-height:1.6;color:#4b5563;">
+            오늘 일정은 <b>3건</b>이네요.
+            <br><br>
+            오후 2시 치과 예약 잊지 마세요.
+            그 외엔 비교적 여유로운 하루예요.
+            <br><br>
+            점심엔 든든한 식사로 컨디션 챙기시고,
+            저녁엔 가볍게 산책 어떨까요? 🌿
+            <br><br>
+            오늘도 천천히, 하나씩 해봐요.
+          </div>
+          <div style="margin-top:18px;display:flex;justify-content:flex-end;">
+            <span style="background:#7c3aed;color:white;padding:10px 20px;border-radius:14px;font-size:16px;font-weight:700;">🔊 음성으로 듣기</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:center;font-size:14px;color:#9ca3af;">
+          <span>매일 07:30 · 22:00 자동</span>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>음성으로 듣기 가능</li>
-      <li>일정 없는 날 — 휴식 권유</li>
-      <li>저녁엔 회고 + 내일 준비</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>06</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>06</span></div>
   </section>
 
   <!-- 7. 아카이브 -->
   <section class="card c7">
-    <span class="num">07 / 10</span>
     <div class="deco bl">📚</div>
     <span class="badge">📚 아카이브</span>
-    <h1 class="title">노션 같은<br>나만의 데이터베이스</h1>
+    <h1 class="title">노션 같은<br>나만의 DB</h1>
     <p class="sub">레시피 · 독서 · 영화 · 여행…<br>5가지 뷰 자유 전환</p>
-    <div class="mock">
-      <div class="mock-line">📋 리스트 &nbsp;&nbsp; 🖼 갤러리</div>
-      <div class="mock-line">📊 표 &nbsp;&nbsp; 📅 캘린더 &nbsp;&nbsp; 📑 보드</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div class="mock-header"><h2>🍳 레시피</h2></div>
+        <!-- 뷰 토글 -->
+        <div style="display:flex;gap:6px;background:#f3f4f6;padding:4px;border-radius:14px;margin-bottom:18px;">
+          <span style="padding:8px 12px;border-radius:10px;font-size:16px;font-weight:700;color:#6b7280;">📋</span>
+          <span style="padding:8px 12px;border-radius:10px;font-size:16px;font-weight:700;color:#6b7280;">🖼</span>
+          <span style="padding:8px 12px;border-radius:10px;font-size:16px;font-weight:700;color:#6b7280;">📊</span>
+          <span style="padding:8px 12px;background:white;border-radius:10px;font-size:16px;font-weight:700;color:#7c3aed;box-shadow:0 1px 3px rgba(0,0,0,.1);">📅 캘린더</span>
+          <span style="padding:8px 12px;border-radius:10px;font-size:16px;font-weight:700;color:#6b7280;">📑</span>
+        </div>
+        <!-- 미니 캘린더 -->
+        <div style="background:white;border:1px solid #e5e7eb;border-radius:18px;overflow:hidden;">
+          <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:18px;font-weight:800;">2026년 5월</span>
+            <span style="display:flex;gap:6px;font-size:14px;color:#9ca3af;">‹ 오늘 ›</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);font-size:11px;color:#9ca3af;text-align:center;background:#f9fafb;padding:6px 0;">
+            <div style="color:#ef4444;">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color:#3b82f6;">토</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);">
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#9ca3af;">27</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#9ca3af;">28</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#9ca3af;">29</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#9ca3af;">30</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">1</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">2</div>
+            <div style="aspect-ratio:1;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#3b82f6;">3<div style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 3px;border-radius:3px;margin-top:2px;">🍳김치찌개</div></div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#ef4444;background:#fef2f2;">4<div style="background:#7c3aed;color:white;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;margin:1px auto;">4</div></div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">5<div style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 3px;border-radius:3px;margin-top:2px;">🍳비빔밥</div></div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">6</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">7</div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">8<div style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 3px;border-radius:3px;margin-top:2px;">🍳된장</div></div>
+            <div style="aspect-ratio:1;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;">9</div>
+            <div style="aspect-ratio:1;border-bottom:1px solid #f3f4f6;padding:4px;font-size:11px;color:#3b82f6;">10</div>
+          </div>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>AI 가 자동으로 컬럼 설계</li>
-      <li>노션 임포트 / 익스포트</li>
-      <li>관계형 속성 (Relation)</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>07</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>07</span></div>
   </section>
 
   <!-- 8. 자동 누적 -->
   <section class="card c8">
-    <span class="num">08 / 10</span>
     <div class="deco tr">📊</div>
     <span class="badge">🔗 자동 누적</span>
     <h1 class="title">활동 → 컬렉션<br>자동 통계</h1>
-    <p class="sub">요리 활동을 레시피에 연결하면<br>요리 횟수 · 시간이 자동 누적</p>
-    <div class="mock">
-      <div class="mock-line">🍳 김치찌개</div>
-      <div class="mock-line dim">횟수 3회 &nbsp;·&nbsp; 총 1시간 25분</div>
-      <div class="mock-line dim">평균 28분 &nbsp;·&nbsp; 마지막 5/3</div>
+    <p class="sub">요리 활동을 레시피에 연결하면<br>횟수 · 시간이 자동 누적</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div class="mock-header">
+          <span style="font-size:14px;color:#9ca3af;">레시피 ›</span>
+        </div>
+        <div style="text-align:center;padding:20px 0 16px;">
+          <div style="font-size:56px;">🍳</div>
+          <div style="font-size:32px;font-weight:900;margin-top:6px;">김치찌개</div>
+          <div style="font-size:14px;color:#9ca3af;margin-top:4px;">우리 집 대표 레시피</div>
+        </div>
+
+        <!-- 자동 통계 (4개 칸) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+          <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:14px;border-radius:14px;text-align:center;">
+            <div style="font-size:13px;color:#a16207;font-weight:700;">횟수</div>
+            <div style="font-size:30px;font-weight:900;color:#854d0e;margin-top:4px;">3<span style="font-size:18px;">회</span></div>
+          </div>
+          <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:14px;border-radius:14px;text-align:center;">
+            <div style="font-size:13px;color:#a16207;font-weight:700;">총 시간</div>
+            <div style="font-size:24px;font-weight:900;color:#854d0e;margin-top:6px;">1시간 25분</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:14px;border-radius:14px;text-align:center;">
+            <div style="font-size:13px;color:#a16207;font-weight:700;">평균</div>
+            <div style="font-size:30px;font-weight:900;color:#854d0e;margin-top:4px;">28<span style="font-size:18px;">분</span></div>
+          </div>
+          <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);padding:14px;border-radius:14px;text-align:center;">
+            <div style="font-size:13px;color:#a16207;font-weight:700;">마지막</div>
+            <div style="font-size:24px;font-weight:900;color:#854d0e;margin-top:6px;">5월 3일</div>
+          </div>
+        </div>
+
+        <div style="font-size:14px;color:#7c3aed;font-weight:700;margin-bottom:8px;text-transform:uppercase;">⏱ 활동 기록</div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 14px;margin-bottom:6px;display:flex;gap:10px;align-items:center;">
+          <span>🍳</span><span style="flex:1;font-size:16px;">5/3 (토) 18:30</span><span style="font-size:14px;color:#854d0e;font-weight:700;">30분</span>
+        </div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 14px;margin-bottom:6px;display:flex;gap:10px;align-items:center;">
+          <span>🍳</span><span style="flex:1;font-size:16px;">5/1 (목) 19:15</span><span style="font-size:14px;color:#854d0e;font-weight:700;">25분</span>
+        </div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;">
+          <span>🍳</span><span style="flex:1;font-size:16px;">4/29 (화) 20:00</span><span style="font-size:14px;color:#854d0e;font-weight:700;">30분</span>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>수동 입력 0건</li>
-      <li>활동 시작·정지만 하면 끝</li>
-      <li>노션 못 따라옴</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>08</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>08</span></div>
   </section>
 
   <!-- 9. 멀티태스킹 -->
   <section class="card c9">
-    <span class="num">09 / 10</span>
     <div class="deco bl">🎯</div>
     <span class="badge">🎯 멀티태스킹</span>
     <h1 class="title">요리하면서<br>드라마도 같이</h1>
-    <p class="sub">여러 활동 동시 진행 · 각자 따로 누적<br>실생활 그대로 추적</p>
-    <div class="mock">
-      <div class="mock-line">🍳 요리 &nbsp;&nbsp; <span style="opacity:.6">25분 진행중</span></div>
-      <div class="mock-line">📺 드라마 &nbsp;&nbsp; <span style="opacity:.6">25분 진행중</span></div>
+    <p class="sub">여러 활동 동시 진행 · 각자 따로 누적</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>📶 100%</span></div>
+      <div class="screen">
+        <div class="mock-header"><h2>⏱ 활동 추적</h2></div>
+
+        <!-- 진행 중 1 -->
+        <div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:18px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+          <div style="width:42px;height:42px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;">⏹</div>
+          <div style="flex:1;">
+            <div style="font-size:20px;font-weight:800;">🍳 요리<span style="font-size:12px;color:#dc2626;font-weight:800;margin-left:6px;">진행중</span></div>
+            <div style="font-size:14px;color:#9ca3af;">📚 김치찌개 · 레시피 연결됨</div>
+            <div style="font-size:24px;color:#dc2626;font-weight:900;margin-top:2px;">00:25:32</div>
+          </div>
+        </div>
+
+        <!-- 진행 중 2 -->
+        <div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:18px;padding:16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
+          <div style="width:42px;height:42px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;">⏹</div>
+          <div style="flex:1;">
+            <div style="font-size:20px;font-weight:800;">📺 드라마 시청<span style="font-size:12px;color:#dc2626;font-weight:800;margin-left:6px;">진행중</span></div>
+            <div style="font-size:14px;color:#9ca3af;">🎬 폭싹 속았수다 · 드라마 연결됨</div>
+            <div style="font-size:24px;color:#dc2626;font-weight:900;margin-top:2px;">00:24:18</div>
+          </div>
+        </div>
+
+        <!-- 안내 -->
+        <div style="background:linear-gradient(135deg,#fff7ed,#fef3c7);border-radius:16px;padding:16px;text-align:center;">
+          <div style="font-size:24px;margin-bottom:6px;">✨</div>
+          <div style="font-size:18px;font-weight:800;color:#9a3412;">동시에 진행 중</div>
+          <div style="font-size:14px;color:#a16207;margin-top:4px;line-height:1.5;">
+            요리하면서 드라마 시청 중!<br>
+            끝나면 각자 다른 컬렉션에 자동 누적
+          </div>
+        </div>
+
+        <!-- 시작 안 한 활동 -->
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;background:#f9fafb;padding:6px 12px;border-radius:14px;border:1px solid #e5e7eb;">
+            <span style="width:24px;height:24px;border-radius:50%;background:#10b981;color:white;display:flex;align-items:center;justify-content:center;font-size:10px;">▶</span>
+            <span style="font-size:16px;font-weight:700;">🏃 산책</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;background:#f9fafb;padding:6px 12px;border-radius:14px;border:1px solid #e5e7eb;">
+            <span style="width:24px;height:24px;border-radius:50%;background:#6366f1;color:white;display:flex;align-items:center;justify-content:center;font-size:10px;">▶</span>
+            <span style="font-size:16px;font-weight:700;">📚 독서</span>
+          </div>
+        </div>
+      </div>
     </div>
-    <ul class="bullets">
-      <li>각 활동 별개의 타이머</li>
-      <li>각자 다른 컬렉션에 누적</li>
-      <li>정지도 따로따로</li>
-    </ul>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>09</span></div>
+    <div class="footer"><span>📱 MoneyKeeper</span><span>09</span></div>
   </section>
 
   <!-- 10. 마무리 -->
   <section class="card c10 closing">
-    <span class="num">10 / 10</span>
     <div class="deco tr">💜</div>
-    <div class="h-emoji">🛠️</div>
-    <h1 class="title">직접 만든<br>1인용 앱</h1>
-    <p class="sub">개인 데이터는 본인 클라우드에<br>광고 X · 트래킹 X</p>
-    <span class="stamp">✨ 본인이 만든 본인의 비서</span>
-    <div class="footer"><span class="brand">📱 MoneyKeeper</span><span>완</span></div>
+    <div style="display:flex;gap:30px;font-size:140px;line-height:1;margin-bottom:50px;align-items:center;">
+      <span>💰</span><span style="font-size:80px;opacity:.6;">+</span><span>⏱</span>
+    </div>
+    <h1 class="title">시간도 돈이다<br><span style="font-size:70px;opacity:.85;">둘 다 새는 곳을 막다</span></h1>
+    <p class="sub" style="margin-top:30px;">
+      개인 데이터는 본인 클라우드에 (Supabase)<br>
+      광고 X · 트래킹 X · 진짜 내 거
+    </p>
+    <div style="background:rgba(255,255,255,.18);border-radius:24px;padding:30px 40px;margin-top:40px;backdrop-filter:blur(8px);max-width:700px;">
+      <div style="font-size:30px;font-weight:800;margin-bottom:14px;">✨ 부족하면? 그냥 만들면 됨</div>
+      <div style="font-size:22px;line-height:1.6;opacity:0.92;">Claude Code 와 같이 코딩하면<br>2026년의 1인 개발은 어려운 일이 아니에요</div>
+    </div>
+    <span class="stamp" style="margin-top:50px;">📱 MoneyKeeper · by me · for me</span>
+    <div class="footer"><span></span><span>10 / 10</span></div>
   </section>
 </body>
 </html>
