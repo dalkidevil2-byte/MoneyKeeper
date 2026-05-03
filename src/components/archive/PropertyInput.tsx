@@ -590,6 +590,14 @@ export default function PropertyInput({ prop, value, onChange }: Props) {
           {prop.type === 'rollup' ? '집계 (자동 계산)' : '수식 (자동 계산)'}
         </div>
       );
+    case 'activity_stat': {
+      const display = formatPropertyDisplay(prop, v);
+      return (
+        <div className="text-xs text-gray-700 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-100">
+          {display || <span className="text-gray-400">—</span>}
+        </div>
+      );
+    }
     default:
       return (
         <input
@@ -639,6 +647,31 @@ export function formatPropertyDisplay(prop: ArchiveProperty, value: unknown): st
     case 'rollup':
     case 'formula':
       return value == null ? '' : String(value);
+    case 'activity_stat': {
+      if (value == null || value === '') return '';
+      switch (prop.stat_kind) {
+        case 'count':
+          return `${value as number}회`;
+        case 'total_min':
+        case 'avg_min': {
+          const m = value as number;
+          if (m <= 0) return '0분';
+          const h = Math.floor(m / 60);
+          const mm = m % 60;
+          if (h === 0) return `${mm}분`;
+          if (mm === 0) return `${h}시간`;
+          return `${h}시간 ${mm}분`;
+        }
+        case 'last_date':
+        case 'first_date': {
+          const d = String(value);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+          return d.slice(5).replace('-', '/'); // M/D
+        }
+        default:
+          return String(value);
+      }
+    }
     default:
       return String(value);
   }

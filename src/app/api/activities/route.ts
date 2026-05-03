@@ -125,6 +125,11 @@ export async function POST(req: NextRequest) {
       error = retry.error;
     }
     if (error) throw error;
+    // link_collection_id 설정됐으면 그 컬렉션 스키마에 활동 통계 속성 자동 추가
+    if (data?.link_collection_id) {
+      const { ensureActivityStatProperties } = await import('@/lib/augment-archive-schema');
+      await ensureActivityStatProperties(supabase, data.link_collection_id);
+    }
     return NextResponse.json({ activity: data }, { status: 201 });
   } catch (e) {
     return NextResponse.json(

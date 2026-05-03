@@ -43,6 +43,11 @@ export async function PATCH(
       error = retry.error;
     }
     if (error) throw error;
+    // link_collection_id 설정/변경됐으면 그 컬렉션 스키마 증강
+    if (data?.link_collection_id && Object.prototype.hasOwnProperty.call(update, 'link_collection_id')) {
+      const { ensureActivityStatProperties } = await import('@/lib/augment-archive-schema');
+      await ensureActivityStatProperties(supabase, data.link_collection_id);
+    }
     return NextResponse.json({ activity: data });
   } catch (e) {
     return NextResponse.json(

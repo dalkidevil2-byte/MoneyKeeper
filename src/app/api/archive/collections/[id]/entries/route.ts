@@ -23,7 +23,83 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
-    return NextResponse.json({ entries: data ?? [] });
+    const entries = (data ?? []) as Array<{ id: string; data: Record<string, unknown> }>;
+
+    // 활동 통계 자동 계산 (activity_stat 속성이 있을 때만)
+    const { data: col } = await supabase
+      .from('archive_collections')
+      .select('schema')
+      .eq('id', id)
+      .maybeSingle();
+    type SchemaProp = { key: string; type?: string; stat_kind?: string };
+    const schema = (col?.schema ?? []) as SchemaProp[];
+    const statProps = schema.filter((p) => p.type === 'activity_stat');
+    if (statProps.length > 0 && entries.length > 0) {
+      const entryIds = entries.map((e) => e.id);
+      const { data: sessions } = await supabase
+        .from('activity_sessions')
+        .select('archive_links, duration_minutes, session_date, end_at')
+        .filter('archive_links', 'cs', JSON.stringify([{ collection_id: id }]))
+        .not('end_at', 'is', null);
+
+      const stats = new Map<
+        string,
+        { count: number; total: number; lastDate: string | null; firstDate: string | null }
+      >();
+      for (const s of (sessions ?? []) as Array<{
+        archive_links: Array<{ collection_id: string; entry_id: string }>;
+        duration_minutes: number | null;
+        session_date: string;
+      }>) {
+        for (const link of s.archive_links ?? []) {
+          if (link.collection_id !== id) continue;
+          if (!entryIds.includes(link.entry_id)) continue;
+          const cur =
+            stats.get(link.entry_id) ??
+            { count: 0, total: 0, lastDate: null as string | null, firstDate: null as string | null };
+          cur.count += 1;
+          cur.total += s.duration_minutes ?? 0;
+          if (!cur.lastDate || s.session_date > cur.lastDate) cur.lastDate = s.session_date;
+          if (!cur.firstDate || s.session_date < cur.firstDate) cur.firstDate = s.session_date;
+          stats.set(link.entry_id, cur);
+        }
+      }
+
+      for (const e of entries) {
+        const st = stats.get(e.id);
+        if (!e.data) e.data = {};
+        for (const sp of statProps) {
+          let value: unknown = null;
+          if (st) {
+            switch (sp.stat_kind) {
+              case 'count':
+                value = st.count;
+                break;
+              case 'total_min':
+                value = st.total;
+                break;
+              case 'avg_min':
+                value = st.count > 0 ? Math.round(st.total / st.count) : 0;
+                break;
+              case 'last_date':
+                value = st.lastDate;
+                break;
+              case 'first_date':
+                value = st.firstDate;
+                break;
+            }
+          } else {
+            value =
+              sp.stat_kind === 'count' || sp.stat_kind === 'total_min' || sp.stat_kind === 'avg_min'
+                ? 0
+                : null;
+          }
+          e.data[sp.key] = value;
+        }
+      }
+    }
+
+    return NextResponse.json({ entries });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : '실패' },

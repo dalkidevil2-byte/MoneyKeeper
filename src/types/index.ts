@@ -707,7 +707,15 @@ export type ArchivePropertyType =
   | 'checklist' // 체크리스트 — [{ label, done, note? }] 배열
   | 'relation' // 다른 컬렉션 항목 참조 (entry id 배열)
   | 'rollup'   // relation 통해 연결된 항목들의 속성 집계
-  | 'formula'; // 다른 속성 값으로 계산식
+  | 'formula'  // 다른 속성 값으로 계산식
+  | 'activity_stat'; // 연결된 활동 세션 자동 통계 (count/total/avg/last)
+
+export type ActivityStatKind =
+  | 'count' // 세션 수
+  | 'total_min' // 총 분
+  | 'avg_min' // 평균 분
+  | 'last_date' // 마지막 날
+  | 'first_date'; // 처음 날
 
 export type RollupAggregation =
   | 'count'
@@ -735,6 +743,10 @@ export interface ArchiveProperty {
   // formula 전용
   formula?: string;               // 예: "{price} * {quantity}"
   return_type?: 'number' | 'text' | 'date';
+  // activity_stat 전용 (자동 추가 속성)
+  stat_kind?: ActivityStatKind;
+  /** 자동 추가 속성 마커 — 사용자가 함부로 못 지우게 (선택적 표시용) */
+  auto_added?: boolean;
 }
 
 export interface ArchiveCollection {
