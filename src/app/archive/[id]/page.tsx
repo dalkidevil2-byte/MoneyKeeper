@@ -22,7 +22,8 @@ import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
 import ArchiveCalendarView from '@/components/archive/ArchiveCalendarView';
 import ArchiveTableView from '@/components/archive/ArchiveTableView';
-import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon } from 'lucide-react';
+import ArchiveBoardView from '@/components/archive/ArchiveBoardView';
+import { List, LayoutGrid, Calendar as CalendarIcon, Table as TableIcon, Columns3 } from 'lucide-react';
 
 type Params = { id: string };
 
@@ -43,8 +44,9 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [busy, setBusy] = useState(false);
   const [aiFillBusy, setAiFillBusy] = useState(false);
   const [aiFillError, setAiFillError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar' | 'table'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar' | 'table' | 'board'>('list');
   const [calendarDateKey, setCalendarDateKey] = useState<string>('');
+  const [boardGroupKey, setBoardGroupKey] = useState<string>('');
   const [aiFillResult, setAiFillResult] = useState<{
     data: Record<string, unknown>;
     filled: string[];
@@ -276,7 +278,8 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
         saved === 'list' ||
         saved === 'gallery' ||
         saved === 'calendar' ||
-        saved === 'table'
+        saved === 'table' ||
+        saved === 'board'
       ) {
         setViewMode(saved);
       } else {
@@ -290,10 +293,15 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
       (p: ArchiveProperty) => p.type === 'date',
     );
     if (firstDate) setCalendarDateKey(firstDate.key);
+    // 첫 select 속성을 보드 기준으로 자동 선택
+    const firstSelect = (collection.schema ?? []).find(
+      (p: ArchiveProperty) => p.type === 'select',
+    );
+    if (firstSelect) setBoardGroupKey(firstSelect.key);
   }, [collection]);
 
   // viewMode 변경 시 localStorage 저장
-  const changeViewMode = (mode: 'list' | 'gallery' | 'calendar' | 'table') => {
+  const changeViewMode = (mode: 'list' | 'gallery' | 'calendar' | 'table' | 'board') => {
     setViewMode(mode);
     if (collection) {
       try {
@@ -309,6 +317,15 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     () =>
       ((collection?.schema ?? []) as ArchiveProperty[]).filter(
         (p) => p.type === 'date',
+      ),
+    [collection],
+  );
+
+  // schema 의 select 속성 목록 (보드 뷰용)
+  const selectProps = useMemo(
+    () =>
+      ((collection?.schema ?? []) as ArchiveProperty[]).filter(
+        (p) => p.type === 'select',
       ),
     [collection],
   );
@@ -561,6 +578,22 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             </button>
             <button
               onClick={() => {
+                if (selectProps.length === 0) {
+                  alert('select 타입 속성이 있어야 보드 뷰를 사용할 수 있어요. 컬렉션 설정에서 select 속성을 추가해주세요.');
+                  return;
+                }
+                changeViewMode('board');
+              }}
+              disabled={selectProps.length === 0}
+              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors disabled:opacity-40 ${
+                viewMode === 'board' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500'
+              }`}
+              title={selectProps.length === 0 ? 'select 속성이 필요해요' : ''}
+            >
+              <Columns3 size={12} /> 보드
+            </button>
+            <button
+              onClick={() => {
                 if (dateProps.length === 0) {
                   alert('날짜 속성이 있어야 캘린더 뷰를 사용할 수 있어요. 컬렉션 설정에서 date 타입 속성을 추가해주세요.');
                   return;
@@ -590,11 +623,42 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
               ))}
             </select>
           )}
+          {/* 보드 모드일 때 select 속성 선택 (여러 개일 때) */}
+          {viewMode === 'board' && selectProps.length > 1 && (
+            <select
+              value={boardGroupKey}
+              onChange={(e) => setBoardGroupKey(e.target.value)}
+              className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white"
+            >
+              {selectProps.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label} 기준
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
-      <div className={`mx-auto px-4 space-y-2 pt-3 ${viewMode === 'table' ? 'max-w-full' : 'max-w-lg'}`}>
-        {viewMode === 'table' ? (
+      <div className={`mx-auto px-4 space-y-2 pt-3 ${viewMode === 'table' || viewMode === 'board' ? 'max-w-full' : 'max-w-lg'}`}>
+        {viewMode === 'board' && boardGroupKey ? (
+          <ArchiveBoardView
+            entries={filteredEntries}
+            schema={(collection?.schema ?? []) as ArchiveProperty[]}
+            groupKey={boardGroupKey}
+            onSelectEntry={(eid) => {
+              const found = entries.find((x) => x.id === eid);
+              if (found) setEditingEntry(found);
+            }}
+            onCreateInColumn={(gKey, val) => {
+              setDuplicateData({
+                data: { [gKey]: val },
+                sourceTitle: '',
+              });
+              setEditingEntry('new');
+            }}
+          />
+        ) : viewMode === 'table' ? (
           <ArchiveTableView
             entries={filteredEntries}
             schema={(collection?.schema ?? []) as ArchiveProperty[]}
