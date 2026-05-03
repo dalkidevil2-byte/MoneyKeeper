@@ -45,14 +45,11 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
   }, [activities]);
 
   // 진짜 시작 호출 (선택적으로 archive_links 함께)
+  // 다른 활동 동시 진행 허용 — 자동 정지 X (멀티태스킹)
   const doStart = async (a: Activity, links: ArchiveLink[]) => {
     if (busyId) return;
     setBusyId(a.id);
     try {
-      const others = activities.filter((x) => x.running_session && x.id !== a.id);
-      for (const o of others) {
-        await fetch(`/api/activities/${o.id}/stop`, { method: 'POST' });
-      }
       await fetch(`/api/activities/${a.id}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
