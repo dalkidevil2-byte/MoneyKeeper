@@ -39,6 +39,7 @@ export default function ArchiveCalendarView({
 }: Props) {
   const [cursor, setCursor] = useState(dayjs());
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [dayDetail, setDayDetail] = useState<string | null>(null);
 
   // 보고 있는 월의 세션 fetch
   useEffect(() => {
@@ -252,19 +253,30 @@ export default function ArchiveCalendarView({
           const isSun = day.day() === 0;
           const isSat = day.day() === 6;
           const dayEntries = entriesByDate.get(key) ?? [];
+          const daySessions = sessionsByDate.get(key) ?? [];
+          const totalItemCount = dayEntries.length + daySessions.length;
           return (
             <button
               key={key}
               onClick={() => {
-                if (dayEntries.length === 0) {
+                // 비어있으면 새 항목 만들기
+                if (totalItemCount === 0) {
                   onSelectDate(null, key);
-                } else if (dayEntries.length === 1) {
-                  onSelectDate(dayEntries[0].entry.id, key);
-                } else {
-                  onSelectDate(dayEntries[0].entry.id, key);
+                  return;
                 }
+                // 1개면 바로 열기
+                if (totalItemCount === 1) {
+                  if (dayEntries[0]) {
+                    onSelectDate(dayEntries[0].entry.id, key);
+                  } else if (daySessions[0]) {
+                    onSelectDate(daySessions[0].entryId, key);
+                  }
+                  return;
+                }
+                // 여러 개면 그 날 전체 목록 시트 열기
+                setDayDetail(key);
               }}
-              className={`min-h-[64px] border-b border-r border-gray-50 p-1 text-left flex flex-col gap-0.5 transition-colors ${
+              className={`min-h-[80px] border-b border-r border-gray-50 p-1 text-left flex flex-col gap-0.5 transition-colors ${
                 inMonth ? 'bg-white' : 'bg-gray-50/50'
               } active:bg-violet-50 hover:bg-violet-50/50`}
             >
@@ -329,7 +341,7 @@ export default function ArchiveCalendarView({
                 )}
                 {/* 활동 세션 layer (주황색) */}
                 {(() => {
-                  const sList = sessionsByDate.get(key) ?? [];
+                  const sList = daySessions;
                   if (sList.length === 0) return null;
                   return (
                     <>
@@ -369,6 +381,94 @@ export default function ArchiveCalendarView({
           );
         })}
       </div>
+
+      {/* 날짜 상세 시트 — 여러 항목/세션 있을 때 탭하면 펼침 */}
+      {dayDetail && (() => {
+        const key = dayDetail;
+        const dayLabel = dayjs(key).format('M월 D일 (ddd)');
+        const dEntries = entriesByDate.get(key) ?? [];
+        const dSessions = sessionsByDate.get(key) ?? [];
+        return (
+          <div
+            className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
+            onClick={() => setDayDetail(null)}
+          >
+            <div
+              className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto"
+              onClick={(ev) => ev.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-gray-900">{dayLabel}</h3>
+                <button
+                  onClick={() => setDayDetail(null)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                >
+                  ✕
+                </button>
+              </div>
+              {dEntries.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-violet-600 uppercase mb-1">
+                    📅 항목 ({dEntries.length})
+                  </p>
+                  <div className="space-y-1">
+                    {dEntries.map((de, i) => {
+                      const dt = (de.entry.data ?? {}) as Record<string, unknown>;
+                      const t = titleKey ? String(dt[titleKey] ?? '') : '';
+                      return (
+                        <button
+                          key={`d-${de.entry.id}-${i}`}
+                          onClick={() => {
+                            setDayDetail(null);
+                            onSelectDate(de.entry.id, key);
+                          }}
+                          className="w-full text-left text-sm bg-violet-50 text-violet-900 px-3 py-2 rounded-lg hover:bg-violet-100"
+                        >
+                          {t || '(제목 없음)'}
+                          {de.isRange && (
+                            <span className="text-[10px] text-violet-500 ml-2">기간</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {dSessions.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">
+                    ⏱ 활동 세션 ({dSessions.length})
+                  </p>
+                  <div className="space-y-1">
+                    {dSessions.map((ds, i) => {
+                      const dur = ds.session.duration_minutes ?? 0;
+                      const durLabel = dur > 0 ? ` · ${dur}분` : '';
+                      return (
+                        <button
+                          key={`ds-${ds.session.id}-${i}`}
+                          onClick={() => {
+                            setDayDetail(null);
+                            onSelectDate(ds.entryId, key);
+                          }}
+                          className="w-full text-left text-sm bg-amber-50 text-amber-900 px-3 py-2 rounded-lg hover:bg-amber-100"
+                        >
+                          <span className="mr-1">
+                            {ds.session.activity?.emoji ?? '⏱'}
+                          </span>
+                          {ds.entryTitle}
+                          <span className="text-[10px] text-amber-600">
+                            {durLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
