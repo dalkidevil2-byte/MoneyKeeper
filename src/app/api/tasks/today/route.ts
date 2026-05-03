@@ -27,26 +27,29 @@ export async function GET(req: NextRequest) {
   const date = dayjs.tz(dateStr, KST);
 
   try {
-    // 활성 task 전체 (cancelled 제외)
-    let q = supabase
+    // 활성 task 전체 (cancelled 제외) — 멤버 필터 없이 먼저 조회
+    // (overdue 는 모든 멤버 거 다 보이게 하기 위해)
+    const { data: allTasksRaw, error } = await supabase
       .from('tasks')
       .select(`*, member:members!member_id(id, name, color)`)
       .eq('household_id', householdId)
       .neq('status', 'cancelled')
       .eq('is_active', true)
-      // 일정(event) 만 — todo 는 별도 리스트
       .eq('kind', 'event');
-    // 멤버 필터: 본인 + 다중 담당 포함 + 공유(담당 없음) 모두 포함
-    if (memberId) {
-      q = q.or(
-        `member_id.eq.${memberId},target_member_ids.cs.{${memberId}},member_id.is.null`
-      );
-    }
-
-    const { data: tasks, error } = await q;
     if (error) throw error;
 
-    const allTasks = (tasks ?? []) as Task[];
+    const allTasks = (allTasksRaw ?? []) as Task[];
+
+    // 멤버 필터 매칭 함수 (today/tomorrow 만 적용, overdue 는 무시)
+    const matchesMember = (t: Task): boolean => {
+      if (!memberId) return true;
+      if (!t.member_id && (!t.target_member_ids || t.target_member_ids.length === 0)) {
+        return true; // 공유
+      }
+      if (t.member_id === memberId) return true;
+      if (t.target_member_ids?.includes(memberId)) return true;
+      return false;
+    };
 
     // routine 들의 최근 30일 completion 한 번에 조회
     const routineIds = allTasks.filter((t) => t.type === 'routine').map((t) => t.id);
@@ -71,9 +74,13 @@ export async function GET(req: NextRequest) {
     const tomorrowKey = tomorrowDate.format('YYYY-MM-DD');
 
     for (const task of allTasks) {
+      // overdue 는 멤버 무관 모두 보이게, 그 외는 멤버 필터 적용
+      const memberOk = matchesMember(task);
+
       if (task.type === 'one_time') {
         // 완료된 일회성: due_date 가 오늘/내일인 것만 (취소선 노출)
         if (task.status === 'done') {
+          if (!memberOk) continue;
           if (task.due_date === todayKey) {
             today.push({ task, occurrence_date: todayKey, completed_today: true });
           } else if (task.due_date === tomorrowKey) {
@@ -83,9 +90,9 @@ export async function GET(req: NextRequest) {
         }
         // snoozed는 snoozed_to가 오늘이면 표시
         const effectiveDate = task.status === 'snoozed' ? task.snoozed_to : task.due_date;
-        if (effectiveDate === todayKey) {
+        if (effectiveDate === todayKey && memberOk) {
           today.push({ task, occurrence_date: todayKey, completed_today: false });
-        } else if (effectiveDate === tomorrowKey) {
+        } else if (effectiveDate === tomorrowKey && memberOk) {
           tomorrow.push({ task, occurrence_date: tomorrowKey, completed_today: false });
         } else if (isTaskOverdue(task, todayKey)) {
           overdue.push({
@@ -95,7 +102,8 @@ export async function GET(req: NextRequest) {
           });
         }
       } else {
-        // routine — 오늘과 내일 둘 다 체크
+        // routine — 멤버 매칭 안 되면 스킵 (overdue 개념 없음)
+        if (!memberOk) continue;
         const completions = completionsMap[task.id] ?? [];
         if (isRoutineDueOn(task.recurrence, task.due_date, date, completions)) {
           const todayCompletion = completions.find((c) => c.completed_on === todayKey);

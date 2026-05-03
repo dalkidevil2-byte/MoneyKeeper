@@ -27,9 +27,9 @@ export default function TodoHomePage() {
   const [memberFilter, setMemberFilter] = useState<string | ''>('');
   const { data, loading, refetch: refetchToday } = useTodayTasks(memberFilter || undefined);
   // todo 리스트 — pending + done 모두 (취소선 표시 위해)
+  // 멤버 필터는 client-side 로 적용 (overdue 만큼은 모든 멤버 거 보이게 위해)
   const { tasks: todoTasks, refetch: refetchTodos } = useTasks({
     kind: 'todo',
-    member_id: memberFilter || undefined,
   });
   // Daily Track Record
   const [dailyTracks, setDailyTracks] = useState<DailyTrack[]>([]);
@@ -323,6 +323,7 @@ export default function TodoHomePage() {
         {/* 할일 (todo) — 기한 임박순 */}
         <TodoSection
           todos={todoTasks}
+          memberFilter={memberFilter || undefined}
           onClick={openEdit}
           onTimerChange={refetch}
           onToggleComplete={async (t) => {
@@ -402,25 +403,45 @@ export default function TodoHomePage() {
 // ─────────────────────────────────────────
 function TodoSection({
   todos,
+  memberFilter,
   onClick,
   onToggleComplete,
   onTimerChange,
 }: {
   todos: Task[];
+  memberFilter?: string;
   onClick: (t: Task) => void;
   onToggleComplete: (t: Task) => Promise<void>;
   onTimerChange?: () => void;
 }) {
   const today = dayjs().startOf('day');
+  const todayStr = today.format('YYYY-MM-DD');
+
+  // 멤버 필터 매칭 — overdue 는 멤버 무관 항상 노출.
+  // 그 외 (today/tomorrow/week/later/none) 는 필터 적용.
+  const isMemberMatch = (t: Task): boolean => {
+    if (!memberFilter) return true;
+    if (!t.member_id && (!t.target_member_ids || t.target_member_ids.length === 0)) return true; // 공유
+    if (t.member_id === memberFilter) return true;
+    if (t.target_member_ids?.includes(memberFilter)) return true;
+    return false;
+  };
+  const isOverdue = (t: Task): boolean =>
+    !!t.deadline_date && t.deadline_date < todayStr;
 
   // 모든 미완료 할일을 노출 (시작일 미래여도 보이게 — 사용자가 "있는 줄도 모르는" 상황 방지)
   // pending 과 done 분리 — done 은 맨 아래 별도 섹션
   // 완료된 항목은 최근 3일 이내만 노출 (이전 것은 자동으로 사라짐 — 기록은 /todo/archive 에서 확인)
   const threeDaysAgo = today.subtract(3, 'day');
-  const pending = todos.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
+  const pending = todos.filter((t) => {
+    if (t.status === 'done' || t.status === 'cancelled') return false;
+    // overdue 는 멤버 무관, 나머지는 필터 적용
+    if (isOverdue(t)) return true;
+    return isMemberMatch(t);
+  });
   const done = todos.filter((t) => {
     if (t.status !== 'done') return false;
-    // completed_at 없으면(혹시 있을 레거시) 일단 노출
+    if (!isMemberMatch(t)) return false;
     if (!t.completed_at) return true;
     return dayjs(t.completed_at).isAfter(threeDaysAgo);
   });
