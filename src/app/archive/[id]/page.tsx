@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import type { ArchiveCollection, ArchiveEntry, ArchiveProperty } from '@/types';
 import PropertyInput, { formatPropertyDisplay } from '@/components/archive/PropertyInput';
+import ArchiveCalendarView from '@/components/archive/ArchiveCalendarView';
+import { List, LayoutGrid, Calendar as CalendarIcon } from 'lucide-react';
 
 type Params = { id: string };
 
@@ -40,6 +42,8 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
   const [busy, setBusy] = useState(false);
   const [aiFillBusy, setAiFillBusy] = useState(false);
   const [aiFillError, setAiFillError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'gallery' | 'calendar'>('list');
+  const [calendarDateKey, setCalendarDateKey] = useState<string>('');
   const [aiFillResult, setAiFillResult] = useState<{
     data: Record<string, unknown>;
     filled: string[];
@@ -262,6 +266,47 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     load();
   }, [load]);
 
+  // 컬렉션이 로드되면 viewMode 초기화 (localStorage 우선, 없으면 card_layout)
+  useEffect(() => {
+    if (!collection) return;
+    try {
+      const saved = localStorage.getItem(`archive:view:${collection.id}`);
+      if (saved === 'list' || saved === 'gallery' || saved === 'calendar') {
+        setViewMode(saved);
+      } else {
+        setViewMode(collection.card_layout === 'gallery' ? 'gallery' : 'list');
+      }
+    } catch {
+      setViewMode(collection.card_layout === 'gallery' ? 'gallery' : 'list');
+    }
+    // 첫 date 속성을 캘린더 기준으로 자동 선택
+    const firstDate = (collection.schema ?? []).find(
+      (p: ArchiveProperty) => p.type === 'date',
+    );
+    if (firstDate) setCalendarDateKey(firstDate.key);
+  }, [collection]);
+
+  // viewMode 변경 시 localStorage 저장
+  const changeViewMode = (mode: 'list' | 'gallery' | 'calendar') => {
+    setViewMode(mode);
+    if (collection) {
+      try {
+        localStorage.setItem(`archive:view:${collection.id}`, mode);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  // schema 의 date 속성 목록
+  const dateProps = useMemo(
+    () =>
+      ((collection?.schema ?? []) as ArchiveProperty[]).filter(
+        (p) => p.type === 'date',
+      ),
+    [collection],
+  );
+
   const deleteCollection = async () => {
     if (!confirm('이 컬렉션을 삭제할까요?\n(항목들도 함께 사라집니다)')) return;
     await fetch(`/api/archive/collections/${id}`, { method: 'DELETE' });
@@ -480,10 +525,81 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
         {aiFillError && (
           <div className="text-[11px] text-rose-500 px-1 mt-1">{aiFillError}</div>
         )}
+
+        {/* 뷰 모드 토글 */}
+        <div className="flex items-center gap-1 pt-1">
+          <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
+            <button
+              onClick={() => changeViewMode('list')}
+              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                viewMode === 'list' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              <List size={12} /> 리스트
+            </button>
+            <button
+              onClick={() => changeViewMode('gallery')}
+              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                viewMode === 'gallery' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              <LayoutGrid size={12} /> 갤러리
+            </button>
+            <button
+              onClick={() => {
+                if (dateProps.length === 0) {
+                  alert('날짜 속성이 있어야 캘린더 뷰를 사용할 수 있어요. 컬렉션 설정에서 date 타입 속성을 추가해주세요.');
+                  return;
+                }
+                changeViewMode('calendar');
+              }}
+              disabled={dateProps.length === 0}
+              className={`px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-semibold transition-colors disabled:opacity-40 ${
+                viewMode === 'calendar' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500'
+              }`}
+              title={dateProps.length === 0 ? '날짜 속성이 필요해요' : ''}
+            >
+              <CalendarIcon size={12} /> 캘린더
+            </button>
+          </div>
+          {/* 캘린더 모드일 때 date 속성 선택 (여러 개일 때) */}
+          {viewMode === 'calendar' && dateProps.length > 1 && (
+            <select
+              value={calendarDateKey}
+              onChange={(e) => setCalendarDateKey(e.target.value)}
+              className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white"
+            >
+              {dateProps.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label} 기준
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 space-y-2 pt-3">
-        {filteredEntries.length === 0 ? (
+        {viewMode === 'calendar' && calendarDateKey ? (
+          <ArchiveCalendarView
+            entries={filteredEntries}
+            schema={(collection?.schema ?? []) as ArchiveProperty[]}
+            dateKey={calendarDateKey}
+            onSelectDate={(entryId, date) => {
+              if (entryId) {
+                const found = entries.find((e) => e.id === entryId);
+                if (found) setEditingEntry(found);
+              } else if (date) {
+                // 빈 날짜 — 새 항목 만들면서 그 날짜 prefill
+                setDuplicateData({
+                  data: { [calendarDateKey]: date },
+                  sourceTitle: '',
+                });
+                setEditingEntry('new');
+              }
+            }}
+          />
+        ) : filteredEntries.length === 0 ? (
           <div className="text-center text-sm text-gray-400 py-12">
             {search ? '검색 결과 없음' : '아직 항목이 없어요. 첫 항목을 추가해보세요.'}
           </div>
@@ -498,7 +614,7 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
             const realIdx = entries.findIndex((x) => x.id === e.id);
 
             // gallery 모드 — 첫 'files' 속성에서 첫 이미지 추출
-            const cardLayout = collection.card_layout === 'gallery' ? 'gallery' : 'list';
+            const cardLayout = viewMode === 'gallery' ? 'gallery' : 'list';
             let coverUrl: string | null = null;
             if (cardLayout === 'gallery') {
               for (const p of schema) {
