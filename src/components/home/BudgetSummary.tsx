@@ -27,8 +27,9 @@ export default function BudgetSummary() {
         const bJson = await bRes.json();
 
         const txs: Tx[] = txJson.transactions ?? [];
+        // 메인 요약은 '변동 지출' 만 — 고정 지출은 예산 비교 의미가 적음
         const total = txs
-          .filter((t) => t.type === 'variable_expense' || t.type === 'fixed_expense')
+          .filter((t) => t.type === 'variable_expense')
           .reduce((s, t) => s + t.amount, 0);
 
         const budgets: Budget[] = bJson.budgets ?? [];
@@ -65,7 +66,7 @@ export default function BudgetSummary() {
       ) : (
         <>
           <div className="flex items-baseline justify-between">
-            <span className="text-xs text-gray-500">이번 달 지출</span>
+            <span className="text-xs text-gray-500">이번 달 변동 지출</span>
             <span className="text-sm font-bold text-gray-900">
               {(spent ?? 0).toLocaleString('ko-KR')}원
             </span>
