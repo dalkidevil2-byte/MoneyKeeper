@@ -171,17 +171,21 @@ export default function ArchiveCalendarView({
                 {day.date()}
               </div>
               {/* 항목 미리보기 — 최대 3개, 더 있으면 +N */}
-              <div className="space-y-0.5 overflow-hidden">
+              {/* overflow-visible: range 칩이 셀 경계 너머로 확장되어야 하므로 */}
+              <div className="space-y-0.5">
                 {dayEntries.slice(0, 3).map((de, di) => {
                   const dt = (de.entry.data ?? {}) as Record<string, unknown>;
                   const title = titleKey ? String(dt[titleKey] ?? '') : '';
                   // range 표시: 시작은 둥근 좌측, 끝은 둥근 우측, 중간은 직각
                   const radius = de.isRange
-                    ? `${de.isStart ? 'rounded-l ' : ''}${de.isEnd ? 'rounded-r ' : ''}${!de.isStart && !de.isEnd ? '' : ''}`
-                    : 'rounded';
-                  // 중간 칸은 음각/짙은 색으로 연결 표시 (margin 으로 살짝 밀착)
+                    ? `${de.isStart ? 'rounded-l-md' : ''} ${de.isEnd ? 'rounded-r-md' : ''}`
+                    : 'rounded-md';
+                  // 셀 padding(4px) + 셀 border(1px) = 5px 갭을 메우려면 좌/우 -8px 이상 음수 마진
+                  // 시작 셀: 우측만 셀 경계 너머로 확장
+                  // 종료 셀: 좌측만 확장
+                  // 중간 셀: 양쪽 모두 확장
                   const mx = de.isRange
-                    ? `${!de.isStart ? '-ml-1 ' : ''}${!de.isEnd ? '-mr-1 ' : ''}`
+                    ? `${!de.isStart ? '-ml-2' : ''} ${!de.isEnd ? '-mr-2' : ''}`
                     : '';
                   // 시작 셀에만 제목 표시, 그 외엔 "→" 빈 띠
                   const label = de.isRange && !de.isStart
