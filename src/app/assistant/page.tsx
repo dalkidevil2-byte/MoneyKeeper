@@ -189,7 +189,7 @@ export default function AssistantPage() {
           </div>
           <button
             onClick={() => setUsageOpen(true)}
-            className="p-2 rounded-xl hover:bg-violet-50 text-violet-600"
+            className="p-2 mr-12 rounded-xl hover:bg-violet-50 text-violet-600"
             title="AI 사용량 / 비용 보기"
             aria-label="AI 사용량"
           >
