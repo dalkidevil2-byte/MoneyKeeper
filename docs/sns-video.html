@@ -407,22 +407,21 @@
     <span id="time" style="font-variant-numeric:tabular-nums;opacity:.7;">0 / 36s</span>
   </div>
 
-  <!-- 녹화 모드 빠져나가는 안내 -->
-  <div id="exitTip" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:white;padding:10px 18px;border-radius:999px;font-size:13px;z-index:1001;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.15);">
-    💡 ESC → 녹화 모드 해제
-  </div>
+  <!-- (구) exitTip 자리 — 재생 시작 후엔 어떤 안내도 띄우지 않음 -->
+  <div id="exitTip" style="display:none;"></div>
 
   <!-- 녹화 시작 대기 화면 (전체 덮음) -->
   <div id="readyScreen" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.95);z-index:999;align-items:center;justify-content:center;flex-direction:column;color:white;backdrop-filter:blur(12px);text-align:center;padding:40px;">
     <div style="font-size:80px;margin-bottom:30px;">🎥</div>
     <div style="font-size:48px;font-weight:900;margin-bottom:14px;letter-spacing:-0.04em;">녹화 준비됐어요?</div>
-    <div style="font-size:22px;opacity:0.8;line-height:1.6;margin-bottom:50px;max-width:600px;">
-      Win+G (또는 Cmd+Shift+5) 로<br>
-      <b>화면 녹화부터 먼저 시작</b>하세요.<br>
-      그 다음 아래 버튼 클릭 →
+    <div style="font-size:22px;opacity:0.8;line-height:1.7;margin-bottom:50px;max-width:680px;">
+      <b style="color:#fbbf24;">1단계.</b> Win+G (또는 Cmd+Shift+5) → <b>화면 녹화 시작</b><br>
+      <b style="color:#fbbf24;">2단계.</b> 아래 버튼 클릭<br>
+      <b style="color:#fbbf24;">3단계.</b> 5초 카운트다운 후 자동 재생 (36초)<br>
+      <b style="color:#fbbf24;">4단계.</b> 끝나면 녹화 정지
     </div>
     <button id="startNow" style="background:linear-gradient(135deg,#fbbf24,#ec4899);color:#0f172a;border:0;padding:24px 60px;border-radius:999px;font-size:32px;font-weight:900;cursor:pointer;box-shadow:0 12px 40px rgba(251,191,36,0.4);">
-      ▶ 3초 후 재생 시작
+      ▶ 5초 후 재생 시작
     </button>
     <div style="font-size:18px;opacity:0.6;margin-top:30px;">ESC 누르면 취소</div>
   </div>
@@ -542,10 +541,11 @@
     readyScreen.style.display = 'flex';
   };
 
-  // "▶ 3초 후 재생 시작" 클릭 → 카운트다운 후 자동 재생
+  // "▶ 5초 후 재생 시작" 클릭 → 카운트다운 후 자동 재생
+  // 카운트다운 동안 사용자는 화면 캡처(Win+G)를 시작할 시간 확보
   startNowBtn.onclick = () => {
     readyScreen.style.display = 'none';
-    let n = 3;
+    let n = 5;
     countdown.style.display = 'flex';
     countdown.textContent = n;
     const cd = setInterval(() => {
@@ -555,10 +555,9 @@
       } else {
         clearInterval(cd);
         countdown.style.display = 'none';
-        exitTip.style.display = 'block';
+        // 안내 메시지 일절 X — 깨끗하게 슬라이드만 보임
         i = -1;
         play();
-        setTimeout(() => { exitTip.style.display = 'none'; }, 3000);
       }
     }, 1000);
   };
