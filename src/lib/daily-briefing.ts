@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { createServerSupabaseClient } from './supabase';
+import { logAiUsage } from './ai-usage';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -231,6 +232,14 @@ ${actList.map((a) => `- ${a.name}: ${a.minutes}분`).join('\n') || '없음'}
     });
     const body = res.choices[0]?.message?.content?.trim() ?? '';
     const title = mode === 'morning' ? '☀️ 아침 브리핑' : '🌙 저녁 회고';
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'briefing',
+      inputTokens: res.usage?.prompt_tokens ?? 0,
+      outputTokens: res.usage?.completion_tokens ?? 0,
+      householdId,
+      meta: { mode },
+    });
     return { title, body };
   } catch (e) {
     console.error('[generateBriefing]', e);

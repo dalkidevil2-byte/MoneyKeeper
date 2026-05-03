@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { ASSISTANT_TOOLS, executeTool } from './assistant-tools';
+import { logAiUsage } from './ai-usage';
 
 dayjs.locale('ko');
 
@@ -107,13 +108,22 @@ H) 그 외는 데이터 조회/분석 도구 사용.`;
   let finalContent = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const usedModel = imageUrl && round === 0 ? 'gpt-4o' : 'gpt-4o-mini';
     const response = await openai.chat.completions.create({
       // 이미지 첨부된 첫 라운드는 gpt-4o(vision 정확도) 사용, 이후 라운드는 mini
-      model: imageUrl && round === 0 ? 'gpt-4o' : 'gpt-4o-mini',
+      model: usedModel,
       messages,
       tools: ASSISTANT_TOOLS,
       tool_choice: 'auto',
       temperature: 0.5,
+    });
+    void logAiUsage({
+      model: usedModel,
+      feature: 'assistant',
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      householdId,
+      meta: { round, hasImage: !!imageUrl },
     });
 
     const msg = response.choices[0]?.message;

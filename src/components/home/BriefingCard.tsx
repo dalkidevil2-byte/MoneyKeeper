@@ -131,7 +131,7 @@ export default function BriefingCard() {
         <>
           {!data && !loading && (
             <button
-              onClick={fetchBriefing}
+              onClick={() => fetchBriefing()}
               className="w-full py-3 rounded-xl bg-white border border-violet-200 text-sm text-violet-700 font-semibold inline-flex items-center justify-center gap-1 active:bg-violet-50"
             >
               <Sparkles size={14} />

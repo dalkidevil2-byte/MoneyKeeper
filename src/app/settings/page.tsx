@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Wallet, CreditCard, PiggyBank, Users, Check, Pencil, Tag, Trash2, RepeatIcon, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { useAccounts, usePaymentMethods, useBudgets, useMembers, useCustomCategories, useFixedExpenseTemplates } from '@/hooks/useAccounts';
+import AiUsageCard from '@/components/AiUsageCard';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
@@ -1125,6 +1126,9 @@ export default function SettingsPage() {
           </div>
           <p className="text-xs text-gray-400 px-1 mt-1.5">기본 카테고리는 변경할 수 없어요</p>
         </section>
+
+        {/* AI 사용량 / 비용 */}
+        <AiUsageCard />
 
         {/* 로그아웃 */}
         <section>

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { logAiUsage } from '@/lib/ai-usage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -48,6 +49,12 @@ export async function POST(req: NextRequest) {
       // speed: 1.0 (기본). 0.25~4.0 가능
     });
     const buf = Buffer.from(await speech.arrayBuffer());
+    void logAiUsage({
+      model: 'tts-1',
+      feature: 'tts',
+      audioChars: text.length,
+      meta: { voice },
+    });
     return new NextResponse(buf as unknown as BodyInit, {
       status: 200,
       headers: {

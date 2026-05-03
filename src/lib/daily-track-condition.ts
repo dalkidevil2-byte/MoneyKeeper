@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import dayjs from 'dayjs';
+import { logAiUsage } from './ai-usage';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 
@@ -68,6 +69,12 @@ JSON 만 응답 (마크다운 X):
       temperature: 0.1,
     });
     const raw = res.choices[0]?.message?.content ?? '{}';
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'condition',
+      inputTokens: res.usage?.prompt_tokens ?? 0,
+      outputTokens: res.usage?.completion_tokens ?? 0,
+    });
     const parsed = JSON.parse(raw) as { met?: boolean; reason?: string };
     return {
       met: !!parsed.met,
