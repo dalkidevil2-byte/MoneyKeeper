@@ -65,12 +65,15 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
     }
   };
 
-  // 활동에 link_collection_id 가 설정돼 있으면 시작 전 항목 선택 모달 열기
-  // (없으면 바로 시작)
+  // 활동에 link_collection_id 가 설정돼 있으면 시작 전 항목 선택 모달 열기.
+  // 없으면 바로 시작 (모달 X)
   const start = async (a: Activity) => {
-    // 단축: shift/ctrl + 클릭 등은 바로 시작 — 향후 옵션화
-    setLinkDialog({ activity: a });
-    setPendingLinks([]);
+    if (a.link_collection_id) {
+      setLinkDialog({ activity: a });
+      setPendingLinks([]);
+    } else {
+      void doStart(a, []);
+    }
   };
 
   const stop = async (a: Activity) => {
@@ -297,10 +300,13 @@ export default function ActivityChips({ onChange }: { onChange?: () => void }) {
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              관련 아카이브 항목을 선택하면 끝났을 때 그 항목에 시간이 자동
-              기록돼요. (선택)
+              어떤 항목에 시간을 기록할까요? (선택)
             </p>
-            <ArchiveLinksPicker value={pendingLinks} onChange={setPendingLinks} />
+            <ArchiveLinksPicker
+              value={pendingLinks}
+              onChange={setPendingLinks}
+              fixedCollectionId={linkDialog.activity.link_collection_id ?? undefined}
+            />
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() => {

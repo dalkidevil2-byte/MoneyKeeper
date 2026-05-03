@@ -663,6 +663,8 @@ export interface Activity {
   position: number;
   goal_id: string | null;
   daily_track_id: string | null;
+  /** 시작 시 항목을 묻을 아카이브 컬렉션 (선택) */
+  link_collection_id?: string | null;
   goal_count_mode: 'session' | 'hours';
   created_at: string;
   updated_at: string;

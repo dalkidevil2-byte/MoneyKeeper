@@ -9,6 +9,8 @@ export type ArchiveLink = { collection_id: string; entry_id: string };
 interface Props {
   value: ArchiveLink[];
   onChange: (links: ArchiveLink[]) => void;
+  /** 지정 시: 컬렉션 선택 단계 건너뛰고 이 컬렉션의 항목만 보여줌 */
+  fixedCollectionId?: string;
 }
 
 type CollectionLite = {
@@ -23,7 +25,7 @@ type EntryLite = { id: string; data: Record<string, unknown> };
  * 할일/일정에 아카이브 컬렉션 항목들을 연결.
  * 단계: 컬렉션 선택 → 그 안의 항목 다중 선택 → 칩으로 누적.
  */
-export default function ArchiveLinksPicker({ value, onChange }: Props) {
+export default function ArchiveLinksPicker({ value, onChange, fixedCollectionId }: Props) {
   const [collections, setCollections] = useState<CollectionLite[]>([]);
   const [entriesByCollection, setEntriesByCollection] = useState<
     Record<string, EntryLite[]>
@@ -47,6 +49,27 @@ export default function ArchiveLinksPicker({ value, onChange }: Props) {
       })
       .catch(() => {});
   }, []);
+
+  // fixedCollectionId 가 있으면 자동으로 그 컬렉션 진입 + entries 로드
+  useEffect(() => {
+    if (fixedCollectionId) {
+      setOpen({ collectionId: fixedCollectionId });
+      setPicking(false);
+      // entries 로드
+      if (!entriesByCollection[fixedCollectionId]) {
+        fetch(`/api/archive/collections/${fixedCollectionId}/entries`)
+          .then((r) => r.json())
+          .then((j) => {
+            setEntriesByCollection((prev) => ({
+              ...prev,
+              [fixedCollectionId]: (j.entries ?? []) as EntryLite[],
+            }));
+          })
+          .catch(() => {});
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixedCollectionId]);
 
   // 선택된 link 들의 컬렉션 entries 캐시 (제목 표시용)
   useEffect(() => {
@@ -87,9 +110,13 @@ export default function ArchiveLinksPicker({ value, onChange }: Props) {
   };
 
   const closeAll = () => {
+    setSearch('');
+    if (fixedCollectionId) {
+      // 고정 컬렉션 모드에서는 닫지 않고 그대로 유지
+      return;
+    }
     setOpen(null);
     setPicking(false);
-    setSearch('');
   };
 
   // 항목 검색 결과
@@ -139,7 +166,7 @@ export default function ArchiveLinksPicker({ value, onChange }: Props) {
       )}
 
       {/* + 추가 버튼 / 컬렉션 선택 / 항목 선택 */}
-      {!picking && !open && (
+      {!picking && !open && !fixedCollectionId && (
         <button
           type="button"
           onClick={() => {

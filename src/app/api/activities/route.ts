@@ -107,13 +107,23 @@ export async function POST(req: NextRequest) {
       is_active: true,
       goal_id: body.goal_id ?? null,
       daily_track_id: body.daily_track_id ?? null,
+      link_collection_id: body.link_collection_id ?? null,
       goal_count_mode: body.goal_count_mode ?? 'session',
     };
-    const { data, error } = await supabase
-      .from('activities')
-      .insert(insert)
-      .select('*')
-      .single();
+    const tryInsert = async (payload: Record<string, unknown>) =>
+      supabase.from('activities').insert(payload).select('*').single();
+    let { data, error } = await tryInsert(insert);
+    if (
+      error &&
+      /column .* does not exist/i.test(error.message ?? '') &&
+      'link_collection_id' in insert
+    ) {
+      const { link_collection_id: _omit, ...reduced } = insert as Record<string, unknown>;
+      void _omit;
+      const retry = await tryInsert(reduced);
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw error;
     return NextResponse.json({ activity: data }, { status: 201 });
   } catch (e) {

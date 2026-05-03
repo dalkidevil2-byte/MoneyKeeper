@@ -28,6 +28,9 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
   const [memberId, setMemberId] = useState<string>(initial?.member_id ?? '');
   const [goalId, setGoalId] = useState(initial?.goal_id ?? '');
   const [trackId, setTrackId] = useState(initial?.daily_track_id ?? '');
+  const [linkCollectionId, setLinkCollectionId] = useState<string>(
+    initial?.link_collection_id ?? '',
+  );
   const [mode, setMode] = useState<'session' | 'hours'>(
     initial?.goal_count_mode ?? 'session',
   );
@@ -35,6 +38,9 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
 
   const [goals, setGoals] = useState<Array<{ id: string; title: string; emoji?: string; unit?: string }>>([]);
   const [tracks, setTracks] = useState<Array<{ id: string; title: string; emoji?: string }>>([]);
+  const [collections, setCollections] = useState<
+    Array<{ id: string; name: string; emoji: string }>
+  >([]);
 
   useEffect(() => {
     fetch(`/api/goals?household_id=${HOUSEHOLD_ID}`)
@@ -44,6 +50,18 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
     fetch(`/api/daily-tracks?household_id=${HOUSEHOLD_ID}`)
       .then((r) => r.json())
       .then((d) => setTracks(d.tracks ?? []))
+      .catch(() => {});
+    fetch(`/api/archive/collections?household_id=${HOUSEHOLD_ID}`)
+      .then((r) => r.json())
+      .then((d) =>
+        setCollections(
+          (d.collections ?? []).map((c: { id: string; name: string; emoji: string }) => ({
+            id: c.id,
+            name: c.name,
+            emoji: c.emoji,
+          })),
+        ),
+      )
       .catch(() => {});
   }, []);
 
@@ -60,6 +78,7 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
         member_id: memberId || null,
         goal_id: goalId || null,
         daily_track_id: trackId || null,
+        link_collection_id: linkCollectionId || null,
         goal_count_mode: mode,
       };
       const res = isEdit && initial
@@ -250,6 +269,29 @@ export default function ActivityFormSheet({ initial, onClose, onSaved }: Props) 
             </select>
             <div className="text-[11px] text-gray-400 mt-1">
               ▶ 시작 시 오늘 Daily Track 자동 체크.
+            </div>
+          </div>
+
+          {/* 아카이브 컬렉션 연결 */}
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+              🔗 아카이브 컬렉션 연결 (선택)
+            </label>
+            <select
+              value={linkCollectionId}
+              onChange={(e) => setLinkCollectionId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+            >
+              <option value="">연결 안 함</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.emoji} {c.name}
+                </option>
+              ))}
+            </select>
+            <div className="text-[11px] text-gray-400 mt-1">
+              ▶ 시작 시 이 컬렉션의 항목을 골라 연결할 수 있어요. 끝나면
+              해당 항목에 시간이 자동 누적됩니다. (예: 요리→레시피, 시청→드라마)
             </div>
           </div>
 

@@ -14,7 +14,7 @@ export async function PATCH(
     const allowed = [
       'name', 'emoji', 'color', 'category', 'member_id',
       'is_favorite', 'is_active', 'position',
-      'goal_id', 'daily_track_id', 'goal_count_mode',
+      'goal_id', 'daily_track_id', 'goal_count_mode', 'link_collection_id',
     ] as const;
     const update: Record<string, unknown> = {};
     for (const k of allowed) {
@@ -23,12 +23,25 @@ export async function PATCH(
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: '수정할 내용 없음' }, { status: 400 });
     }
-    const { data, error } = await supabase
-      .from('activities')
-      .update(update)
-      .eq('id', id)
-      .select('*')
-      .single();
+    const tryUpdate = async (payload: Record<string, unknown>) =>
+      supabase
+        .from('activities')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+    let { data, error } = await tryUpdate(update);
+    if (
+      error &&
+      /column .* does not exist/i.test(error.message ?? '') &&
+      'link_collection_id' in update
+    ) {
+      const { link_collection_id: _omit, ...reduced } = update;
+      void _omit;
+      const retry = await tryUpdate(reduced);
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw error;
     return NextResponse.json({ activity: data });
   } catch (e) {
