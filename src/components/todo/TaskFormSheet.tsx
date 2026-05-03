@@ -11,6 +11,8 @@ import RoutineFrequencyPicker from './RoutineFrequencyPicker';
 import RoutineEndPicker from './RoutineEndPicker';
 import RoutineScopeDialog, { type RoutineScope } from './RoutineScopeDialog';
 import ArchiveLinksPicker from './ArchiveLinksPicker';
+import TransactionLinkPicker from './TransactionLinkPicker';
+import TransactionInputModal from '@/components/transaction/TransactionInputModal';
 import type { Task, RecurrenceRule, TaskPriority, TaskKind } from '@/types';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 
@@ -77,13 +79,18 @@ export default function TaskFormSheet({
   const [goalId, setGoalId] = useState<string | ''>('');
   const { goals: activeGoals } = useGoals('active');
 
-  // 비용 (가계부 연동)
+  // 비용 (가계부 연동) — deprecated inline 필드 (호환성 위해 남겨둠)
   const [expenseAmount, setExpenseAmount] = useState<string>('');
   const [expenseCategoryMain, setExpenseCategoryMain] = useState('');
   const [expenseAccountId, setExpenseAccountId] = useState<string>('');
   const [expensePaymentMethodId, setExpensePaymentMethodId] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>('');
   const [archiveLinks, setArchiveLinks] = useState<Array<{ collection_id: string; entry_id: string }>>([]);
+  // 가계부 거래 연결 (M:N) — 새 방식
+  const [transactionLinks, setTransactionLinks] = useState<Array<{ transaction_id: string }>>([]);
+  const [linkedTxs, setLinkedTxs] = useState<Array<{ id: string; name: string; amount: number; type: string; date: string; category_main?: string }>>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [newTxModalOpen, setNewTxModalOpen] = useState(false);
   const [reminderMins, setReminderMins] = useState<number[]>([]);
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
@@ -92,6 +99,45 @@ export default function TaskFormSheet({
 
   // 루틴 범위 다이얼로그 상태
   const [scopeDialog, setScopeDialog] = useState<null | { action: '수정' | '삭제' }>(null);
+
+  // 연결된 거래 상세 정보 fetch (요약 표시용)
+  useEffect(() => {
+    if (transactionLinks.length === 0) {
+      setLinkedTxs([]);
+      return;
+    }
+    const ids = transactionLinks.map((l) => l.transaction_id);
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          ids.map((id) =>
+            fetch(`/api/transactions/${id}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null),
+          ),
+        );
+        if (cancelled) return;
+        const txs = results
+          .map((r) => r?.transaction)
+          .filter(Boolean)
+          .map((t) => ({
+            id: t.id,
+            name: t.name ?? t.merchant_name ?? '',
+            amount: Number(t.amount) || 0,
+            type: t.type,
+            date: t.date,
+            category_main: t.category_main,
+          }));
+        setLinkedTxs(txs);
+      } catch (e) {
+        console.warn('linked tx fetch fail', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transactionLinks]);
 
   // open / initial 변경 시 초기화
   useEffect(() => {
@@ -136,6 +182,11 @@ export default function TaskFormSheet({
       setArchiveLinks(
         Array.isArray(initial.archive_links) ? initial.archive_links : [],
       );
+      setTransactionLinks(
+        Array.isArray((initial as { transaction_links?: Array<{ transaction_id: string }> }).transaction_links)
+          ? (initial as { transaction_links: Array<{ transaction_id: string }> }).transaction_links
+          : [],
+      );
       setReminderMins(
         Array.isArray(initial.reminders)
           ? initial.reminders.map((r) => r.min).filter((n) => typeof n === 'number')
@@ -176,6 +227,7 @@ export default function TaskFormSheet({
       setExpensePaymentMethodId(d.expense_payment_method_id ?? '');
       setEstimatedMinutes('');
       setArchiveLinks([]);
+      setTransactionLinks([]);
       setReminderMins([]);
     }
     setErr(null);
@@ -287,6 +339,7 @@ export default function TaskFormSheet({
     expense_payment_method_id: expensePaymentMethodId || null,
     estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
     archive_links: archiveLinks,
+    transaction_links: transactionLinks,
     reminders: reminderMins.map((min) => ({ min })),
   });
 
@@ -869,69 +922,68 @@ export default function TaskFormSheet({
             </div>
           )}
 
-          {/* 비용 (가계부 연동) */}
+          {/* 가계부 거래 연결 (M:N) */}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">
-              💰 비용 (선택) — 완료 시 가계부에 자동 등록
+            <label className="text-xs text-gray-500 mb-1.5 block">
+              💰 가계부 연결 — 관련 거래를 골라서 묶기
             </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                step={1000}
-                value={expenseAmount}
-                onChange={(e) => setExpenseAmount(e.target.value)}
-                placeholder="금액"
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm"
-              />
-              <span className="text-xs text-gray-400 shrink-0">원</span>
-            </div>
-            {expenseAmount && parseInt(expenseAmount) > 0 && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <select
-                  value={expenseCategoryMain}
-                  onChange={(e) => setExpenseCategoryMain(e.target.value)}
-                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                >
-                  <option value="">분류 (선택)</option>
-                  {CATEGORY_MAIN_OPTIONS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={expensePaymentMethodId}
-                  onChange={(e) => {
-                    setExpensePaymentMethodId(e.target.value);
-                    if (e.target.value) setExpenseAccountId('');
-                  }}
-                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                >
-                  <option value="">결제수단 (선택)</option>
-                  {paymentMethods.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={expenseAccountId}
-                  onChange={(e) => {
-                    setExpenseAccountId(e.target.value);
-                    if (e.target.value) setExpensePaymentMethodId('');
-                  }}
-                  className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                >
-                  <option value="">또는 계좌 (선택)</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {linkedTxs.length > 0 && (
+              <ul className="space-y-1 mb-2">
+                {linkedTxs.map((t) => (
+                  <li
+                    key={t.id}
+                    className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg text-sm"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate font-medium">{t.name || '(이름없음)'}</div>
+                      <div className="text-xs text-gray-500">
+                        {dayjs(t.date).format('M/D')} · {t.category_main || '미분류'}
+                      </div>
+                    </div>
+                    <div
+                      className={`text-sm font-bold shrink-0 ${
+                        t.type === 'income' ? 'text-blue-600' : 'text-red-600'
+                      }`}
+                    >
+                      {t.type === 'income' ? '+' : '-'}
+                      {t.amount.toLocaleString()}원
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTransactionLinks((prev) =>
+                          prev.filter((l) => l.transaction_id !== t.id),
+                        )
+                      }
+                      className="p-1 text-gray-400 hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+                {linkedTxs.length > 1 && (
+                  <li className="text-xs text-gray-500 pt-1 text-right">
+                    총{' '}
+                    <b className="text-amber-700">
+                      {linkedTxs
+                        .reduce(
+                          (s, t) => s + (t.type === 'income' ? -t.amount : t.amount),
+                          0,
+                        )
+                        .toLocaleString()}
+                      원
+                    </b>
+                  </li>
+                )}
+              </ul>
             )}
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="w-full py-2 border-2 border-dashed border-amber-200 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-50"
+            >
+              + 거래 연결{linkedTxs.length > 0 ? ' / 더 추가' : ''}
+            </button>
           </div>
 
           {/* 체크리스트 (수정 모드 전용) */}
@@ -1105,6 +1157,33 @@ export default function TaskFormSheet({
           setScopeDialog(null);
           if (action === '수정') performSave(scope);
           else performDelete(scope);
+        }}
+      />
+
+      {/* 가계부 거래 picker */}
+      <TransactionLinkPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        selectedIds={transactionLinks.map((l) => l.transaction_id)}
+        onConfirm={(ids) =>
+          setTransactionLinks(ids.map((id) => ({ transaction_id: id })))
+        }
+        onCreateNew={() => {
+          setPickerOpen(false);
+          setNewTxModalOpen(true);
+        }}
+      />
+
+      {/* 새 거래 추가 모달 */}
+      <TransactionInputModal
+        open={newTxModalOpen}
+        onClose={() => setNewTxModalOpen(false)}
+        onSaved={() => {}}
+        onSavedWithId={(id) => {
+          setTransactionLinks((prev) => {
+            if (prev.some((l) => l.transaction_id === id)) return prev;
+            return [...prev, { transaction_id: id }];
+          });
         }}
       />
     </div>

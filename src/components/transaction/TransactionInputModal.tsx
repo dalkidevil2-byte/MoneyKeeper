@@ -22,6 +22,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  /** 새로 저장된 거래 id 회신 — 다른 엔티티에 즉시 연결할 때 사용 */
+  onSavedWithId?: (id: string) => void;
   prefill?: {
     name: string;
     amount: number;
@@ -34,7 +36,7 @@ interface Props {
   } | null;
 }
 
-export default function TransactionInputModal({ open, onClose, onSaved, prefill }: Props) {
+export default function TransactionInputModal({ open, onClose, onSaved, onSavedWithId, prefill }: Props) {
   const [step, setStep] = useState<'input' | 'preview'>('input');
   const [inputMode, setInputMode] = useState<'text' | 'ocr'>('text');
   const [inputText, setInputText] = useState('');
@@ -268,6 +270,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
         });
       }
       onSaved();
+      if (onSavedWithId && tx?.id) onSavedWithId(tx.id);
       handleClose();
     }
   };
@@ -469,6 +472,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, prefill 
 
     setOcrResult(null);
     onSaved();
+    if (onSavedWithId && transaction?.id) onSavedWithId(transaction.id);
     handleClose();
   };
 
