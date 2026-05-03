@@ -310,20 +310,20 @@
       <div class="brand-mark"><div class="dot"></div>MoneyKeeper</div>
     </div>
 
-    <!-- 씬 8: 멀티태스킹 -->
+    <!-- 씬 8: 자투리 시간까지 -->
     <div class="scene bg6" data-i="7">
-      <span class="label">🎯 멀티 트래킹</span>
+      <span class="label">⏰ 시간이 곧 자산</span>
       <div class="mid">
-        요리하면서<br>
-        드라마도?<br>
-        <span class="accent">동시에 추적</span>
+        하루의<br>
+        <span class="accent">자투리 시간</span>까지<br>
+        다 보입니다
       </div>
-      <div style="display:flex;gap:20px;margin-top:50px;">
-        <div style="font-size:120px;">🍳</div>
-        <div style="font-size:80px;align-self:center;opacity:.7;">+</div>
-        <div style="font-size:120px;">📺</div>
+      <div class="small" style="margin-top:50px;font-size:42px;line-height:1.6;">
+        💪 운동 1시간 25분<br>
+        📚 독서 45분<br>
+        🧘 명상 12분<br>
+        ⏰ 늘어진 시간 2시간 03분
       </div>
-      <div style="margin-top:30px;font-size:48px;font-weight:700;opacity:0.85;">= 둘 다 자동 누적</div>
       <div class="brand-mark"><div class="dot"></div>MoneyKeeper</div>
     </div>
 
@@ -409,8 +409,26 @@
 
   <!-- 녹화 모드 빠져나가는 안내 -->
   <div id="exitTip" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:white;padding:10px 18px;border-radius:999px;font-size:13px;z-index:1001;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.15);">
-    💡 ESC 또는 화면 클릭 → 녹화 모드 해제
+    💡 ESC → 녹화 모드 해제
   </div>
+
+  <!-- 녹화 시작 대기 화면 (전체 덮음) -->
+  <div id="readyScreen" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.95);z-index:999;align-items:center;justify-content:center;flex-direction:column;color:white;backdrop-filter:blur(12px);text-align:center;padding:40px;">
+    <div style="font-size:80px;margin-bottom:30px;">🎥</div>
+    <div style="font-size:48px;font-weight:900;margin-bottom:14px;letter-spacing:-0.04em;">녹화 준비됐어요?</div>
+    <div style="font-size:22px;opacity:0.8;line-height:1.6;margin-bottom:50px;max-width:600px;">
+      Win+G (또는 Cmd+Shift+5) 로<br>
+      <b>화면 녹화부터 먼저 시작</b>하세요.<br>
+      그 다음 아래 버튼 클릭 →
+    </div>
+    <button id="startNow" style="background:linear-gradient(135deg,#fbbf24,#ec4899);color:#0f172a;border:0;padding:24px 60px;border-radius:999px;font-size:32px;font-weight:900;cursor:pointer;box-shadow:0 12px 40px rgba(251,191,36,0.4);">
+      ▶ 3초 후 재생 시작
+    </button>
+    <div style="font-size:18px;opacity:0.6;margin-top:30px;">ESC 누르면 취소</div>
+  </div>
+
+  <!-- 카운트다운 숫자 -->
+  <div id="countdown" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:998;font-size:400px;font-weight:900;color:white;letter-spacing:-0.05em;background:rgba(15,23,42,0.5);"></div>
 
 <script>
   // ─── 정확한 화면 맞춤 (브라우저 / OS 별 viewport 차이 보정) ───
@@ -507,27 +525,50 @@
   // 녹화 모드 토글 — UI 숨기고 풀스크린 + 처음부터 재생
   const recordBtn = document.getElementById('record');
   const exitTip = document.getElementById('exitTip');
+  const readyScreen = document.getElementById('readyScreen');
+  const startNowBtn = document.getElementById('startNow');
+  const countdown = document.getElementById('countdown');
+
   recordBtn.onclick = async () => {
     document.body.classList.add('record-mode');
-    exitTip.style.display = 'block';
     fitStage();
     // 풀스크린 진입
     try { await document.documentElement.requestFullscreen(); } catch {}
-    setTimeout(fitStage, 100); // 풀스크린 확정 후 다시 측정
-    // 처음부터 자동 재생
+    setTimeout(fitStage, 100);
+    // 자동 재생 즉시 정지
     stop();
-    setTimeout(() => {
-      i = -1;
-      play();
-    }, 200);
-    // 3초 뒤 안내 메시지 사라짐
-    setTimeout(() => { exitTip.style.display = 'none'; }, 3000);
+    show(0);
+    // 준비 화면 표시 — 사용자 클릭 대기
+    readyScreen.style.display = 'flex';
+  };
+
+  // "▶ 3초 후 재생 시작" 클릭 → 카운트다운 후 자동 재생
+  startNowBtn.onclick = () => {
+    readyScreen.style.display = 'none';
+    let n = 3;
+    countdown.style.display = 'flex';
+    countdown.textContent = n;
+    const cd = setInterval(() => {
+      n -= 1;
+      if (n > 0) {
+        countdown.textContent = n;
+      } else {
+        clearInterval(cd);
+        countdown.style.display = 'none';
+        exitTip.style.display = 'block';
+        i = -1;
+        play();
+        setTimeout(() => { exitTip.style.display = 'none'; }, 3000);
+      }
+    }, 1000);
   };
   // ESC 또는 클릭으로 녹화 모드 해제
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       document.body.classList.remove('record-mode');
       exitTip.style.display = 'none';
+      readyScreen.style.display = 'none';
+      countdown.style.display = 'none';
     }
   });
   document.addEventListener('fullscreenchange', () => {
