@@ -900,96 +900,7 @@ export default function TaskFormSheet({
             </div>
           </div>
 
-          {/* 목표 연결 */}
-          {activeGoals.length > 0 && (
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">목표 연결 (선택)</label>
-              <select
-                value={goalId}
-                onChange={(e) => setGoalId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white"
-              >
-                <option value="">(연결 없음)</option>
-                {activeGoals.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.emoji} {g.title}
-                  </option>
-                ))}
-              </select>
-              <div className="text-[11px] text-gray-400 mt-1">
-                완료할 때마다 이 목표의 진행률이 자동으로 +1 됩니다.
-              </div>
-            </div>
-          )}
-
-          {/* 가계부 거래 연결 (M:N) */}
-          <div>
-            <label className="text-xs text-gray-500 mb-1.5 block">
-              💰 가계부 연결 — 관련 거래를 골라서 묶기
-            </label>
-            {linkedTxs.length > 0 && (
-              <ul className="space-y-1 mb-2">
-                {linkedTxs.map((t) => (
-                  <li
-                    key={t.id}
-                    className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg text-sm"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate font-medium">{t.name || '(이름없음)'}</div>
-                      <div className="text-xs text-gray-500">
-                        {dayjs(t.date).format('M/D')} · {t.category_main || '미분류'}
-                      </div>
-                    </div>
-                    <div
-                      className={`text-sm font-bold shrink-0 ${
-                        t.type === 'income' ? 'text-blue-600' : 'text-red-600'
-                      }`}
-                    >
-                      {t.type === 'income' ? '+' : '-'}
-                      {t.amount.toLocaleString()}원
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setTransactionLinks((prev) =>
-                          prev.filter((l) => l.transaction_id !== t.id),
-                        )
-                      }
-                      className="p-1 text-gray-400 hover:text-red-500"
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-                {linkedTxs.length > 1 && (
-                  <li className="text-xs text-gray-500 pt-1 text-right">
-                    총{' '}
-                    <b className="text-amber-700">
-                      {linkedTxs
-                        .reduce(
-                          (s, t) => s + (t.type === 'income' ? -t.amount : t.amount),
-                          0,
-                        )
-                        .toLocaleString()}
-                      원
-                    </b>
-                  </li>
-                )}
-              </ul>
-            )}
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              className="w-full py-2 border-2 border-dashed border-amber-200 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-50"
-            >
-              + 거래 연결{linkedTxs.length > 0 ? ' / 더 추가' : ''}
-            </button>
-          </div>
-
-          {/* 체크리스트 (수정 모드 전용) */}
-          {isEdit && initial && <ChecklistSection taskId={initial.id} />}
-
-          {/* 알림 설정 (다중) */}
+          {/* ─── 알림 ─── */}
           <div>
             <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
               <span>🔔</span> 알림 (여러 개 선택 가능)
@@ -1038,16 +949,15 @@ export default function TaskFormSheet({
             </p>
           </div>
 
-          {/* 관련 아카이브 항목 */}
-          <div>
-            <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-              <span>🔗</span> 관련 아카이브
-            </label>
-            <ArchiveLinksPicker value={archiveLinks} onChange={setArchiveLinks} />
-            <p className="text-[10px] text-gray-400 mt-1">
-              예: 드라마 → 그 회차 시청 / 책 → 읽은 부분 / 여행 → 준비 할일
-            </p>
-          </div>
+          {/* ─── 작업 추적 (todo 전용) ─── */}
+          {kind === 'todo' && (
+            <div className="pt-2 border-t border-gray-100 -mx-1 px-1">
+              <div className="text-[11px] font-semibold text-gray-400 mb-2">📋 작업 추적</div>
+            </div>
+          )}
+
+          {/* 체크리스트 (수정 모드 전용) */}
+          {isEdit && initial && kind === 'todo' && <ChecklistSection taskId={initial.id} />}
 
           {/* 예상 소요시간 — 계획 단계 입력 (todo 전용) */}
           {kind === 'todo' && (
@@ -1117,6 +1027,110 @@ export default function TaskFormSheet({
               placeholder="필요한 메모"
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"
             />
+          </div>
+
+          {/* ─── 🔗 연결 ─── */}
+          <div className="pt-3 border-t border-gray-100">
+            <div className="text-[11px] font-semibold text-gray-400 mb-3">🔗 연결</div>
+
+            <div className="space-y-3">
+              {/* 목표 연결 */}
+              {activeGoals.length > 0 && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">🎯 목표 연결</label>
+                  <select
+                    value={goalId}
+                    onChange={(e) => setGoalId(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white"
+                  >
+                    <option value="">(연결 없음)</option>
+                    {activeGoals.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.emoji} {g.title}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-gray-400 mt-1">
+                    완료할 때마다 이 목표의 진행률이 자동으로 +1 됩니다.
+                  </div>
+                </div>
+              )}
+
+              {/* 가계부 거래 연결 (M:N) */}
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block">
+                  💰 가계부 연결
+                </label>
+                {linkedTxs.length > 0 && (
+                  <ul className="space-y-1 mb-2">
+                    {linkedTxs.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg text-sm"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate font-medium">{t.name || '(이름없음)'}</div>
+                          <div className="text-xs text-gray-500">
+                            {dayjs(t.date).format('M/D')} · {t.category_main || '미분류'}
+                          </div>
+                        </div>
+                        <div
+                          className={`text-sm font-bold shrink-0 ${
+                            t.type === 'income' ? 'text-blue-600' : 'text-red-600'
+                          }`}
+                        >
+                          {t.type === 'income' ? '+' : '-'}
+                          {t.amount.toLocaleString()}원
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTransactionLinks((prev) =>
+                              prev.filter((l) => l.transaction_id !== t.id),
+                            )
+                          }
+                          className="p-1 text-gray-400 hover:text-red-500"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                    {linkedTxs.length > 1 && (
+                      <li className="text-xs text-gray-500 pt-1 text-right">
+                        총{' '}
+                        <b className="text-amber-700">
+                          {linkedTxs
+                            .reduce(
+                              (s, t) => s + (t.type === 'income' ? -t.amount : t.amount),
+                              0,
+                            )
+                            .toLocaleString()}
+                          원
+                        </b>
+                      </li>
+                    )}
+                  </ul>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="w-full py-2 border-2 border-dashed border-amber-200 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-50"
+                >
+                  + 거래 연결{linkedTxs.length > 0 ? ' / 더 추가' : ''}
+                </button>
+              </div>
+
+              {/* 관련 아카이브 항목 */}
+              <div>
+                <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                  <span>📚</span> 관련 아카이브
+                </label>
+                <ArchiveLinksPicker value={archiveLinks} onChange={setArchiveLinks} />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  예: 드라마 → 그 회차 시청 / 책 → 읽은 부분 / 여행 → 준비 할일
+                </p>
+              </div>
+            </div>
           </div>
 
           {err && (
