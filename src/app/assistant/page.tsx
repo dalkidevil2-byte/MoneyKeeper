@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Send, Sparkles, Loader2, Mic, MicOff, Paperclip, X as CloseIcon } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Loader2, Mic, MicOff, Paperclip, X as CloseIcon, Coins } from 'lucide-react';
 import MessageContent from '@/components/assistant/MessageContent';
 import TtsButton from '@/components/TtsButton';
+import AiUsageCard from '@/components/AiUsageCard';
 
 type Msg = { role: 'user' | 'assistant'; content: string; imageUrl?: string };
 
@@ -24,6 +25,7 @@ export default function AssistantPage() {
   const [autoSendOnFinish, setAutoSendOnFinish] = useState(true);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [attachedPreview, setAttachedPreview] = useState<string | null>(null);
+  const [usageOpen, setUsageOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<unknown>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -185,8 +187,44 @@ export default function AssistantPage() {
             <Sparkles size={18} className="text-violet-600" />
             <h1 className="text-lg font-bold text-gray-900">AI 어시스턴트</h1>
           </div>
+          <button
+            onClick={() => setUsageOpen(true)}
+            className="p-2 rounded-xl hover:bg-violet-50 text-violet-600"
+            title="AI 사용량 / 비용 보기"
+            aria-label="AI 사용량"
+          >
+            <Coins size={18} />
+          </button>
         </div>
       </div>
+
+      {/* AI 사용량 모달 */}
+      {usageOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center"
+          onClick={() => setUsageOpen(false)}
+        >
+          <div
+            className="bg-gray-50 w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 inline-flex items-center gap-1.5">
+                <Coins size={16} className="text-violet-600" /> AI 사용량 / 비용
+              </h3>
+              <button
+                onClick={() => setUsageOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
+            <div className="p-4">
+              <AiUsageCard />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 메시지 영역 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-2">
