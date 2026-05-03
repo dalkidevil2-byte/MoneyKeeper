@@ -53,6 +53,67 @@ export function loadHistoryCache(key: string): unknown | null {
   return entry.data;
 }
 
+// ─── 네이버 NXT 가격 (실험적 — integration endpoint) ─────────────
+export type NxtQuote = {
+  symbol: string;
+  nxtPrice: number;
+  nxtChange?: number;
+  nxtChangePct?: number;
+};
+
+/**
+ * Naver 의 통합 종목 endpoint 에서 NXT 가격 추출 시도.
+ * 응답 구조가 변경될 수 있으므로 실패해도 graceful 하게 null 반환.
+ * 평일 8:00 ~ 20:00 사이에만 의미있음.
+ */
+export async function naverNxtFallback(symbol: string): Promise<NxtQuote | null> {
+  const match = symbol.match(/^(\d{6})\.(KS|KQ)$/);
+  if (!match) return null;
+  const code = match[1];
+  try {
+    // integration 응답에 nxtBasic / dealStockInfos 같은 필드 존재 가능
+    const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': randomUA(), Referer: 'https://m.stock.naver.com/' },
+    });
+    if (!resp.ok) return null;
+    const data: Record<string, unknown> = await resp.json();
+
+    // 가능한 필드 후보들 — 네이버 응답 변경 대응
+    const candidates: Array<Record<string, unknown> | undefined> = [
+      data.nxtBasic as Record<string, unknown> | undefined,
+      data.nxt as Record<string, unknown> | undefined,
+      (data.dealStockInfos as Array<Record<string, unknown>> | undefined)?.find(
+        (d) =>
+          String(d.marketCategoryCode ?? d.market ?? '').toUpperCase().includes('NXT'),
+      ),
+    ];
+    for (const c of candidates) {
+      if (!c) continue;
+      const priceRaw =
+        c.closePrice ?? c.currentPrice ?? c.tradePrice ?? c.price ?? null;
+      const price = parseFloat(String(priceRaw ?? '0').replace(/,/g, ''));
+      if (!price || price <= 0) continue;
+      const changeAmt = parseFloat(
+        String(c.compareToPreviousClosePrice ?? c.change ?? '0').replace(/,/g, ''),
+      );
+      const changePct = parseFloat(
+        String(c.fluctuationsRatio ?? c.changeRate ?? '0').replace(/,/g, ''),
+      );
+      return {
+        symbol,
+        nxtPrice: price,
+        nxtChange: isNaN(changeAmt) ? undefined : changeAmt,
+        nxtChangePct: isNaN(changePct) ? undefined : changePct,
+      };
+    }
+    return null;
+  } catch (e) {
+    console.warn('[naverNxtFallback]', symbol, (e as Error).message);
+    return null;
+  }
+}
+
 // ─── 네이버 시세 폴백 (한국 주식 전용) ──────────────────────────
 export async function naverQuoteFallback(symbol: string): Promise<QuoteResult | null> {
   const match = symbol.match(/^(\d{6})\.(KS|KQ)$/);

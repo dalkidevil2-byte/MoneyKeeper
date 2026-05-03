@@ -876,10 +876,15 @@ export async function executeTool(
         const agg = aggregateByTicker(holdings);
         const realized = computeRealizedPL(txs as never);
 
-        // 시세 조회
+        // 시세 조회 — Yahoo + DB 캐시 fallback
         const tickers = Array.from(new Set(agg.map((a) => a.ticker)));
-        let quotes: Record<string, { price: number }> = {};
-        if (tickers.length > 0) {
+        const quotes: Record<string, { price: number; source?: string }> = {};
+        const { loadQuoteCache, pickFallbackPrice } = await import('./stock-quote-cache');
+        const { shouldPreferNxtPrice, isLiveTradingNow } = await import('./market-hours');
+        const dbCache = await loadQuoteCache(tickers);
+        const preferNxt = shouldPreferNxtPrice();
+
+        if (tickers.length > 0 && isLiveTradingNow()) {
           try {
             const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(',')}`;
             const r = await fetch(url, {
@@ -890,7 +895,7 @@ export async function executeTool(
               const results = j?.quoteResponse?.result ?? [];
               for (const q of results) {
                 if (q.symbol && typeof q.regularMarketPrice === 'number') {
-                  quotes[q.symbol] = { price: q.regularMarketPrice };
+                  quotes[q.symbol] = { price: q.regularMarketPrice, source: 'yahoo' };
                 }
               }
             }
@@ -898,10 +903,24 @@ export async function executeTool(
             /* skip */
           }
         }
+        // 누락된 심볼은 DB 캐시 (NXT 우선 시간대면 NXT 가격) → last_close 순
+        for (const t of tickers) {
+          if (quotes[t]) continue;
+          const c = dbCache[t];
+          if (!c) continue;
+          let p: number | null = null;
+          if (preferNxt && typeof c.nxt_price === 'number' && c.nxt_price > 0) {
+            p = c.nxt_price;
+          } else {
+            p = pickFallbackPrice(c);
+          }
+          if (p) quotes[t] = { price: p, source: 'cache' };
+        }
 
         let totalInvested = 0;
         let totalCurrent = 0;
         const positions = agg.map((a) => {
+          // 시세 못 구하면 최종 종가 → 그것도 없으면 평단 (마지막 안전장치)
           const cur = quotes[a.ticker]?.price ?? a.avgPrice;
           const value = a.qty * cur;
           totalInvested += a.invested;
