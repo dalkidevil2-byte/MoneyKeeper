@@ -301,6 +301,65 @@ export const ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'list_archive_collections',
+      description:
+        '아카이브의 모든 컬렉션 목록 조회. 사용자가 "내 아카이브 뭐있어?", "컬렉션 보여줘", "X 페이지 있어?" 같은 질문 시 호출. 각 컬렉션의 이름/스키마/항목 수 반환.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search_archive_entries',
+      description:
+        '특정 컬렉션의 항목들 조회/검색. 사용자가 "독서 컬렉션 뭐 읽었어?", "여행 기록에서 일본 찾아줘", "와인노트 평점 높은 거" 같이 아카이브 내용을 물어볼 때 호출. collection_name 으로 컬렉션 자동 매칭. query 가 있으면 entry data 안의 텍스트 부분문자열 검색.',
+      parameters: {
+        type: 'object',
+        properties: {
+          collection_name: {
+            type: 'string',
+            description: '컬렉션 이름 (부분 일치 가능. 예: "독서", "여행", "와인")',
+          },
+          query: {
+            type: 'string',
+            description: '항목 데이터 안에서 검색할 키워드 (선택). 비우면 전체 항목.',
+          },
+          limit: {
+            type: 'number',
+            description: '최대 반환 개수 (기본 30, 최대 100)',
+          },
+        },
+        required: ['collection_name'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'create_archive_entry',
+      description:
+        '특정 컬렉션에 항목 1개 추가. 사용자가 "독서 컬렉션에 사피엔스 추가해줘", "와인노트에 새 와인 기록" 같을 때 호출. data 는 컬렉션 schema 의 key→값 매핑. collection_name 으로 컬렉션 자동 매칭. 어떤 키가 있는지 모르면 list_archive_collections 먼저 호출.',
+      parameters: {
+        type: 'object',
+        properties: {
+          collection_name: { type: 'string', description: '대상 컬렉션 이름' },
+          data: {
+            type: 'object',
+            description:
+              '컬렉션 schema 의 key 별 값. 예: {"title":"사피엔스","author":"유발하라리","rating":5}',
+            additionalProperties: true,
+          },
+        },
+        required: ['collection_name', 'data'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_time_breakdown',
       description:
         '특정 기간의 카테고리별/멤버별 시간 누적 — 어디에 시간 많이 썼는지.',
@@ -562,6 +621,142 @@ export async function executeTool(
           data: {
             collection: data,
             message: `✨ "${insert.name}" 컬렉션 생성됨 (속성 ${(insert.schema as unknown[]).length}개)\n→ /archive 에서 항목 추가`,
+          },
+        };
+      }
+
+      case 'list_archive_collections': {
+        const { data: cols, error } = await supabase
+          .from('archive_collections')
+          .select('id, name, emoji, description, schema')
+          .eq('household_id', householdId)
+          .eq('is_active', true)
+          .order('position', { ascending: true });
+        if (error) return { ok: false, error: error.message };
+
+        const ids = (cols ?? []).map((c) => c.id as string);
+        let countMap: Record<string, number> = {};
+        if (ids.length > 0) {
+          const { data: entries } = await supabase
+            .from('archive_entries')
+            .select('collection_id')
+            .in('collection_id', ids);
+          for (const e of entries ?? []) {
+            const k = e.collection_id as string;
+            countMap[k] = (countMap[k] ?? 0) + 1;
+          }
+        }
+        return {
+          ok: true,
+          data: {
+            collections: (cols ?? []).map((c) => ({
+              id: c.id,
+              name: c.name,
+              emoji: c.emoji,
+              description: c.description,
+              schema: c.schema,
+              entry_count: countMap[c.id as string] ?? 0,
+            })),
+          },
+        };
+      }
+
+      case 'search_archive_entries': {
+        const collectionName = String(args.collection_name ?? '').trim();
+        const query = String(args.query ?? '').trim().toLowerCase();
+        const limit = Math.min(Number(args.limit ?? 30), 100);
+
+        // 컬렉션 매칭 (부분일치)
+        const { data: cols } = await supabase
+          .from('archive_collections')
+          .select('id, name, emoji, schema')
+          .eq('household_id', householdId)
+          .eq('is_active', true);
+        const matched = (cols ?? []).find(
+          (c) =>
+            (c.name as string).toLowerCase() === collectionName.toLowerCase() ||
+            (c.name as string).toLowerCase().includes(collectionName.toLowerCase()),
+        );
+        if (!matched) {
+          return {
+            ok: false,
+            error: `"${collectionName}" 컬렉션을 찾지 못했습니다. list_archive_collections 로 먼저 확인해 보세요.`,
+          };
+        }
+
+        const { data: entries, error } = await supabase
+          .from('archive_entries')
+          .select('id, data, member_id, created_at, updated_at')
+          .eq('collection_id', matched.id)
+          .order('updated_at', { ascending: false })
+          .limit(limit * 3); // 클라이언트 필터 후 limit
+        if (error) return { ok: false, error: error.message };
+
+        let filtered = entries ?? [];
+        if (query) {
+          filtered = filtered.filter((e) => {
+            const data = e.data as Record<string, unknown>;
+            return Object.values(data ?? {}).some((v) => {
+              if (v == null) return false;
+              return String(v).toLowerCase().includes(query);
+            });
+          });
+        }
+        return {
+          ok: true,
+          data: {
+            collection: {
+              id: matched.id,
+              name: matched.name,
+              emoji: matched.emoji,
+              schema: matched.schema,
+            },
+            entries: filtered.slice(0, limit),
+            total: filtered.length,
+          },
+        };
+      }
+
+      case 'create_archive_entry': {
+        const collectionName = String(args.collection_name ?? '').trim();
+        const data = (args.data as Record<string, unknown>) ?? {};
+
+        const { data: cols } = await supabase
+          .from('archive_collections')
+          .select('id, name, emoji, schema')
+          .eq('household_id', householdId)
+          .eq('is_active', true);
+        const matched = (cols ?? []).find(
+          (c) =>
+            (c.name as string).toLowerCase() === collectionName.toLowerCase() ||
+            (c.name as string).toLowerCase().includes(collectionName.toLowerCase()),
+        );
+        if (!matched) {
+          return {
+            ok: false,
+            error: `"${collectionName}" 컬렉션을 찾지 못했습니다.`,
+          };
+        }
+
+        const { data: created, error } = await supabase
+          .from('archive_entries')
+          .insert({
+            collection_id: matched.id,
+            household_id: householdId,
+            data,
+          })
+          .select('*')
+          .single();
+        if (error) return { ok: false, error: error.message };
+
+        const titleKey = (matched.schema as Array<{ key: string }>)?.[0]?.key;
+        const title =
+          (titleKey && (data[titleKey] as string)) ?? '항목';
+        return {
+          ok: true,
+          data: {
+            entry: created,
+            message: `✅ "${matched.name}" 에 "${title}" 추가됨`,
           },
         };
       }
