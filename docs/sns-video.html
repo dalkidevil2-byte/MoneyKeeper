@@ -17,8 +17,8 @@
     border-radius: 24px;
     box-shadow: 0 24px 80px rgba(0,0,0,.5);
     transform-origin: center center;
-    /* 가로/세로 중 더 작은 비율로 스케일 → 항상 화면 안에 들어감 */
-    transform: scale(min(calc(100vw / 1080), calc(100vh / 1920)));
+    /* 초기 추정값 — JS 가 즉시 정확한 값으로 덮어씀 */
+    transform: scale(0.42);
   }
 
   /* 녹화 모드 — 그림자/둥근 모서리 X, 정확한 1080x1920 */
@@ -106,19 +106,19 @@
 
   /* 모킹 폰 */
   .phone-mini {
-    width: 440px; height: 640px;
+    width: 400px; height: 560px;
     background: white;
-    border-radius: 46px;
-    border: 12px solid #0f172a;
+    border-radius: 42px;
+    border: 10px solid #0f172a;
     color: #1f2937;
     overflow: hidden;
     position: relative;
-    margin-top: 28px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    margin-top: 16px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.4);
     text-align: left;
   }
-  .phone-mini .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 140px; height: 22px; background: #0f172a; border-radius: 12px; z-index: 5; }
-  .phone-mini .screen { padding: 60px 24px 24px; height: 100%; }
+  .phone-mini .notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 120px; height: 20px; background: #0f172a; border-radius: 12px; z-index: 5; }
+  .phone-mini .screen { padding: 50px 20px 20px; height: 100%; font-size: 18px; }
 
   /* 컨트롤 */
   .controls {
@@ -413,6 +413,23 @@
   </div>
 
 <script>
+  // ─── 정확한 화면 맞춤 (브라우저 / OS 별 viewport 차이 보정) ───
+  const stage = document.querySelector('.stage');
+  const controls = document.querySelector('.controls');
+  function fitStage() {
+    const ctrlH = controls && !document.body.classList.contains('record-mode')
+      ? (controls.offsetHeight + 28) // 컨트롤 바 + 여백
+      : 0;
+    const availW = window.innerWidth - 16; // 살짝 여유
+    const availH = window.innerHeight - ctrlH - 16;
+    const scale = Math.min(availW / 1080, availH / 1920);
+    stage.style.transform = `scale(${scale})`;
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  document.addEventListener('fullscreenchange', () => setTimeout(fitStage, 50));
+  fitStage();
+
   const scenes = document.querySelectorAll('.scene');
   const bars = document.querySelectorAll('#progress span');
   const playBtn = document.getElementById('play');
@@ -493,8 +510,10 @@
   recordBtn.onclick = async () => {
     document.body.classList.add('record-mode');
     exitTip.style.display = 'block';
+    fitStage();
     // 풀스크린 진입
     try { await document.documentElement.requestFullscreen(); } catch {}
+    setTimeout(fitStage, 100); // 풀스크린 확정 후 다시 측정
     // 처음부터 자동 재생
     stop();
     setTimeout(() => {
