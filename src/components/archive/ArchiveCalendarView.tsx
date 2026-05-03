@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ArchiveEntry, ArchiveProperty } from '@/types';
@@ -23,6 +23,44 @@ export default function ArchiveCalendarView({
   onSelectDate,
 }: Props) {
   const [cursor, setCursor] = useState(dayjs());
+  const [swipeDx, setSwipeDx] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const swiping = useRef(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStartX.current = t.clientX;
+    touchStartY.current = t.clientY;
+    swiping.current = false;
+    setSwipeDx(0);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current == null || touchStartY.current == null) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartX.current;
+    const dy = t.clientY - touchStartY.current;
+    // 가로 스와이프로 판단 (수직 움직임이 더 크면 스크롤로 간주)
+    if (!swiping.current && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+      swiping.current = true;
+    }
+    if (swiping.current) {
+      e.preventDefault();
+      // 화면 폭의 일부분만 따라 움직이게 (저항감)
+      setSwipeDx(dx);
+    }
+  };
+  const onTouchEnd = () => {
+    if (swiping.current && Math.abs(swipeDx) > 50) {
+      // 일정 거리 이상 스와이프 → 월 변경
+      if (swipeDx < 0) setCursor(cursor.add(1, 'month'));
+      else setCursor(cursor.subtract(1, 'month'));
+    }
+    setSwipeDx(0);
+    swiping.current = false;
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
   const titleProp = schema[0];
   const titleKey = titleProp?.key;
 
@@ -130,8 +168,18 @@ export default function ArchiveCalendarView({
         ))}
       </div>
 
-      {/* 날짜 격자 */}
-      <div className="grid grid-cols-7 auto-rows-fr">
+      {/* 날짜 격자 — 스와이프 지원 */}
+      <div
+        className="grid grid-cols-7 auto-rows-fr touch-pan-y select-none transition-transform"
+        style={{
+          transform: swipeDx ? `translateX(${swipeDx * 0.4}px)` : undefined,
+          transition: swipeDx ? 'none' : 'transform 0.2s ease',
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      >
         {days.map((day) => {
           const key = day.format('YYYY-MM-DD');
           const inMonth = day.month() === cursor.month();
