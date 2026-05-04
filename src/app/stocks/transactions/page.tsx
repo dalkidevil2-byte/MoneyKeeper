@@ -242,9 +242,7 @@ export default function StockTransactionsPage() {
                     <li
                       key={t.id}
                       className={
-                        isBuy
-                          ? 'bg-red-50/40 border-l-2 border-red-300'
-                          : 'bg-blue-50/40 border-l-2 border-blue-300'
+                        isBuy ? 'bg-red-50/50' : 'bg-blue-50/50'
                       }
                     >
                       <button
