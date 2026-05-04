@@ -47,21 +47,29 @@ export default function AssetHistoryChart() {
 
         if (isSparse) {
           setHistory(existing); // 일단 기존 데이터로 보여주고
-          // 백그라운드 backfill
+          // 백그라운드 backfill (실패해도 chart 유지)
           try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 55_000);
             const r2 = await fetch(`/api/stocks/asset-history/backfill?days=${days}`, {
               method: 'POST',
-            });
-            const j2 = await r2.json();
-            if (cancelled) return;
-            if (j2.ok) {
-              const r3 = await fetch(`/api/stocks/asset-history?start_date=${start}`);
-              const j3 = await r3.json();
+              signal: ctrl.signal,
+            }).finally(() => clearTimeout(timer));
+            if (!r2.ok) {
+              console.warn('[backfill]', 'HTTP', r2.status);
+            } else {
+              const j2 = await r2.json().catch(() => ({}));
               if (cancelled) return;
-              setHistory(j3.history ?? existing);
+              if (j2.ok) {
+                const r3 = await fetch(`/api/stocks/asset-history?start_date=${start}`);
+                const j3 = await r3.json();
+                if (cancelled) return;
+                setHistory(j3.history ?? existing);
+              }
             }
-          } catch {
-            /* fallback to existing */
+          } catch (e) {
+            console.warn('[backfill] skipped', (e as Error).message);
+            // 기존 데이터로 표시 유지
           }
         } else {
           setHistory(existing);

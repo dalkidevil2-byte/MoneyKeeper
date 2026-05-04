@@ -62,9 +62,9 @@ async function handle(req: NextRequest) {
     const priceByTicker: Record<string, Record<string, number>> = {};
     const period = days <= 35 ? '1mo' : days <= 95 ? '3mo' : days <= 190 ? '6mo' : '1y';
 
-    for (const ticker of tickers) {
+    // 종목별 시세 fetch 병렬화 (Promise.all) — sequential 이면 timeout 위험
+    const fetchOne = async (ticker: string): Promise<[string, Record<string, number>]> => {
       const closes: Record<string, number> = {};
-      // Yahoo
       try {
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${period}&interval=1d`;
         const r = await fetch(url, { headers: yfHeaders() });
@@ -83,7 +83,7 @@ async function handle(req: NextRequest) {
       } catch {
         /* skip */
       }
-      // Naver fallback (한국주식만)
+      // Naver fallback
       if (Object.keys(closes).length === 0 && /^\d{6}\.(KS|KQ)$/.test(ticker)) {
         const naver = await naverHistoryFallback(ticker, period);
         const ts = naver?.chart?.result?.[0]?.timestamp ?? [];
@@ -95,6 +95,11 @@ async function handle(req: NextRequest) {
           if (c && Number.isFinite(c)) closes[key] = c;
         }
       }
+      return [ticker, closes];
+    };
+
+    const fetchResults = await Promise.all(tickers.map(fetchOne));
+    for (const [ticker, closes] of fetchResults) {
       priceByTicker[ticker] = closes;
     }
 
