@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     if (imageUrl) {
       try {
         const cls = await classifyImage(imageUrl, userMessage || undefined);
-        if (cls.kind === 'stock_brokerage' && cls.confidence >= 0.5) {
+        if (cls.kind === 'stock_brokerage' && cls.confidence >= 0.4) {
           const pending = await prepareStockTradesPending(imageUrl);
           if (pending) {
             return NextResponse.json({

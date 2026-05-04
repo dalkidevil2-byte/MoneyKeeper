@@ -655,15 +655,28 @@ async function handleReceiptPhoto(
       throw new Error(`OCR ${ocrRes.status}: ${txt.slice(0, 100)}`);
     }
     const ocrJson = await ocrRes.json();
-    const items = (ocrJson.items ?? []) as Array<{
+    // OCR endpoint 응답 구조: { result: { store_name, date, items, total } }
+    // 옛날 코드는 ocrJson.items 로 직접 읽으려 해서 항상 빈 배열 → 항상 "영수증 못 읽었어요" 였음. 수정.
+    const result = (ocrJson.result ?? ocrJson) as {
+      store_name?: string;
+      date?: string;
+      total?: number;
+      items?: Array<{
+        name: string;
+        amount: number;
+        category_main?: string;
+        category_sub?: string;
+      }>;
+    };
+    const items = (result.items ?? []) as Array<{
       name: string;
       amount: number;
       category_main?: string;
       category_sub?: string;
     }>;
-    const storeName = ocrJson.store_name ?? '';
-    const date = ocrJson.date || dayjs().format('YYYY-MM-DD');
-    const total = ocrJson.total ?? items.reduce((s, i) => s + (i.amount ?? 0), 0);
+    const storeName = result.store_name ?? '';
+    const date = result.date || dayjs().format('YYYY-MM-DD');
+    const total = result.total ?? items.reduce((s, i) => s + (i.amount ?? 0), 0);
 
     if (items.length === 0) {
       await sendTelegramMessage(
