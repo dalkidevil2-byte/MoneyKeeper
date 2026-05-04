@@ -21,6 +21,7 @@ export function middleware(req: NextRequest) {
     '/api/todo/telegram/dispatch',
     '/api/todo/telegram/debug',
     '/api/telegram/webhook',
+    '/api/stocks/asset-history/snapshot',
   ];
   if (cronPaths.includes(pathname)) {
     // CRON_SECRET 가 설정돼 있으면 일치 검증, 없으면 그냥 통과

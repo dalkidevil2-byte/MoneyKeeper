@@ -26,6 +26,7 @@ import {
 } from '@/lib/stock-holdings';
 import StockTransactionSheet from '@/components/stock/StockTransactionSheet';
 import StockImportFromImage from '@/components/stock/StockImportFromImage';
+import AssetHistoryChart from '@/components/stock/AssetHistoryChart';
 import HoldingDetailSheet from '@/components/stock/HoldingDetailSheet';
 
 type Quote = {
@@ -511,6 +512,9 @@ export default function PortfolioPage() {
             거래내역을 불러오지 못했습니다: {error}
           </div>
         )}
+
+        {/* 자산 추세 차트 — 매일 종가 기준 누적 */}
+        {!hasFilter && <AssetHistoryChart />}
 
         {/* 보유 종목 리스트 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
