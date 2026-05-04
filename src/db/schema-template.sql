@@ -505,11 +505,56 @@ CREATE TABLE IF NOT EXISTS telegram_sent_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
   household_id UUID NOT NULL,
-  notify_at TIMESTAMPTZ NOT NULL,
+  member_id UUID,
+  occurrence_date DATE NOT NULL,
   lead_minutes INTEGER NOT NULL,
-  sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(task_id, notify_at, lead_minutes)
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- 중복 발송 방지 (member 있는 경우 / 없는 경우 분리)
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_tg_sent_log_with_member
+  ON telegram_sent_log(task_id, occurrence_date, lead_minutes, member_id)
+  WHERE member_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_tg_sent_log_no_member
+  ON telegram_sent_log(task_id, occurrence_date, lead_minutes)
+  WHERE member_id IS NULL;
+
+-- 텔레그램 캡쳐 → 확인 후 등록용 pending 큐
+CREATE TABLE IF NOT EXISTS telegram_pending_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chat_id TEXT NOT NULL,
+  household_id UUID NOT NULL,
+  member_id UUID,
+  kind TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  message_id BIGINT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','confirmed','cancelled','expired')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '1 hour')
+);
+CREATE INDEX IF NOT EXISTS idx_telegram_pending_chat
+  ON telegram_pending_actions(chat_id, status);
+
+-- 주식 시세 영구 캐시 (장 종료 후 외부 API 호출 줄임 + NXT 가격 분리)
+CREATE TABLE IF NOT EXISTS stock_quote_cache (
+  symbol TEXT PRIMARY KEY,
+  price NUMERIC NOT NULL,
+  previous_close NUMERIC,
+  change_amount NUMERIC,
+  change_percent NUMERIC,
+  short_name TEXT,
+  currency TEXT,
+  market_state TEXT,
+  source TEXT,
+  nxt_price NUMERIC,
+  nxt_change_amount NUMERIC,
+  nxt_change_percent NUMERIC,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_close_price NUMERIC,
+  last_close_date DATE
+);
+CREATE INDEX IF NOT EXISTS idx_stock_quote_cache_fetched_at
+  ON stock_quote_cache(fetched_at DESC);
 
 CREATE TABLE IF NOT EXISTS telegram_chat_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
