@@ -128,12 +128,14 @@ async function handle(req: NextRequest) {
             heldByTicker[ticker] = (heldByTicker[ticker] ?? 0) - qty;
           }
         }
-        // 그날 평가금액
+        // 그날 평가금액 — 보유 종목 모두 가격 있어야 기록 (부분 데이터 방지)
         let totalValue = 0;
+        let totalHeld = 0;
         let priceCount = 0;
         // 그날 종가 없으면 직전 영업일 종가로 fallback
         for (const [ticker, qty] of Object.entries(heldByTicker)) {
           if (qty <= 0) continue;
+          totalHeld++;
           let price = priceByTicker[ticker]?.[dKey];
           if (!price) {
             // 가장 가까운 이전 날짜
@@ -146,15 +148,40 @@ async function handle(req: NextRequest) {
             priceCount++;
           }
         }
-        if (priceCount > 0) {
+        // 보유 종목의 80% 이상 가격 매핑된 경우만 기록 (부분 = 잘못된 작은 값)
+        if (totalHeld > 0 && priceCount / totalHeld >= 0.8) {
           records.push({ date: dKey, total_value: Math.round(totalValue) });
         }
       }
       dCursor = dCursor.add(1, 'day');
     }
 
+    // ─── 주말 / 공휴일 dirty data 정리 ───
+    // KRX 휴장일 (주말 + 한국 공휴일) 의 stock_asset_history 행 삭제
+    const startKey = start.format('YYYY-MM-DD');
+    const todayKey = today.format('YYYY-MM-DD');
+    const { data: existing } = await supabase
+      .from('stock_asset_history')
+      .select('date')
+      .eq('household_id', householdId)
+      .gte('date', startKey)
+      .lte('date', todayKey);
+    const datesToDelete: string[] = [];
+    for (const row of existing ?? []) {
+      const d = dayjs(row.date as string).tz(KST);
+      const dow = d.day();
+      if (dow === 0 || dow === 6) datesToDelete.push(row.date as string);
+    }
+    if (datesToDelete.length > 0) {
+      await supabase
+        .from('stock_asset_history')
+        .delete()
+        .eq('household_id', householdId)
+        .in('date', datesToDelete);
+    }
+
     if (records.length === 0) {
-      return NextResponse.json({ ok: true, days_filled: 0, message: 'no price data' });
+      return NextResponse.json({ ok: true, days_filled: 0, message: 'no price data', cleaned_weekend: datesToDelete.length });
     }
 
     // upsert
