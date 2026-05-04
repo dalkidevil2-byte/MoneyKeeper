@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from 'recharts';
 import dayjs from 'dayjs';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, LineChart as ChartIcon, Table as TableIcon } from 'lucide-react';
 
 interface HistoryPoint {
   date: string;
@@ -12,16 +12,20 @@ interface HistoryPoint {
 }
 
 const RANGES = [
+  { key: '1d', label: '전일', days: 2 }, // 최근 2거래일 비교
   { key: '7d', label: '7일', days: 7 },
   { key: '30d', label: '30일', days: 30 },
   { key: '90d', label: '90일', days: 90 },
   { key: '1y', label: '1년', days: 365 },
 ];
 
+type ViewMode = 'chart' | 'table';
+
 export default function AssetHistoryChart() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [range, setRange] = useState<string>('30d');
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('chart');
 
   useEffect(() => {
     let cancelled = false;
@@ -137,24 +141,51 @@ export default function AssetHistoryChart() {
   const pct = first > 0 ? (diff / first) * 100 : 0;
   const isUp = diff >= 0;
 
+  // 일별 변화 (전 거래일 대비)
+  const withChange = history.map((p, i) => {
+    const prev = i > 0 ? history[i - 1] : null;
+    const change = prev ? p.total_value - prev.total_value : 0;
+    const changePct = prev && prev.total_value > 0 ? (change / prev.total_value) * 100 : 0;
+    return { ...p, change, changePct };
+  });
+
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-      <div className="flex items-baseline justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2">
         <h2 className="text-base font-bold text-gray-900">📈 자산 추세</h2>
-        <div className="flex gap-1">
-          {RANGES.map((r) => (
+        <div className="flex items-center gap-2">
+          {/* view mode 토글 */}
+          <div className="flex bg-gray-100 rounded-md p-0.5">
             <button
-              key={r.key}
-              onClick={() => setRange(r.key)}
-              className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
-                range === r.key
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-600'
-              }`}
+              onClick={() => setViewMode('chart')}
+              className={`p-1 rounded ${viewMode === 'chart' ? 'bg-white shadow' : ''}`}
+              title="차트"
             >
-              {r.label}
+              <ChartIcon size={13} className={viewMode === 'chart' ? 'text-indigo-600' : 'text-gray-500'} />
             </button>
-          ))}
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-1 rounded ${viewMode === 'table' ? 'bg-white shadow' : ''}`}
+              title="표"
+            >
+              <TableIcon size={13} className={viewMode === 'table' ? 'text-indigo-600' : 'text-gray-500'} />
+            </button>
+          </div>
+          <div className="flex gap-1 flex-wrap justify-end">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
+                  range === r.key
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -174,76 +205,134 @@ export default function AssetHistoryChart() {
         · {history.length}일 기록
       </div>
 
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={history}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 10 }}
-            tickFormatter={(d) => dayjs(d).format('M/D')}
-            minTickGap={30}
-          />
-          <YAxis
-            tick={{ fontSize: 10 }}
-            tickFormatter={(v) => {
-              if (Math.abs(v) >= 1e8) return `${(v / 1e8).toFixed(1)}억`;
-              if (Math.abs(v) >= 1e4) return `${(v / 1e4).toFixed(0)}만`;
-              return v.toString();
-            }}
-            domain={['auto', 'auto']}
-            width={45}
-          />
-          <Tooltip
-            formatter={(v, name) => {
-              const label =
-                name === 'total_value'
+      {viewMode === 'chart' ? (
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={history}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10 }}
+              tickFormatter={(d) => dayjs(d).format('M/D')}
+              minTickGap={30}
+            />
+            <YAxis
+              tick={{ fontSize: 10 }}
+              tickFormatter={(v) => {
+                if (Math.abs(v) >= 1e8) return `${(v / 1e8).toFixed(1)}억`;
+                if (Math.abs(v) >= 1e4) return `${(v / 1e4).toFixed(0)}만`;
+                return v.toString();
+              }}
+              domain={['auto', 'auto']}
+              width={45}
+            />
+            <Tooltip
+              formatter={(v, name) => {
+                const label =
+                  name === 'total_value'
+                    ? '총 평가'
+                    : name === 'seed_money'
+                      ? '시드머니'
+                      : '손익';
+                return [Number(v).toLocaleString('ko-KR') + '원', label];
+              }}
+              labelFormatter={(d) => dayjs(String(d)).format('YYYY-MM-DD (ddd)')}
+              contentStyle={{ fontSize: 12 }}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: 11 }}
+              formatter={(value) =>
+                value === 'total_value'
                   ? '총 평가'
-                  : name === 'seed_money'
+                  : value === 'seed_money'
                     ? '시드머니'
-                    : '손익';
-              return [Number(v).toLocaleString('ko-KR') + '원', label];
-            }}
-            labelFormatter={(d) => dayjs(String(d)).format('YYYY-MM-DD (ddd)')}
-            contentStyle={{ fontSize: 12 }}
-          />
-          <Legend
-            wrapperStyle={{ fontSize: 11 }}
-            formatter={(value) =>
-              value === 'total_value'
-                ? '총 평가'
-                : value === 'seed_money'
-                  ? '시드머니'
-                  : '손익'
-            }
-          />
-          <ReferenceLine y={0} stroke="#d1d5db" strokeDasharray="2 2" />
-          <Line
-            type="monotone"
-            dataKey="seed_money"
-            stroke="#9ca3af"
-            strokeWidth={1.5}
-            strokeDasharray="4 2"
-            dot={false}
-            activeDot={{ r: 3 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="total_value"
-            stroke={isUp ? '#ef4444' : '#3b82f6'}
-            strokeWidth={2}
-            dot={history.length <= 14 ? { r: 2 } : false}
-            activeDot={{ r: 4 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="pnl"
-            stroke="#10b981"
-            strokeWidth={1.5}
-            dot={false}
-            activeDot={{ r: 3 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+                    : '손익'
+              }
+            />
+            <ReferenceLine y={0} stroke="#d1d5db" strokeDasharray="2 2" />
+            <Line
+              type="monotone"
+              dataKey="seed_money"
+              stroke="#9ca3af"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+              dot={false}
+              activeDot={{ r: 3 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="total_value"
+              stroke={isUp ? '#ef4444' : '#3b82f6'}
+              strokeWidth={2}
+              dot={history.length <= 14 ? { r: 2 } : false}
+              activeDot={{ r: 4 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="pnl"
+              stroke="#10b981"
+              strokeWidth={1.5}
+              dot={false}
+              activeDot={{ r: 3 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="overflow-x-auto -mx-2">
+          <table className="w-full text-xs">
+            <thead className="text-[10px] text-gray-400 border-b border-gray-100">
+              <tr>
+                <th className="text-left py-1.5 px-2 font-medium">날짜</th>
+                <th className="text-right py-1.5 px-2 font-medium">총 평가</th>
+                <th className="text-right py-1.5 px-2 font-medium">전일 대비</th>
+                <th className="text-right py-1.5 px-2 font-medium">시드머니</th>
+                <th className="text-right py-1.5 px-2 font-medium">손익</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...withChange].reverse().map((p) => {
+                const up = p.change > 0;
+                const down = p.change < 0;
+                const colorClass = up ? 'text-red-500' : down ? 'text-blue-500' : 'text-gray-400';
+                return (
+                  <tr key={p.date} className="border-b border-gray-50">
+                    <td className="py-1.5 px-2 text-gray-700">
+                      {dayjs(p.date).format('M/D (ddd)')}
+                    </td>
+                    <td className="text-right py-1.5 px-2 font-semibold tabular-nums">
+                      {p.total_value.toLocaleString('ko-KR')}
+                    </td>
+                    <td className={`text-right py-1.5 px-2 font-semibold tabular-nums ${colorClass}`}>
+                      {p.change === 0 ? (
+                        '-'
+                      ) : (
+                        <>
+                          {up ? '+' : ''}
+                          {p.change.toLocaleString('ko-KR')}
+                          <div className="text-[10px] font-normal">
+                            ({up ? '+' : ''}
+                            {p.changePct.toFixed(2)}%)
+                          </div>
+                        </>
+                      )}
+                    </td>
+                    <td className="text-right py-1.5 px-2 text-gray-500 tabular-nums">
+                      {(p.seed_money ?? 0).toLocaleString('ko-KR')}
+                    </td>
+                    <td
+                      className={`text-right py-1.5 px-2 font-semibold tabular-nums ${
+                        (p.pnl ?? 0) >= 0 ? 'text-rose-500' : 'text-blue-500'
+                      }`}
+                    >
+                      {(p.pnl ?? 0) >= 0 ? '+' : ''}
+                      {(p.pnl ?? 0).toLocaleString('ko-KR')}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
