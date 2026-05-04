@@ -126,6 +126,63 @@ export async function generateBriefing(
   const todaySpent = (txs ?? []).reduce((s, t) => s + (t.amount as number), 0);
   const txCount = (txs ?? []).length;
 
+  // 5) 어제 가계부 + 카테고리 Top
+  const { data: yTxs } = await supabase
+    .from('transactions')
+    .select('amount, name, category_main')
+    .eq('household_id', householdId)
+    .eq('date', yesterdayKey)
+    .eq('type', 'variable_expense')
+    .neq('status', 'cancelled');
+  const yesterdaySpent = (yTxs ?? []).reduce((s, t) => s + (t.amount as number), 0);
+  const yesterdayCatMap: Record<string, number> = {};
+  for (const t of yTxs ?? []) {
+    const k = (t.category_main as string) || '기타';
+    yesterdayCatMap[k] = (yesterdayCatMap[k] ?? 0) + (t.amount as number);
+  }
+  const yesterdayTopCats = Object.entries(yesterdayCatMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  // 6) 이번 달 누적 지출 + 예산 대비
+  const monthStart = today.startOf('month').format('YYYY-MM-DD');
+  const { data: mTxs } = await supabase
+    .from('transactions')
+    .select('amount')
+    .eq('household_id', householdId)
+    .gte('date', monthStart)
+    .lte('date', todayKey)
+    .eq('type', 'variable_expense')
+    .neq('status', 'cancelled');
+  const monthSpent = (mTxs ?? []).reduce((s, t) => s + (t.amount as number), 0);
+
+  // 7) 최근 24시간 새 컬렉션 항목
+  const since24h = today.subtract(24, 'hour').toISOString();
+  const { data: archEntries } = await supabase
+    .from('archive_entries')
+    .select('data, created_at, collection:archive_collections!collection_id(name, emoji)')
+    .eq('household_id', householdId)
+    .gte('created_at', since24h)
+    .order('created_at', { ascending: false })
+    .limit(8);
+  type ArchEntryRaw = {
+    data: Record<string, unknown> | null;
+    created_at: string;
+    collection: { name?: string; emoji?: string } | { name?: string; emoji?: string }[] | null;
+  };
+  const recentArchive = ((archEntries ?? []) as ArchEntryRaw[]).map((e) => {
+    const collRaw = e.collection;
+    const coll = Array.isArray(collRaw) ? collRaw[0] : collRaw;
+    const data = (e.data ?? {}) as Record<string, unknown>;
+    // 첫 번째 텍스트 필드를 제목으로 사용
+    const firstVal = Object.values(data).find((v) => typeof v === 'string' && (v as string).trim());
+    return {
+      collection: coll?.name ?? '?',
+      emoji: coll?.emoji ?? '📦',
+      title: (firstVal as string) ?? '항목',
+    };
+  });
+
   // ─── LLM 프롬프트 ────────────────────────────
   const dataBlock =
     mode === 'morning'
@@ -150,7 +207,14 @@ ${
 ${trackList.map((t) => `- ${t.emoji} ${t.title}${t.done ? ' ✅' : ''}`).join('\n') || '없음'}
 
 ## 내일 예정 일정 (${tomorrowEvents.length}건)
-${tomorrowEvents.slice(0, 5).map((e) => `- ${e.title}`).join('\n') || '없음'}`
+${tomorrowEvents.slice(0, 5).map((e) => `- ${e.title}`).join('\n') || '없음'}
+
+## 가계부 — 어제 지출
+- 총 ${yesterdaySpent.toLocaleString('ko-KR')}원${yesterdayTopCats.length > 0 ? ` (${yesterdayTopCats.map(([c, a]) => `${c} ${a.toLocaleString('ko-KR')}원`).join(', ')})` : ''}
+- 이번 달 누적: ${monthSpent.toLocaleString('ko-KR')}원
+
+## 최근 컬렉션 등록 (24시간)
+${recentArchive.map((a) => `- ${a.emoji} ${a.collection}: ${a.title}`).join('\n') || '없음'}`
       : `# 오늘 마감 데이터 (${todayKey} ${today.format('dddd')})
 
 ## 완료한 일정 (${todayDoneEvents.length}건)
@@ -172,7 +236,14 @@ ${trackList.map((t) => `- ${t.emoji} ${t.title}: ${t.done ? '✅ 달성' : '❌ 
 ${actList.map((a) => `- ${a.name}: ${a.minutes}분`).join('\n') || '없음'}
 
 ## 오늘 변동 지출
-- ${todaySpent.toLocaleString('ko-KR')}원 (${txCount}건)`;
+- ${todaySpent.toLocaleString('ko-KR')}원 (${txCount}건)
+
+## 어제 지출 + 이번 달 누적
+- 어제 ${yesterdaySpent.toLocaleString('ko-KR')}원
+- 이번 달 누적: ${monthSpent.toLocaleString('ko-KR')}원
+
+## 최근 컬렉션 등록 (24시간)
+${recentArchive.map((a) => `- ${a.emoji} ${a.collection}`).join('\n') || '없음'}`;
 
   const systemPrompt =
     mode === 'morning'
@@ -191,6 +262,13 @@ ${actList.map((a) => `- ${a.name}: ${a.minutes}분`).join('\n') || '없음'}
 3. 상황에 맞는 격려 / 힘이 나는 말 (구체적으로)
 4. 실용 조언 (컨디션·시간배분·작은 팁)
 5. 마지막 응원
+
+데이터 사용 원칙 (러프하게):
+- 가계부/컬렉션 등록은 **러프하게만 참고**. 구체적 항목명/금액 단정 X.
+- 예: "어제 외식 좀 있었네요" (X "어제 김밥천국 8,000원")
+- "이번 달은 평소보다 좀 쓴 편" 정도. 정확한 금액 강조 X.
+- 컬렉션 신규 등록은 "관심사가 다양해 보여요" 같은 분위기 언급 정도.
+- 데이터가 잘못 입력됐을 가능성 있으니 단정 표현 피하고 "~인 듯" 톤.
 
 톤:
 - 친한 누나/형 같은 따뜻함, 데이터 기반 구체성
@@ -214,6 +292,12 @@ ${actList.map((a) => `- ${a.name}: ${a.minutes}분`).join('\n') || '없음'}
 3. 마음에 와닿는 위로 — 본인 상황에 맞춤
 4. 내일을 위한 조언 (컨디션 회복, 우선순위, 작은 팁)
 5. 따뜻한 한 줄 (잘 자, 푹 쉬어 등)
+
+데이터 사용 원칙 (러프하게):
+- 가계부/컬렉션은 **러프하게만 참고**. 구체적 항목/금액 단정 X.
+- "오늘은 좀 많이 쓴 듯" / "조용한 지출 흐름" 정도.
+- 컬렉션 신규 등록은 "오늘 새로 기록한 것들이 있네요" 처럼 분위기만.
+- 데이터 오인식 가능성 인정 — 단정 X, "~인 듯" 톤.
 
 톤:
 - "수고했어요" 같은 진부한 말 피하고 데이터 활용
