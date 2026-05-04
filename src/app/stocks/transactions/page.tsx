@@ -307,14 +307,28 @@ export default function StockTransactionsPage() {
                                     realized.quantity * realized.avgCostAtSell
                                   ).toLocaleString('ko-KR')}
                                 </span>
-                                {q && (
-                                  <>
-                                    {' · '}현재가{' '}
-                                    <span className="font-semibold text-gray-700">
-                                      {fmtPrice(q.price)}
-                                    </span>
-                                  </>
-                                )}
+                                {q && (() => {
+                                  // 매도 안 했을 때 손익 = (현재가 - 평단) × 수량
+                                  const hypothetical =
+                                    (q.price - realized.avgCostAtSell) * realized.quantity;
+                                  const isPositive = hypothetical >= 0;
+                                  return (
+                                    <>
+                                      {' · '}현재가{' '}
+                                      <span className="font-semibold text-gray-700">
+                                        {fmtPrice(q.price)}
+                                      </span>
+                                      <span
+                                        className={`ml-0.5 font-semibold ${
+                                          isPositive ? 'text-rose-500' : 'text-blue-500'
+                                        }`}
+                                      >
+                                        ({isPositive ? '+' : ''}
+                                        {Math.round(hypothetical).toLocaleString('ko-KR')})
+                                      </span>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             )}
                           </div>
