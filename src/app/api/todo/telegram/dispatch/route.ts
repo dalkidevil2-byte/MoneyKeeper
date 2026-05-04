@@ -181,16 +181,28 @@ async function handle(req: NextRequest) {
         const key = `${c.task_id}|${c.occurrence_date}|${c.lead}|${mid}`;
         if (sentSet.has(key)) continue;
 
-        const text = `🔔 <b>${escapeHtml(c.task_title)}</b>\n⏰ ${dueLabel} · ${remainLabel}`;
-        try {
-          await sendTelegramMessage(botToken, m.chat_id, text);
-          await supabase.from('telegram_sent_log').insert({
+        // race condition 방지: insert 먼저 시도. UNIQUE 제약으로 중복 차단됨.
+        // 성공한 row 만 send 진행.
+        const { error: lockErr } = await supabase
+          .from('telegram_sent_log')
+          .insert({
             household_id: householdId,
             task_id: c.task_id,
             member_id: mid,
             occurrence_date: c.occurrence_date,
             lead_minutes: c.lead,
           });
+        if (lockErr) {
+          // UNIQUE 충돌 = 다른 인스턴스가 먼저 발송 중. skip.
+          if (!lockErr.message.includes('duplicate')) {
+            console.warn('[dispatch] sent_log insert err', lockErr.message);
+          }
+          continue;
+        }
+
+        const text = `🔔 <b>${escapeHtml(c.task_title)}</b>\n⏰ ${dueLabel} · ${remainLabel}`;
+        try {
+          await sendTelegramMessage(botToken, m.chat_id, text);
           sent++;
         } catch (e: any) {
           errors.push(`${m.name}: ${e?.message ?? e}`);
