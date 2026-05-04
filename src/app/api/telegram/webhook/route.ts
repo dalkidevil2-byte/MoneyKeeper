@@ -399,9 +399,22 @@ async function handlePhoto(
     }
   }
 
+  // 캡션에 강제 키워드 있으면 분류기 무시하고 직접 라우팅
+  const caption = (message.caption ?? '').toLowerCase();
+  const STOCK_KEYWORDS = ['주식', '거래내역', '체결', '매수', '매도', '키움', '미래에셋', '삼성증권', '한투', '한국투자', '토스증권', 'nh투자', '신한투자', 'kb증권', '대신', '메리츠'];
+  const RECEIPT_KEYWORDS = ['영수증', '가계부'];
+  const forcedStock = STOCK_KEYWORDS.some((k) => caption.includes(k));
+  const forcedReceipt = RECEIPT_KEYWORDS.some((k) => caption.includes(k));
+
   // 분류 — 실패 시 receipt 로 fallback
   let kind: 'receipt' | 'stock_brokerage' | 'stock_recommendation' | 'other' = 'receipt';
-  if (imageUrl) {
+  if (forcedStock) {
+    kind = 'stock_brokerage';
+    console.log('[image-classify] forced stock_brokerage by caption');
+  } else if (forcedReceipt) {
+    kind = 'receipt';
+    console.log('[image-classify] forced receipt by caption');
+  } else if (imageUrl) {
     try {
       const cls = await classifyImage(imageUrl, message.caption);
       kind = cls.kind;
