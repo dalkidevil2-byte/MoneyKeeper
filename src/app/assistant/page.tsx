@@ -8,11 +8,32 @@ import TtsButton from '@/components/TtsButton';
 import AiUsageCard from '@/components/AiUsageCard';
 
 type ToolCall = { name: string; args: unknown };
+type PendingTrade = {
+  account_id?: string;
+  broker_name?: string;
+  ticker: string;
+  company_name?: string;
+  type: 'BUY' | 'SELL';
+  date: string;
+  quantity: number;
+  price: number;
+  fee: number;
+  tax: number;
+};
+type PendingPayload = {
+  id: string;
+  kind: 'stock_trades_import';
+  trades: PendingTrade[];
+  /** 사용자 결정 후 결과 메시지 */
+  resolved?: 'confirmed' | 'cancelled';
+  resolveText?: string;
+};
 type Msg = {
   role: 'user' | 'assistant';
   content: string;
   imageUrl?: string;
   toolCalls?: ToolCall[];
+  pending?: PendingPayload;
 };
 
 // 도구 → 바로가기 링크 매핑
@@ -152,6 +173,44 @@ export default function AssistantPage() {
     rec.start();
   };
 
+  const resolvePending = async (msgIndex: number, action: 'confirm' | 'cancel') => {
+    const msg = messages[msgIndex];
+    if (!msg?.pending || msg.pending.resolved) return;
+    const id = msg.pending.id;
+    try {
+      const res = await fetch(`/api/assistant/pending/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const j = await res.json();
+      const updated = [...messages];
+      const newPending: PendingPayload = {
+        ...msg.pending,
+        resolved: action === 'confirm' ? 'confirmed' : 'cancelled',
+        resolveText:
+          action === 'cancel'
+            ? '❌ 취소됨'
+            : j.ok
+              ? `✅ ${j.inserted}건 등록 완료${j.failed?.length ? ` (실패 ${j.failed.length}건)` : ''}`
+              : `⚠️ ${j.error ?? '실패'}`,
+      };
+      updated[msgIndex] = { ...msg, pending: newPending };
+      setMessages(updated);
+    } catch (e) {
+      const updated = [...messages];
+      updated[msgIndex] = {
+        ...msg,
+        pending: {
+          ...msg.pending,
+          resolved: 'cancelled',
+          resolveText: `⚠️ 처리 실패: ${e instanceof Error ? e.message : ''}`,
+        },
+      };
+      setMessages(updated);
+    }
+  };
+
   const send = async (text: string) => {
     if ((!text.trim() && !attachedFile) || busy) return;
     const file = attachedFile;
@@ -190,9 +249,15 @@ export default function AssistantPage() {
       const j = await res.json();
       const reply = j.content ?? '답변을 생성하지 못했어요.';
       const toolCalls = (j.tool_calls ?? []) as ToolCall[];
+      const pending = j.pending as PendingPayload | undefined;
       setMessages([
         ...newMessages,
-        { role: 'assistant', content: reply, toolCalls },
+        {
+          role: 'assistant',
+          content: reply,
+          toolCalls,
+          pending: pending && pending.id ? pending : undefined,
+        },
       ]);
     } catch {
       setMessages([
@@ -328,6 +393,54 @@ export default function AssistantPage() {
                           <span>{s.emoji}</span> {s.label} →
                         </Link>
                       ))}
+                    </div>
+                  )}
+                  {m.role === 'assistant' && m.pending && (
+                    <div className="mt-3 -mx-1 p-3 bg-white border border-violet-200 rounded-xl text-gray-700">
+                      <div className="text-[11px] font-bold text-violet-700 mb-2">
+                        📈 거래 등록 미리보기 ({m.pending.trades.length}건)
+                      </div>
+                      <ul className="space-y-1 mb-2 text-xs">
+                        {m.pending.trades.map((t, idx) => {
+                          const sign = t.type === 'SELL' ? '➖' : '➕';
+                          return (
+                            <li key={idx} className="flex items-center gap-1 leading-tight">
+                              <span>{sign}</span>
+                              <span className="font-semibold">
+                                {t.company_name || t.ticker}
+                              </span>
+                              <span className="text-gray-500">
+                                {t.quantity}주 @ {Number(t.price).toLocaleString()}원
+                              </span>
+                              {t.broker_name && (
+                                <span className="text-[10px] text-gray-400 ml-auto">
+                                  {t.broker_name}
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {m.pending.resolved ? (
+                        <div className="text-xs font-semibold text-violet-700">
+                          {m.pending.resolveText}
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => resolvePending(i, 'confirm')}
+                            className="flex-1 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg active:bg-violet-700"
+                          >
+                            ✅ 등록
+                          </button>
+                          <button
+                            onClick={() => resolvePending(i, 'cancel')}
+                            className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-semibold rounded-lg active:bg-gray-200"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
