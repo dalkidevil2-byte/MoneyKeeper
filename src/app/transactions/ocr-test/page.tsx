@@ -25,6 +25,7 @@ export default function OcrTestPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [clovaConfigured, setClovaConfigured] = useState(true);
   const [clovaResult, setClovaResult] = useState<Result | null>(null);
+  const [clovaRawText, setClovaRawText] = useState<string | null>(null);
   const [gptResult, setGptResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -59,6 +60,7 @@ export default function OcrTestPage() {
       if (!res.ok) throw new Error((json.error as string) ?? `HTTP ${res.status}`);
       setClovaConfigured(json.clova_configured as boolean);
       setClovaResult(json.clova as Result | null);
+      setClovaRawText((json.clova_raw_text as string | null) ?? null);
       setGptResult(json.gpt as Result | null);
       setClovaMs(elapsed);
       setGptMs(elapsed);
@@ -162,21 +164,33 @@ export default function OcrTestPage() {
           </div>
         )}
 
-        {(clovaResult || gptResult) && !busy && (
-          <div className="grid sm:grid-cols-2 gap-3">
-            <ResultCard
-              title="🟢 CLOVA OCR"
-              result={clovaResult}
-              elapsed={clovaMs}
-              fallback="결과 없음"
-            />
-            <ResultCard
-              title="🔵 gpt-4o vision"
-              result={gptResult}
-              elapsed={gptMs}
-              fallback="결과 없음"
-            />
-          </div>
+        {(clovaResult || gptResult || clovaRawText) && !busy && (
+          <>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <ResultCard
+                title="🟢 CLOVA OCR + GPT 파싱"
+                result={clovaResult}
+                elapsed={clovaMs}
+                fallback={clovaRawText ? '구조 파싱 실패 (아래 raw 텍스트 확인)' : 'CLOVA 응답 없음'}
+              />
+              <ResultCard
+                title="🔵 gpt-4o vision (단독)"
+                result={gptResult}
+                elapsed={gptMs}
+                fallback="결과 없음"
+              />
+            </div>
+            {clovaRawText && (
+              <details className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
+                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">
+                  📜 CLOVA 가 추출한 raw 텍스트 (디버그용)
+                </summary>
+                <pre className="text-[11px] text-gray-700 whitespace-pre-wrap mt-2 max-h-60 overflow-y-auto">
+{clovaRawText}
+                </pre>
+              </details>
+            )}
+          </>
         )}
       </div>
     </div>

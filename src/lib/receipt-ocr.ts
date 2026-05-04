@@ -33,6 +33,83 @@ export type ReceiptOcrResult = {
  * URL 확장자 우선, response header 는 fallback.
  */
 /**
+ * CLOVA 가 OCR 한 raw 텍스트 → gpt-4o-mini 로 구조 파싱 + 카테고리 분류.
+ * 시각 인식 안 하니까 mini 로 충분.
+ */
+async function parseReceiptTextWithGPT(
+  rawText: string,
+  householdId: string,
+): Promise<ReceiptOcrResult | null> {
+  const supabase = createServerSupabaseClient();
+  const { data: customCats } = await supabase
+    .from('custom_categories')
+    .select('category_main, category_sub')
+    .eq('household_id', householdId);
+  const customMains = (customCats ?? [])
+    .map((c) => c.category_main)
+    .filter((m, i, arr) => m && arr.indexOf(m) === i);
+  const allMains = [
+    ...CATEGORY_MAIN_OPTIONS.filter((m) => m !== '수입'),
+    ...customMains.filter(
+      (m) => !(CATEGORY_MAIN_OPTIONS as readonly string[]).includes(m),
+    ),
+  ];
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 1500,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'user',
+          content: `다음은 영수증을 OCR 한 raw 텍스트야. 가게명/날짜/품목/금액/합계 추출해서 JSON.
+
+[OCR 텍스트]
+${rawText}
+
+[규칙]
+- 영수증에 명시된 것만. 추측/환각 금지. 못 읽으면 빈 문자열.
+- 품목 = 실제 구매 상품 (할인/적립/카드정보/사업자번호 등 제외).
+- amount 는 그 품목의 합계 금액 (단가 X 수량 결과).
+- "TOTAL"/"합계"/"총액" 행은 items 에 X.
+- 카테고리: ${allMains.join(', ')} 중 어울리는 것.
+
+응답:
+{
+  "store_name": "...",
+  "date": "YYYY-MM-DD 또는 빈 문자열",
+  "items": [{"name":"...", "amount":숫자, "quantity":숫자, "category_main":"...", "category_sub":""}],
+  "total": 숫자,
+  "payment_hint": "현금/카드 등"
+}`,
+        },
+      ],
+    });
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'parse',
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      householdId,
+      meta: { kind: 'receipt_parse_from_clova_text' },
+    });
+    const raw = response.choices[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(raw) as ReceiptOcrResult;
+    return {
+      store_name: parsed.store_name ?? '',
+      date: parsed.date ?? '',
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+      total: parsed.total,
+      payment_hint: parsed.payment_hint,
+    };
+  } catch (e) {
+    console.warn('[parseReceiptTextWithGPT]', e);
+    return null;
+  }
+}
+
+/**
  * CLOVA 가 추출한 raw 품목 → gpt-4o-mini 로 카테고리만 분류.
  * 시각 인식 안 하니까 mini 로 충분 + 매우 저렴.
  */
@@ -177,27 +254,22 @@ export async function runReceiptOcr(
     }
   }
 
-  // ─── CLOVA OCR 우선 사용 (한국 영수증 특화) ───
+  // ─── CLOVA OCR 우선 (한국어 텍스트 추출 정확도 ↑) ───
   if (isClovaConfigured()) {
     const clova = await runClovaReceiptOcr(finalUrl);
-    if (clova && clova.items.length > 0) {
-      // 품목들을 gpt-4o-mini 한테 카테고리 분류만 요청
-      const categorized = await classifyItemsWithGPT(clova.items, householdId);
-      void logAiUsage({
-        model: 'clova-ocr',
-        feature: 'ocr',
-        meta: { kind: 'receipt', source: 'clova', items: clova.items.length },
-      });
-      return {
-        store_name: clova.storeName ?? '',
-        date: clova.date ?? '',
-        items: categorized,
-        total: clova.total,
-        payment_hint: clova.paymentMethod ?? '',
-      };
+    if (clova && clova.rawText && clova.rawText.length > 30) {
+      // CLOVA 가 추출한 raw 텍스트 → gpt-4o-mini 가 구조 파싱
+      const structured = await parseReceiptTextWithGPT(clova.rawText, householdId);
+      if (structured && structured.items.length > 0) {
+        void logAiUsage({
+          model: 'clova-ocr',
+          feature: 'ocr',
+          meta: { kind: 'receipt', source: 'clova+gpt-mini', items: structured.items.length },
+        });
+        return structured;
+      }
     }
-    // CLOVA 실패 시 gpt-4o vision 으로 fallback
-    console.warn('[receipt-ocr] CLOVA failed, fallback to gpt-4o');
+    console.warn('[receipt-ocr] CLOVA empty or parse fail, fallback to gpt-4o vision');
   }
 
   const supabase = createServerSupabaseClient();

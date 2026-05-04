@@ -26,17 +26,54 @@ export async function POST(req: NextRequest) {
   const b64 = Buffer.from(buf).toString('base64');
   const dataUrl = `data:${file.type || 'image/jpeg'};base64,${b64}`;
 
-  // 병렬 실행
+  // 병렬 실행 — CLOVA 는 텍스트만 추출, GPT 는 구조 파싱
   const [clovaResult, gptResult] = await Promise.all([
     isClovaConfigured() ? runClovaReceiptOcr(dataUrl).catch(() => null) : Promise.resolve(null),
     runGptOnly(dataUrl).catch(() => null),
   ]);
 
+  // CLOVA raw text → GPT 로 구조 파싱
+  let clovaParsed: Awaited<ReturnType<typeof runGptOnly>> | null = null;
+  if (clovaResult?.rawText && clovaResult.rawText.length > 30) {
+    clovaParsed = await parseClovaText(clovaResult.rawText).catch(() => null);
+  }
+
   return NextResponse.json({
     clova_configured: isClovaConfigured(),
-    clova: clovaResult,
+    clova_raw_text: clovaResult?.rawText ?? null,
+    clova: clovaParsed,
     gpt: gptResult,
   });
+}
+
+async function parseClovaText(rawText: string) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 1500,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'user',
+          content: `OCR raw 텍스트에서 영수증 정보 추출해 JSON. 명시된 것만, 추측 금지.
+
+[텍스트]
+${rawText}
+
+응답:
+{
+  "store_name": "가게명",
+  "date": "YYYY-MM-DD",
+  "items": [{"name":"...", "amount":숫자}],
+  "total": 숫자
+}`,
+        },
+      ],
+    });
+    return JSON.parse(response.choices[0]?.message?.content ?? '{}');
+  } catch {
+    return null;
+  }
 }
 
 /**

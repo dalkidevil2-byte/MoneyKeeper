@@ -1,15 +1,10 @@
 /**
- * Naver CLOVA Receipt OCR — 한국 영수증 특화.
- * 무료 티어 (1000 건/월) 로 가계부 영수증 처리.
+ * Naver CLOVA OCR (General 도메인) — 한국어 텍스트 추출 특화.
+ * 영수증 텍스트만 추출 → gpt-4o-mini 가 구조 파싱.
  *
  * 환경변수:
- *   CLOVA_OCR_INVOKE_URL — 도메인 생성 후 받는 Invoke URL
+ *   CLOVA_OCR_INVOKE_URL — Invoke URL (도메인 상세 → API Gateway 연동 후)
  *   CLOVA_OCR_SECRET_KEY — Secret Key
- *
- * 둘 다 없으면 isClovaConfigured() 가 false → 호출자가 gpt-4o fallback.
- *
- * 셋업: https://www.ncloud.com/product/aiService/ocr
- *   Console → AI Service → CLOVA OCR → Domain 생성 (영수증/Receipt)
  */
 
 export type ClovaReceiptItem = {
@@ -25,63 +20,77 @@ export type ClovaReceiptResult = {
   total?: number;
   items: ClovaReceiptItem[];
   paymentMethod?: string;
+  /** 디버깅 용 — CLOVA 가 추출한 raw 텍스트 */
+  rawText?: string;
 };
 
 export function isClovaConfigured(): boolean {
   return !!process.env.CLOVA_OCR_INVOKE_URL && !!process.env.CLOVA_OCR_SECRET_KEY;
 }
 
-interface ClovaSubResultItem {
-  name?: { formatted?: { value?: string }; text?: string };
-  count?: { formatted?: { value?: string }; text?: string };
-  unitPrice?: { formatted?: { value?: string }; text?: string };
-  price?: { formatted?: { value?: string }; text?: string };
-}
-
-interface ClovaSubResult {
-  items?: ClovaSubResultItem[];
-}
-
-interface ClovaReceiptObj {
-  result?: {
-    storeInfo?: {
-      name?: { formatted?: { value?: string }; text?: string };
-    };
-    paymentInfo?: {
-      date?: { formatted?: { year?: string; month?: string; day?: string }; text?: string };
-      time?: { formatted?: { hour?: string; minute?: string }; text?: string };
-      cardCompany?: { formatted?: { value?: string }; text?: string };
-      cardNumber?: { formatted?: { value?: string }; text?: string };
-    };
-    totalPrice?: {
-      price?: { formatted?: { value?: string }; text?: string };
-    };
-    subResults?: ClovaSubResult[];
+interface GeneralField {
+  inferText?: string;
+  boundingPoly?: {
+    vertices?: Array<{ x: number; y: number }>;
   };
+  lineBreak?: boolean;
 }
-
-interface ClovaImage {
-  receipt?: ClovaReceiptObj;
-  inferResult?: string; // SUCCESS | FAILURE
+interface GeneralImage {
+  fields?: GeneralField[];
+  inferResult?: string;
   message?: string;
 }
-
-interface ClovaResponse {
-  version?: string;
-  requestId?: string;
-  timestamp?: number;
-  images?: ClovaImage[];
+interface GeneralResponse {
+  images?: GeneralImage[];
 }
 
-const numFromText = (val: string | undefined): number | undefined => {
-  if (!val) return undefined;
-  const cleaned = val.replace(/[,\s원]/g, '');
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : undefined;
-};
+/**
+ * General OCR 의 텍스트 조각들을 줄 단위로 재조합.
+ * y 좌표로 그룹핑 (비슷한 y 값끼리 한 줄), 같은 줄에서 x 좌표 순서로 결합.
+ */
+function fieldsToLines(fields: GeneralField[]): string[] {
+  type Box = { text: string; y: number; x: number; ymax: number };
+  const boxes: Box[] = [];
+  for (const f of fields) {
+    if (!f.inferText) continue;
+    const verts = f.boundingPoly?.vertices ?? [];
+    if (verts.length === 0) continue;
+    const ys = verts.map((v) => v.y).filter((y) => typeof y === 'number');
+    const xs = verts.map((v) => v.x).filter((x) => typeof x === 'number');
+    const y = Math.min(...ys);
+    const ymax = Math.max(...ys);
+    const x = Math.min(...xs);
+    boxes.push({ text: f.inferText, y, ymax, x });
+  }
+
+  // y 순으로 정렬 + 줄 단위 그룹핑 (높이 절반 만큼 겹치면 같은 줄)
+  boxes.sort((a, b) => a.y - b.y);
+  const lines: Box[][] = [];
+  for (const b of boxes) {
+    const cur = lines[lines.length - 1];
+    if (cur) {
+      const lastTop = Math.min(...cur.map((c) => c.y));
+      const lastBot = Math.max(...cur.map((c) => c.ymax));
+      const halfHeight = (lastBot - lastTop) / 2 || 10;
+      // 박스의 중심 y 가 직전 줄 범위 안에 들면 같은 줄
+      const centerY = (b.y + b.ymax) / 2;
+      if (centerY >= lastTop - halfHeight * 0.3 && centerY <= lastBot + halfHeight * 0.3) {
+        cur.push(b);
+        continue;
+      }
+    }
+    lines.push([b]);
+  }
+
+  // 각 줄 내부는 x 순으로 정렬
+  return lines.map((line) =>
+    line.sort((a, b) => a.x - b.x).map((b) => b.text).join(' '),
+  );
+}
 
 /**
- * 이미지 (data URL 또는 base64) 를 CLOVA Receipt OCR 으로 호출.
+ * CLOVA General OCR 호출 → 텍스트 줄 배열 + raw 텍스트 반환.
+ * 구조 파싱 (가게명/품목/금액) 은 receipt-ocr.ts 가 gpt-4o-mini 로 후처리.
  */
 export async function runClovaReceiptOcr(
   imageBase64OrUrl: string,
@@ -90,7 +99,7 @@ export async function runClovaReceiptOcr(
   const secret = process.env.CLOVA_OCR_SECRET_KEY;
   if (!url || !secret) return null;
 
-  // base64 부분만 추출
+  // base64 + format
   let base64 = imageBase64OrUrl;
   let format = 'jpg';
   const mtMatch = imageBase64OrUrl.match(/^data:image\/(\w+);base64,(.+)$/);
@@ -98,7 +107,6 @@ export async function runClovaReceiptOcr(
     format = mtMatch[1] === 'jpeg' ? 'jpg' : mtMatch[1];
     base64 = mtMatch[2];
   } else if (imageBase64OrUrl.startsWith('http')) {
-    // 외부 URL → 다운로드
     try {
       const r = await fetch(imageBase64OrUrl);
       if (!r.ok) return null;
@@ -120,6 +128,7 @@ export async function runClovaReceiptOcr(
     images: [{ format, name: 'receipt', data: base64 }],
   };
 
+  let json: GeneralResponse;
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -133,60 +142,25 @@ export async function runClovaReceiptOcr(
       console.warn('[CLOVA OCR] HTTP', res.status, await res.text().catch(() => ''));
       return null;
     }
-    const json = (await res.json()) as ClovaResponse;
-    const img = json.images?.[0];
-    if (!img || img.inferResult !== 'SUCCESS' || !img.receipt?.result) {
-      console.warn('[CLOVA OCR] inferResult', img?.inferResult, img?.message);
-      return null;
-    }
-    const r = img.receipt.result;
-
-    // 가게명
-    const storeName =
-      r.storeInfo?.name?.formatted?.value || r.storeInfo?.name?.text || undefined;
-
-    // 날짜 — formatted 가 yyyy/mm/dd 같은 식으로 분리됨
-    let date: string | undefined;
-    const yr = r.paymentInfo?.date?.formatted?.year;
-    const mo = r.paymentInfo?.date?.formatted?.month;
-    const dy = r.paymentInfo?.date?.formatted?.day;
-    if (yr && mo && dy) {
-      date = `${yr}-${mo.padStart(2, '0')}-${dy.padStart(2, '0')}`;
-    }
-
-    // 결제수단
-    const paymentMethod =
-      r.paymentInfo?.cardCompany?.formatted?.value ||
-      r.paymentInfo?.cardCompany?.text ||
-      undefined;
-
-    // 합계
-    const total = numFromText(
-      r.totalPrice?.price?.formatted?.value || r.totalPrice?.price?.text,
-    );
-
-    // 품목들 (subResults[].items[])
-    const items: ClovaReceiptItem[] = [];
-    for (const sr of r.subResults ?? []) {
-      for (const it of sr.items ?? []) {
-        const itemName =
-          it.name?.formatted?.value || it.name?.text || '';
-        if (!itemName.trim()) continue;
-        const count = numFromText(
-          it.count?.formatted?.value || it.count?.text,
-        );
-        const unitPrice = numFromText(
-          it.unitPrice?.formatted?.value || it.unitPrice?.text,
-        );
-        const price =
-          numFromText(it.price?.formatted?.value || it.price?.text) ?? 0;
-        items.push({ name: itemName.trim(), count, unitPrice, price });
-      }
-    }
-
-    return { storeName, date, total, items, paymentMethod };
+    json = (await res.json()) as GeneralResponse;
   } catch (e) {
-    console.warn('[CLOVA OCR] error', (e as Error).message);
+    console.warn('[CLOVA OCR] fetch error', (e as Error).message);
     return null;
   }
+
+  const img = json.images?.[0];
+  if (!img || img.inferResult !== 'SUCCESS' || !img.fields) {
+    console.warn('[CLOVA OCR] inferResult', img?.inferResult, img?.message);
+    return null;
+  }
+
+  const lines = fieldsToLines(img.fields);
+  const rawText = lines.join('\n');
+
+  // 구조 파싱은 호출자가 GPT 로 후처리.
+  // 여기서는 텍스트만 반환 (items 빈 배열).
+  return {
+    items: [],
+    rawText,
+  };
 }
