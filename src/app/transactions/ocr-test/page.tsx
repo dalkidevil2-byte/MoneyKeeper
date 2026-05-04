@@ -40,20 +40,26 @@ export default function OcrTestPage() {
     setClovaResult(null);
     setGptResult(null);
     try {
+      const compressed = await compressImage(file, 1600, 0.85);
       const fd = new FormData();
-      fd.append('file', file);
+      fd.append('file', compressed, 'receipt.jpg');
       const t0 = Date.now();
       const res = await fetch('/api/transactions/ocr-compare', {
         method: 'POST',
         body: fd,
       });
       const elapsed = Date.now() - t0;
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      setClovaConfigured(json.clova_configured);
-      setClovaResult(json.clova);
-      setGptResult(json.gpt);
-      // 둘 다 같이 처리됐으니 공통 시간 (참고용)
+      const text = await res.text();
+      let json: Record<string, unknown>;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`서버 응답 파싱 실패: ${text.slice(0, 200)}`);
+      }
+      if (!res.ok) throw new Error((json.error as string) ?? `HTTP ${res.status}`);
+      setClovaConfigured(json.clova_configured as boolean);
+      setClovaResult(json.clova as Result | null);
+      setGptResult(json.gpt as Result | null);
       setClovaMs(elapsed);
       setGptMs(elapsed);
     } catch (e) {
@@ -61,6 +67,40 @@ export default function OcrTestPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * 이미지 리사이즈 + JPEG 압축 (긴 변 maxSize 픽셀로 축소).
+   * 카메라 원본은 4MB 이상이라 Vercel/CLOVA 가 거부 → 1600px JPEG q0.85 ≈ 300KB.
+   */
+  const compressImage = async (file: File, maxSize: number, quality: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('canvas context 실패'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('blob 변환 실패'));
+          },
+          'image/jpeg',
+          quality,
+        );
+      };
+      img.onerror = () => reject(new Error('이미지 로드 실패'));
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   return (
