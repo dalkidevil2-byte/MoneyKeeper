@@ -118,6 +118,7 @@ export default function StockImportFromImage({ onClose, onSaved }: Props) {
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm"
       onClick={onClose}
@@ -242,29 +243,31 @@ export default function StockImportFromImage({ onClose, onSaved }: Props) {
           )}
         </div>
       </div>
-
-      {editing && (
-        <StockTransactionSheet
-          mode="create"
-          prefill={{
-            account_id: guessAccountId(editing.trade.broker_hint),
-            ticker: editing.trade.ticker,
-            company_name: editing.trade.company_name,
-            type: editing.trade.type,
-            date: editing.trade.date,
-            quantity: editing.trade.quantity,
-            price: editing.trade.price,
-            fee: editing.trade.fee,
-            tax: editing.trade.tax,
-          }}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            const idx = trades.indexOf(editing.trade);
-            setEditing(null);
-            if (idx >= 0) onTradeSaved(idx);
-          }}
-        />
-      )}
     </div>
+
+    {/* StockTransactionSheet 는 외곽 div 밖으로 — bubble 로 onClose 발화 방지 */}
+    {editing && (
+      <StockTransactionSheet
+        mode="create"
+        prefill={{
+          account_id: guessAccountId(editing.trade.broker_hint),
+          ticker: editing.trade.ticker,
+          company_name: editing.trade.company_name,
+          type: editing.trade.type,
+          date: editing.trade.date,
+          quantity: editing.trade.quantity,
+          price: editing.trade.price,
+          fee: editing.trade.fee,
+          tax: editing.trade.tax,
+        }}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          const idx = trades.indexOf(editing.trade);
+          setEditing(null);
+          if (idx >= 0) onTradeSaved(idx);
+        }}
+      />
+    )}
+    </>
   );
 }
