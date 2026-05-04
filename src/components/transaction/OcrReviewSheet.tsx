@@ -148,6 +148,13 @@ export default function OcrReviewSheet({ result, paymentMethods, accounts = [], 
 
         {/* 스크롤 영역 */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+          {/* ⚠️ AI 인식 결과 검토 안내 — 마트 영수증 등 복잡한 영수증은 금액 오인식 가능 */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 leading-relaxed">
+            <div className="font-bold mb-0.5">⚠️ 금액 확인 필수</div>
+            AI 가 자동 추출했지만 마트 영수증처럼 복잡한 경우 <b>금액이 부정확할 수 있어요</b>.
+            저장 전에 각 항목 금액과 합계를 꼭 확인 / 수정해주세요.
+          </div>
+
           {/* 날짜 / 결제수단 / 결제자 */}
           <div className="bg-gray-50 rounded-2xl p-3 space-y-2">
             <div className="grid grid-cols-2 gap-2">
