@@ -12,6 +12,7 @@ import OpenAI from 'openai';
 import { logAiUsage } from '@/lib/ai-usage';
 import { classifyImage } from '@/lib/image-classifier';
 import { runStockOcr } from '@/lib/stock-ocr';
+import { runReceiptOcr } from '@/lib/receipt-ocr';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -639,41 +640,9 @@ async function handleReceiptPhoto(
     if (!filePath) throw new Error('파일 경로 못 받음');
     const imageUrl = `https://api.telegram.org/file/bot${tg.bot_token}/${filePath}`;
 
-    // 2) OCR 호출 — 같은 origin 의 OCR endpoint 재사용
-    const origin = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://m-keeper-zgo7-git-main-dalkidevil2-6147s-projects.vercel.app';
-    const ocrRes = await fetch(`${origin}/api/transactions/ocr?secret=${process.env.CRON_SECRET ?? ''}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        imageUrl,
-        household_id: householdId,
-      }),
-    });
-
-    if (!ocrRes.ok) {
-      const txt = await ocrRes.text();
-      throw new Error(`OCR ${ocrRes.status}: ${txt.slice(0, 100)}`);
-    }
-    const ocrJson = await ocrRes.json();
-    // OCR endpoint 응답 구조: { result: { store_name, date, items, total } }
-    // 옛날 코드는 ocrJson.items 로 직접 읽으려 해서 항상 빈 배열 → 항상 "영수증 못 읽었어요" 였음. 수정.
-    const result = (ocrJson.result ?? ocrJson) as {
-      store_name?: string;
-      date?: string;
-      total?: number;
-      items?: Array<{
-        name: string;
-        amount: number;
-        category_main?: string;
-        category_sub?: string;
-      }>;
-    };
-    const items = (result.items ?? []) as Array<{
-      name: string;
-      amount: number;
-      category_main?: string;
-      category_sub?: string;
-    }>;
+    // 2) OCR — lib 에서 직접 호출 (HTTP 우회)
+    const result = await runReceiptOcr(imageUrl, householdId);
+    const items = result.items;
     const storeName = result.store_name ?? '';
     const date = result.date || dayjs().format('YYYY-MM-DD');
     const total = result.total ?? items.reduce((s, i) => s + (i.amount ?? 0), 0);
