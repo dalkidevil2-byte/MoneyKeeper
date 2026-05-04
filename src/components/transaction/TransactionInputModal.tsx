@@ -395,7 +395,13 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   // OCR 확인 후 등록: 거래 1건 + items 테이블
   const handleOcrConfirm = async (
     items: any[],
-    meta: { date: string; payment_method_id: string; member_id: string; saveImage: boolean }
+    meta: {
+      date: string;
+      payment_method_id: string;
+      account_from_id?: string;
+      member_id: string;
+      saveImage: boolean;
+    },
   ) => {
     const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
     const storeName = ocrResult?.store_name || '마트';
@@ -443,6 +449,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
         category_main: topCat,
         category_sub: topSub,
         payment_method_id: meta.payment_method_id || null,
+        account_from_id: meta.account_from_id || null,
         member_id: meta.member_id || null,
         memo: `OCR 등록 (${items.length}개 품목)`,
         input_type: 'receipt',
@@ -492,6 +499,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       <OcrReviewSheet
         result={ocrResult}
         paymentMethods={paymentMethods}
+        accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
         members={members}
         onConfirm={handleOcrConfirm}
         onClose={() => setOcrResult(null)}

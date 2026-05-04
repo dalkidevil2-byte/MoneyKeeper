@@ -31,12 +31,22 @@ interface Props {
     payment_hint: string;
   };
   paymentMethods: { id: string; name: string }[];
+  accounts?: { id: string; name: string }[];
   members: { id: string; name: string; color: string }[];
-  onConfirm: (items: OcrItem[], meta: { date: string; payment_method_id: string; member_id: string; saveImage: boolean }) => void;
+  onConfirm: (
+    items: OcrItem[],
+    meta: {
+      date: string;
+      payment_method_id: string;
+      account_from_id?: string;
+      member_id: string;
+      saveImage: boolean;
+    },
+  ) => void;
   onClose: () => void;
 }
 
-export default function OcrReviewSheet({ result, paymentMethods, members, onConfirm, onClose }: Props) {
+export default function OcrReviewSheet({ result, paymentMethods, accounts = [], members, onConfirm, onClose }: Props) {
   // 사용자 정의 카테고리 머지
   const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
 
@@ -100,6 +110,7 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
   };
   const [date, setDate] = useState(sanitizeDate(result.date));
   const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [accountFromId, setAccountFromId] = useState('');
   const [memberId, setMemberId] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saveImage, setSaveImage] = useState(false);
@@ -150,16 +161,42 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">결제수단</label>
+                <label className="text-xs text-gray-400 mb-1 block">결제수단/계좌</label>
                 <select
-                  value={paymentMethodId}
-                  onChange={(e) => setPaymentMethodId(e.target.value)}
+                  value={
+                    paymentMethodId
+                      ? paymentMethodId
+                      : accountFromId
+                        ? `account:${accountFromId}`
+                        : ''
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.startsWith('account:')) {
+                      setAccountFromId(val.slice('account:'.length));
+                      setPaymentMethodId('');
+                    } else {
+                      setPaymentMethodId(val);
+                      setAccountFromId('');
+                    }
+                  }}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none"
                 >
                   <option value="">선택 안함</option>
-                  {paymentMethods.map((pm) => (
-                    <option key={pm.id} value={pm.id}>{pm.name}</option>
-                  ))}
+                  {paymentMethods.length > 0 && (
+                    <optgroup label="💳 결제수단">
+                      {paymentMethods.map((pm) => (
+                        <option key={pm.id} value={pm.id}>{pm.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {accounts.length > 0 && (
+                    <optgroup label="🏦 계좌">
+                      {accounts.map((a) => (
+                        <option key={a.id} value={`account:${a.id}`}>{a.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
             </div>
@@ -385,7 +422,15 @@ export default function OcrReviewSheet({ result, paymentMethods, members, onConf
               취소
             </button>
             <button
-              onClick={() => onConfirm(selectedItems, { date, payment_method_id: paymentMethodId, member_id: memberId, saveImage })}
+              onClick={() =>
+                onConfirm(selectedItems, {
+                  date,
+                  payment_method_id: paymentMethodId,
+                  account_from_id: accountFromId || undefined,
+                  member_id: memberId,
+                  saveImage,
+                })
+              }
               disabled={selectedItems.length === 0}
               className="flex-[2] py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
             >
