@@ -63,32 +63,33 @@ async function parseReceiptTextWithGPT(
       messages: [
         {
           role: 'user',
-          content: `한국 영수증 OCR raw 텍스트에서 가게명/날짜/품목/금액/합계 + 카테고리 분류.
+          content: `한국 영수증 OCR raw 텍스트 → 가게명/날짜/품목/금액/합계 + 카테고리.
 
 [OCR 텍스트]
 ${rawText}
 
-[한국 마트 영수증 컬럼 구조]
-한 줄: <상품명> <단가> <수량> <금액>
-예: "카스캔500ML  2,300  2  4,600"
-- 단가: 1개당 가격
-- 수량: 작은 정수 (1~9)
-- 금액: 단가×수량 = ⭐️ 이 값을 amount 로
+[컬럼 흩어짐 — CLOVA general OCR 은 자주 컬럼이 묶임]
+표 형식 (상품명 / 단가 / 수량 / 금액).
+OCR 결과 패턴:
+- 합쳐진 경우: "카스캔500ML 2,300 2 4,600"
+- 흩어진 경우: 상품명들 → 단가들 → 수량들 → 금액들 따로 묶임
+  → 같은 인덱스끼리 매칭
 
-⚠️ 수량(작은 정수)을 amount 로 읽지 마. 줄에서 **가장 큰 숫자 = 금액**.
-⚠️ TOTAL/합계/총액 행은 items 에 포함 X.
+[금액 식별]
+- "금액" 컬럼/영수증 끝쪽 큰 숫자 = item.amount
+- "단가"·"수량" X
+- "총합계"/"결제금액"/"총액" 옆 큰 숫자 = total
 
-[검증]
-- items.amount 합 ≈ total. 안 맞으면 다시 검토.
-- 추측 금지. 명확히 안 보이면 생략.
+[검증 필수]
+- items.amount 합 ≈ total. ±5% 넘게 차이나면 매칭 잘못 → 수량을 amount 로 잘못 읽었을 가능성.
+- 못 맞으면 그 항목 생략하는 게 잘못된 값 넣는 것보다 나음.
 
-[카테고리]
-${allMains.join(', ')} 중 어울리는 것.
+[카테고리] ${allMains.join(', ')} 중 어울리는 것.
 
 응답:
 {
   "store_name": "...",
-  "date": "YYYY-MM-DD 또는 빈 문자열",
+  "date": "YYYY-MM-DD",
   "items": [{"name":"...", "amount":숫자, "quantity":숫자, "category_main":"...", "category_sub":""}],
   "total": 숫자,
   "payment_hint": "현금/카드 등"
