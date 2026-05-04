@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateBriefing, type BriefingMode } from '@/lib/daily-briefing';
 import { sendPushToHousehold, isPushConfigured } from '@/lib/web-push';
+import { sendTelegramMessage } from '@/lib/telegram';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -39,7 +41,47 @@ async function handle(req: NextRequest) {
       });
       pushed = { sent: r.sent, failed: r.failed };
     }
-    return NextResponse.json({ ok: true, mode, title, body, pushed });
+
+    // ─── 텔레그램 발송 ───
+    let telegram: { sent: number; failed: number } | null = null;
+    if (push) {
+      try {
+        const supabase = createServerSupabaseClient();
+        const { data: tg } = await supabase
+          .from('telegram_settings')
+          .select('bot_token, enabled')
+          .eq('household_id', householdId)
+          .maybeSingle();
+        if (tg?.bot_token && tg.enabled !== false) {
+          // chat_id 있는 활성 멤버들한테 발송
+          const { data: members } = await supabase
+            .from('members')
+            .select('telegram_chat_id, name')
+            .eq('household_id', householdId)
+            .eq('is_active', true)
+            .not('telegram_chat_id', 'is', null);
+          let sent = 0;
+          let failed = 0;
+          for (const m of members ?? []) {
+            const chatId = m.telegram_chat_id as string;
+            if (!chatId) continue;
+            try {
+              const text = `<b>${title}</b>\n\n${body}`;
+              await sendTelegramMessage(tg.bot_token, chatId, text);
+              sent++;
+            } catch (e) {
+              failed++;
+              console.warn('[briefing tg]', m.name, (e as Error).message);
+            }
+          }
+          telegram = { sent, failed };
+        }
+      } catch (e) {
+        console.warn('[briefing telegram block]', e);
+      }
+    }
+
+    return NextResponse.json({ ok: true, mode, title, body, pushed, telegram });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : '실패' },
