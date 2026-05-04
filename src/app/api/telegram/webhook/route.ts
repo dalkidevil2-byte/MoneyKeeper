@@ -401,7 +401,7 @@ async function handlePhoto(
 
   // 캡션에 강제 키워드 있으면 분류기 무시하고 직접 라우팅
   const caption = (message.caption ?? '').toLowerCase();
-  const STOCK_KEYWORDS = ['주식', '거래내역', '체결', '매수', '매도', '키움', '미래에셋', '삼성증권', '한투', '한국투자', '토스증권', 'nh투자', '신한투자', 'kb증권', '대신', '메리츠'];
+  const STOCK_KEYWORDS = ['주식', '거래내역', '체결', '매수', '매도', '구매', '판매', '키움', '미래에셋', '삼성증권', '한투', '한국투자', '토스증권', 'nh투자', '신한투자', 'kb증권', '카카오뱅크증권', '대신', '메리츠'];
   const RECEIPT_KEYWORDS = ['영수증', '가계부'];
   const forcedStock = STOCK_KEYWORDS.some((k) => caption.includes(k));
   const forcedReceipt = RECEIPT_KEYWORDS.some((k) => caption.includes(k));
