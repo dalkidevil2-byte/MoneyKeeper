@@ -29,7 +29,19 @@ export async function classifyImage(
       if (r.ok) {
         const ab = await r.arrayBuffer();
         const b64 = Buffer.from(ab).toString('base64');
-        const mt = r.headers.get('content-type') ?? 'image/jpeg';
+        // Telegram 은 application/octet-stream 같이 응답할 수 있어 OpenAI 가 거부함.
+        // URL 확장자 우선, header 는 fallback. 둘 다 없으면 image/jpeg.
+        const lower = imageUrl.toLowerCase();
+        const ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        let mt = 'image/jpeg';
+        if (lower.includes('.png')) mt = 'image/png';
+        else if (lower.includes('.gif')) mt = 'image/gif';
+        else if (lower.includes('.webp')) mt = 'image/webp';
+        else if (lower.includes('.jpg') || lower.includes('.jpeg')) mt = 'image/jpeg';
+        else {
+          const headerType = r.headers.get('content-type');
+          if (headerType && ALLOWED.includes(headerType)) mt = headerType;
+        }
         finalUrl = `data:${mt};base64,${b64}`;
       }
     } catch {

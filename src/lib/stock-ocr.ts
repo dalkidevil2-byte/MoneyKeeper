@@ -27,6 +27,17 @@ export type StockOcrResult = {
   accounts: Array<{ id: string; broker_name: string; owner_id: string }>;
 };
 
+function inferImageMime(url: string, headerType?: string | null): string {
+  const ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const lower = url.toLowerCase();
+  if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
+  if (lower.includes('.png')) return 'image/png';
+  if (lower.includes('.gif')) return 'image/gif';
+  if (lower.includes('.webp')) return 'image/webp';
+  if (headerType && ALLOWED.includes(headerType)) return headerType;
+  return 'image/jpeg';
+}
+
 function extractJSON(raw: string): string {
   let s = raw.replace(/```json\n?|```/g, '').trim();
   const start = s.indexOf('{');
@@ -65,7 +76,7 @@ export async function runStockOcr(
       if (r.ok) {
         const ab = await r.arrayBuffer();
         const b64 = Buffer.from(ab).toString('base64');
-        const mt = r.headers.get('content-type') ?? 'image/jpeg';
+        const mt = inferImageMime(imageUrl, r.headers.get('content-type'));
         finalUrl = `data:${mt};base64,${b64}`;
       }
     } catch {
