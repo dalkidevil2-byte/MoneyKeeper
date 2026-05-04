@@ -13,6 +13,7 @@ import {
   Coins,
   X,
   Star,
+  Search,
 } from 'lucide-react';
 import {
   aggregateByTicker,
@@ -58,6 +59,7 @@ export default function PortfolioPage() {
   // 필터
   const [ownerFilter, setOwnerFilter] = useState<string | null>(null);
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   // 데이터 로드 (거래 + 소유자 + 계좌)
   const loadAll = useCallback(async () => {
@@ -252,6 +254,7 @@ export default function PortfolioPage() {
   }, [aggregated, quotes, filteredTxs, filteredFlows]);
 
   const sorted = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return aggregated
       .map((a) => {
         const p = quotes[a.ticker]?.regularMarketPrice ?? a.avgPrice;
@@ -260,6 +263,13 @@ export default function PortfolioPage() {
         const pct = a.invested > 0 ? (unrealized / a.invested) * 100 : 0;
         return { ...a, currentPrice: p, value, unrealized, pct };
       })
+      .filter((a) => {
+        if (!q) return true;
+        return (
+          a.ticker.toLowerCase().includes(q) ||
+          (a.companyName ?? '').toLowerCase().includes(q)
+        );
+      })
       .sort((a, b) => {
         // 즐겨찾기 우선 → 그다음 평가액 내림차순
         const aFav = favorites.has(a.ticker) ? 1 : 0;
@@ -267,7 +277,7 @@ export default function PortfolioPage() {
         if (aFav !== bFav) return bFav - aFav;
         return b.value - a.value;
       });
-  }, [aggregated, quotes, favorites]);
+  }, [aggregated, quotes, favorites, search]);
 
   const hasFilter = ownerFilter || accountFilter;
 
@@ -383,6 +393,28 @@ export default function PortfolioPage() {
             </Link>
           </div>
         </div>
+
+        {/* 검색 */}
+        {aggregated.length > 0 && (
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="종목명 / 티커 검색"
+              className="w-full pl-9 pr-9 py-2 rounded-xl bg-gray-100 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400"
+                aria-label="검색 지우기"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 필터: 소유자 */}
         {owners.length > 0 && (
