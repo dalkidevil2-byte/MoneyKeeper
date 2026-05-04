@@ -141,12 +141,15 @@ export default function AssetHistoryChart() {
   const pct = first > 0 ? (diff / first) * 100 : 0;
   const isUp = diff >= 0;
 
-  // 일별 변화 (전 거래일 대비)
+  // 일별 변화 + 수익률 (손익 / 시드머니)
   const withChange = history.map((p, i) => {
     const prev = i > 0 ? history[i - 1] : null;
     const change = prev ? p.total_value - prev.total_value : 0;
     const changePct = prev && prev.total_value > 0 ? (change / prev.total_value) * 100 : 0;
-    return { ...p, change, changePct };
+    const seed = p.seed_money ?? 0;
+    const pnl = p.pnl ?? 0;
+    const returnPct = seed > 0 ? (pnl / seed) * 100 : 0;
+    return { ...p, change, changePct, returnPct };
   });
 
   return (
@@ -189,7 +192,7 @@ export default function AssetHistoryChart() {
         </div>
       </div>
 
-      <div className="flex items-baseline gap-2 mb-2">
+      <div className="flex items-baseline gap-2 mb-2 flex-wrap">
         <div className="text-2xl font-bold text-gray-900">
           {last.toLocaleString('ko-KR')}원
         </div>
@@ -199,6 +202,18 @@ export default function AssetHistoryChart() {
           {diff.toLocaleString('ko-KR')}원 ({isUp ? '+' : ''}
           {pct.toFixed(2)}%)
         </div>
+        {(() => {
+          const lastEntry = withChange[withChange.length - 1];
+          if (!lastEntry || !lastEntry.seed_money || lastEntry.seed_money <= 0) return null;
+          const r = lastEntry.returnPct;
+          return (
+            <div className={`text-xs font-semibold ml-auto ${r >= 0 ? 'text-rose-500' : 'text-blue-500'}`}>
+              <span className="text-gray-400">수익률 </span>
+              {r >= 0 ? '+' : ''}
+              {r.toFixed(2)}%
+            </div>
+          );
+        })()}
       </div>
       <div className="text-[11px] text-gray-400 mb-2">
         {dayjs(history[0].date).format('M/D')} ~ {dayjs(history[history.length - 1].date).format('M/D')}
@@ -284,8 +299,9 @@ export default function AssetHistoryChart() {
                 <th className="text-left py-1.5 px-2 font-medium">날짜</th>
                 <th className="text-right py-1.5 px-2 font-medium">총 평가</th>
                 <th className="text-right py-1.5 px-2 font-medium">전일 대비</th>
-                <th className="text-right py-1.5 px-2 font-medium">시드머니</th>
+                <th className="text-right py-1.5 px-2 font-medium">시드</th>
                 <th className="text-right py-1.5 px-2 font-medium">손익</th>
+                <th className="text-right py-1.5 px-2 font-medium">수익률</th>
               </tr>
             </thead>
             <tbody>
@@ -325,6 +341,15 @@ export default function AssetHistoryChart() {
                     >
                       {(p.pnl ?? 0) >= 0 ? '+' : ''}
                       {(p.pnl ?? 0).toLocaleString('ko-KR')}
+                    </td>
+                    <td
+                      className={`text-right py-1.5 px-2 font-semibold tabular-nums ${
+                        p.returnPct >= 0 ? 'text-rose-500' : 'text-blue-500'
+                      }`}
+                    >
+                      {!p.seed_money || p.seed_money <= 0
+                        ? '-'
+                        : `${p.returnPct >= 0 ? '+' : ''}${p.returnPct.toFixed(2)}%`}
                     </td>
                   </tr>
                 );
