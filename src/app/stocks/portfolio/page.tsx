@@ -14,6 +14,7 @@ import {
   X,
   Star,
   Search,
+  Camera,
 } from 'lucide-react';
 import {
   aggregateByTicker,
@@ -24,6 +25,7 @@ import {
   type CashFlow,
 } from '@/lib/stock-holdings';
 import StockTransactionSheet from '@/components/stock/StockTransactionSheet';
+import StockImportFromImage from '@/components/stock/StockImportFromImage';
 import HoldingDetailSheet from '@/components/stock/HoldingDetailSheet';
 
 type Quote = {
@@ -53,6 +55,8 @@ export default function PortfolioPage() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedHolding | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
@@ -616,19 +620,89 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* FAB: 거래 추가 */}
+      {/* FAB: 거래 추가 — 클릭 시 입력 방식 선택 시트 */}
       <button
-        onClick={() => setSheetOpen(true)}
+        onClick={() => setAddMenuOpen(true)}
         className="fixed bottom-24 right-1/2 translate-x-[calc(min(50vw,256px)-32px)] w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg active:bg-indigo-700 flex items-center justify-center z-30"
         title="거래 추가"
       >
         <Plus size={24} strokeWidth={2.5} />
       </button>
 
+      {/* 입력 방식 선택 시트 */}
+      {addMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center"
+          onClick={() => setAddMenuOpen(false)}
+        >
+          <div
+            className="w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-4 space-y-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-sm font-bold text-gray-900 mb-1">
+              거래 추가 방식
+            </div>
+            <button
+              onClick={() => {
+                setAddMenuOpen(false);
+                setImporting(true);
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-xl bg-violet-50 hover:bg-violet-100 active:bg-violet-200 text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-violet-600 text-white flex items-center justify-center shrink-0">
+                <Camera size={20} strokeWidth={2.5} />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-gray-900">
+                  ✨ 캡쳐 등록 (AI 분석)
+                </div>
+                <div className="text-xs text-gray-500">
+                  증권사 캡쳐 → 자동 추출
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setAddMenuOpen(false);
+                setSheetOpen(true);
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                <Plus size={20} strokeWidth={2.5} />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-gray-900">
+                  ✏️ 직접 입력
+                </div>
+                <div className="text-xs text-gray-500">
+                  종목·수량·단가 수동 입력
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => setAddMenuOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 mt-1"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
       {sheetOpen && (
         <StockTransactionSheet
           mode="create"
           onClose={() => setSheetOpen(false)}
+          onSaved={() => {
+            loadAll();
+          }}
+        />
+      )}
+
+      {importing && (
+        <StockImportFromImage
+          onClose={() => setImporting(false)}
           onSaved={() => {
             loadAll();
           }}
