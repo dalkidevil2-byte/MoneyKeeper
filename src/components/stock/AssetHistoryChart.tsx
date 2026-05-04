@@ -54,6 +54,40 @@ export default function AssetHistoryChart() {
     );
   }
 
+  if (history.length === 1) {
+    return (
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="text-base font-bold text-gray-900">📈 자산 추세</h2>
+          <div className="flex gap-1">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
+                  range === r.key
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="text-2xl font-bold text-gray-900 mb-1">
+          {history[0].total_value.toLocaleString('ko-KR')}원
+        </div>
+        <div className="text-[11px] text-gray-400 mb-3">
+          {dayjs(history[0].date).format('M월 D일')} 기준 첫 기록
+        </div>
+        <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
+          💡 추세 그래프는 <b>2일 이상</b> 기록이 쌓여야 그려집니다. 매일 16:00 자동 누적되면 자연스럽게 선으로 표시돼요.
+        </div>
+      </div>
+    );
+  }
+
   const first = history[0]?.total_value ?? 0;
   const last = history[history.length - 1]?.total_value ?? 0;
   const diff = last - first;
