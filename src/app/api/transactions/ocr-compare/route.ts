@@ -33,20 +33,38 @@ export async function POST(req: NextRequest) {
   ]);
 
   // CLOVA raw text → GPT 로 구조 파싱
-  let clovaParsed: Awaited<ReturnType<typeof runGptOnly>> | null = null;
+  let clovaParsed: unknown = null;
+  let clovaParseError: string | null = null;
   if (clovaResult?.rawText && clovaResult.rawText.length > 30) {
-    clovaParsed = await parseClovaText(clovaResult.rawText).catch(() => null);
+    try {
+      const r = await parseClovaText(clovaResult.rawText);
+      const obj = r as Record<string, unknown>;
+      if (obj?._error) {
+        clovaParseError = obj._error as string;
+        clovaParsed = null;
+      } else {
+        clovaParsed = r;
+      }
+    } catch (e) {
+      clovaParseError = e instanceof Error ? e.message : String(e);
+    }
+  } else if (clovaResult && (!clovaResult.rawText || clovaResult.rawText.length <= 30)) {
+    clovaParseError = `CLOVA raw text 너무 짧음 (${clovaResult.rawText?.length ?? 0}자)`;
+  } else if (!clovaResult) {
+    clovaParseError = 'CLOVA 응답 없음 (env / 인증 / API 호출 실패)';
   }
 
   return NextResponse.json({
     clova_configured: isClovaConfigured(),
     clova_raw_text: clovaResult?.rawText ?? null,
     clova: clovaParsed,
+    clova_parse_error: clovaParseError,
     gpt: gptResult,
   });
 }
 
 async function parseClovaText(rawText: string) {
+  let raw = '';
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -90,9 +108,11 @@ ${rawText}
         },
       ],
     });
-    return JSON.parse(response.choices[0]?.message?.content ?? '{}');
-  } catch {
-    return null;
+    raw = response.choices[0]?.message?.content ?? '{}';
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn('[parseClovaText]', (e as Error).message, raw.slice(0, 200));
+    return { _error: (e as Error).message, _raw: raw.slice(0, 500) };
   }
 }
 

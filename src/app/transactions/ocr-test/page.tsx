@@ -26,6 +26,7 @@ export default function OcrTestPage() {
   const [clovaConfigured, setClovaConfigured] = useState(true);
   const [clovaResult, setClovaResult] = useState<Result | null>(null);
   const [clovaRawText, setClovaRawText] = useState<string | null>(null);
+  const [clovaParseError, setClovaParseError] = useState<string | null>(null);
   const [gptResult, setGptResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,6 +62,7 @@ export default function OcrTestPage() {
       setClovaConfigured(json.clova_configured as boolean);
       setClovaResult(json.clova as Result | null);
       setClovaRawText((json.clova_raw_text as string | null) ?? null);
+      setClovaParseError((json.clova_parse_error as string | null) ?? null);
       setGptResult(json.gpt as Result | null);
       setClovaMs(elapsed);
       setGptMs(elapsed);
@@ -166,6 +168,11 @@ export default function OcrTestPage() {
 
         {(clovaResult || gptResult || clovaRawText) && !busy && (
           <>
+            {clovaParseError && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-xs">
+                ⚠️ CLOVA 파싱 에러: <code className="font-mono">{clovaParseError}</code>
+              </div>
+            )}
             <div className="grid sm:grid-cols-2 gap-3">
               <ResultCard
                 title="🟢 CLOVA OCR + GPT 파싱"
