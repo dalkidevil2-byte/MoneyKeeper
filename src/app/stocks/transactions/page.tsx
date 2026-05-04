@@ -355,13 +355,13 @@ export default function StockTransactionsPage() {
       </div>
 
       {/* FAB — 캡쳐 등록 + 직접 입력 */}
-      <div className="fixed bottom-24 right-1/2 translate-x-[calc(min(50vw,256px)-32px)] flex flex-col items-end gap-2 z-30">
+      <div className="fixed bottom-24 right-1/2 translate-x-[calc(min(50vw,256px)-32px)] flex flex-col items-center gap-2 z-30">
         <button
           onClick={() => setImporting(true)}
-          className="w-12 h-12 rounded-full bg-violet-600 text-white shadow-lg active:bg-violet-700 flex items-center justify-center"
+          className="w-14 h-14 rounded-full bg-violet-600 text-white shadow-lg active:bg-violet-700 flex items-center justify-center"
           title="캡쳐로 등록 (AI)"
         >
-          <Camera size={20} strokeWidth={2.5} />
+          <Camera size={22} strokeWidth={2.5} />
         </button>
         <button
           onClick={() => setSheet({ mode: 'create' })}
