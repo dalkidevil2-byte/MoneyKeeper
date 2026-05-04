@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ChevronLeft, RefreshCw, Search } from 'lucide-react';
 import StockMemoPanel from '@/components/stock/StockMemoPanel';
-import AssetHistoryChart from '@/components/stock/AssetHistoryChart';
 import {
   Line,
   LineChart as ReLineChart,
@@ -202,9 +201,6 @@ function ChartPageInner() {
       </div>
 
       <div className="max-w-lg mx-auto px-5 pt-4 space-y-4">
-        {/* 자산 추세 — 매일 종가 기준 누적 */}
-        <AssetHistoryChart />
-
         {/* 종목 검색 */}
         <div className="relative">
           <Search

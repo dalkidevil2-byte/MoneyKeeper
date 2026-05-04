@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   RefreshCw,
   Plus,
   List as ListIcon,
@@ -26,6 +28,7 @@ import {
 } from '@/lib/stock-holdings';
 import StockTransactionSheet from '@/components/stock/StockTransactionSheet';
 import StockImportFromImage from '@/components/stock/StockImportFromImage';
+import AssetHistoryChart from '@/components/stock/AssetHistoryChart';
 import HoldingDetailSheet from '@/components/stock/HoldingDetailSheet';
 
 type Quote = {
@@ -57,6 +60,7 @@ export default function PortfolioPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [trendOpen, setTrendOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedHolding | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
@@ -396,7 +400,21 @@ export default function PortfolioPage() {
               </div>
             </Link>
           </div>
+
+          {/* 자산 추세 펼치기 토글 */}
+          {!hasFilter && (
+            <button
+              onClick={() => setTrendOpen((p) => !p)}
+              className="mt-4 -mb-1 w-full flex items-center justify-center gap-1 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            >
+              📈 자산 추세 {trendOpen ? '접기' : '펼치기'}
+              {trendOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          )}
         </div>
+
+        {/* 자산 추세 차트 — 펼쳤을 때만 */}
+        {!hasFilter && trendOpen && <AssetHistoryChart />}
 
         {/* 검색 */}
         {aggregated.length > 0 && (
