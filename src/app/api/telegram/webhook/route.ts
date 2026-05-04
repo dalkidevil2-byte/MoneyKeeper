@@ -253,7 +253,10 @@ async function handleCallbackQuery(cb: {
   }
 
   const data = cb.data ?? '';
-  const [action, pendingId] = data.split(':');
+  const parts = data.split(':');
+  const action = parts[0];
+  const pendingId = parts[1];
+  const arg = parts[2]; // pickacc 의 account_id 등
 
   if (!pendingId) {
     await answerCallbackQuery(token, cb.id, '잘못된 요청');
@@ -282,6 +285,74 @@ async function handleCallbackQuery(cb: {
       .eq('id', pendingId);
     await answerCallbackQuery(token, cb.id, '시간이 지나 만료됨.');
     return NextResponse.json({ ok: false });
+  }
+
+  // 계좌 선택 — pickacc:<pendingId>:<accountId>
+  if (action === 'pickacc') {
+    if (!arg) {
+      await answerCallbackQuery(token, cb.id, '계좌 미지정');
+      return NextResponse.json({ ok: false });
+    }
+    type PendingTrade = {
+      account_id?: string;
+      broker_name?: string;
+      ticker: string;
+      company_name?: string;
+      type: 'BUY' | 'SELL';
+      date: string;
+      quantity: number;
+      price: number;
+      fee: number;
+      tax: number;
+    };
+    const payload = pending.payload as {
+      trades: PendingTrade[];
+      accounts: Array<{ id: string; broker_name: string }>;
+    };
+    const acc = payload.accounts.find((a) => a.id === arg);
+    if (!acc) {
+      await answerCallbackQuery(token, cb.id, '계좌 못 찾음');
+      return NextResponse.json({ ok: false });
+    }
+    // 모든 trades 에 선택된 계좌 적용
+    const updated: PendingTrade[] = payload.trades.map((t) => ({
+      ...t,
+      account_id: acc.id,
+      broker_name: acc.broker_name,
+    }));
+    await supabase
+      .from('telegram_pending_actions')
+      .update({ payload: { ...payload, trades: updated } })
+      .eq('id', pendingId);
+
+    await answerCallbackQuery(token, cb.id, `${acc.broker_name} 선택됨`);
+
+    // 계좌 확정 후 등록/취소 버튼으로 메시지 갱신
+    if (messageId) {
+      const summary = updated.map((t) => {
+        const sign = t.type === 'SELL' ? '➖' : '➕';
+        return `${sign} ${t.company_name || t.ticker} ${t.quantity}주 @ ${Number(t.price).toLocaleString()}원`;
+      });
+      const newText = `📈 <b>주식 거래내역 분석</b> (${updated.length}건)\n계좌: <b>${acc.broker_name}</b>\n\n${summary.join('\n')}\n\n등록할까요?`;
+      // editMessageText 는 reply_markup 도 같이 보낼 수 있어야 하는데 helper 가 지원 안 하면 별도 메시지로
+      try {
+        await editTelegramMessage(token, chatId, messageId, newText);
+      } catch {
+        /* ignore */
+      }
+      // 새 버튼 메시지 송신 (editMessageText 가 reply_markup 갱신 못 한다고 가정)
+      await sendTelegramMessage(token, chatId, '⤴ 위 거래를 등록할까요?', {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ 등록', callback_data: `confirm:${pendingId}` },
+              { text: '❌ 취소', callback_data: `cancel:${pendingId}` },
+            ],
+          ],
+        },
+      });
+    }
+    return NextResponse.json({ ok: true });
   }
 
   // 취소
@@ -501,35 +572,34 @@ async function handleStockBrokeragePhoto(chatId: string, imageUrl: string) {
       return NextResponse.json({ ok: false, error: 'no_account' });
     }
 
-    // 계좌 자동 매칭 — broker_hint 우선, 없으면 첫 계좌
-    const pickAccount = (brokerHint?: string) => {
-      if (brokerHint) {
-        const hit = accounts.find((a) =>
-          (a.broker_name ?? '').includes(brokerHint),
-        );
-        if (hit) return hit;
-      }
-      return accounts[0];
-    };
+    // 계좌 후보 결정
+    // - 1개 → 그것 사용
+    // - broker_hint 가 정확히 1개 매칭 → 그것 사용
+    // - 그 외 → 사용자에게 물어봄 (account_id null 로 저장 후 선택 버튼)
+    const firstHint = trades.find((t) => t.broker_hint)?.broker_hint;
+    let autoAccount: typeof accounts[0] | null = null;
+    if (accounts.length === 1) {
+      autoAccount = accounts[0];
+    } else if (firstHint) {
+      const hits = accounts.filter((a) => (a.broker_name ?? '').includes(firstHint));
+      if (hits.length === 1) autoAccount = hits[0];
+    }
 
-    // 유효한 trades 만 추려서 계좌까지 미리 매칭
+    // 유효한 trades 추리기 (계좌는 아직 미정일 수 있음)
     const prepared = trades
       .filter((t) => t.ticker && t.quantity && t.price != null)
-      .map((t) => {
-        const acc = pickAccount(t.broker_hint);
-        return {
-          account_id: acc?.id,
-          broker_name: acc?.broker_name ?? '',
-          ticker: t.ticker!,
-          company_name: t.company_name ?? '',
-          type: t.type === 'SELL' ? 'SELL' : 'BUY',
-          date: t.date || dayjs().format('YYYY-MM-DD'),
-          quantity: t.quantity!,
-          price: t.price!,
-          fee: typeof t.fee === 'number' && t.fee >= 0 ? t.fee : 0,
-          tax: typeof t.tax === 'number' && t.tax >= 0 ? t.tax : 0,
-        };
-      });
+      .map((t) => ({
+        account_id: autoAccount?.id, // null 이면 사용자가 나중에 선택
+        broker_name: autoAccount?.broker_name ?? '',
+        ticker: t.ticker!,
+        company_name: t.company_name ?? '',
+        type: (t.type === 'SELL' ? 'SELL' : 'BUY') as 'BUY' | 'SELL',
+        date: t.date || dayjs().format('YYYY-MM-DD'),
+        quantity: t.quantity!,
+        price: t.price!,
+        fee: typeof t.fee === 'number' && t.fee >= 0 ? t.fee : 0,
+        tax: typeof t.tax === 'number' && t.tax >= 0 ? t.tax : 0,
+      }));
 
     if (prepared.length === 0) {
       await sendTelegramMessage(
@@ -540,12 +610,7 @@ async function handleStockBrokeragePhoto(chatId: string, imageUrl: string) {
       return NextResponse.json({ ok: true, trades: 0 });
     }
 
-    // pending 으로 저장 → 버튼으로 사용자 확정 받기
-    const summary = prepared.map((t) => {
-      const sign = t.type === 'SELL' ? '➖' : '➕';
-      return `${sign} ${t.company_name || t.ticker} ${t.quantity}주 @ ${Number(t.price).toLocaleString()}원${t.broker_name ? ` (${t.broker_name})` : ''}`;
-    });
-
+    // pending 저장
     const { data: pending, error: pendErr } = await supabase
       .from('telegram_pending_actions')
       .insert({
@@ -553,7 +618,7 @@ async function handleStockBrokeragePhoto(chatId: string, imageUrl: string) {
         household_id: householdId,
         member_id: member.id,
         kind: 'stock_trades_import',
-        payload: { trades: prepared },
+        payload: { trades: prepared, accounts },
       })
       .select('id')
       .single();
@@ -561,8 +626,28 @@ async function handleStockBrokeragePhoto(chatId: string, imageUrl: string) {
       throw new Error(`pending 저장 실패: ${pendErr?.message}`);
     }
 
+    const summary = prepared.map((t) => {
+      const sign = t.type === 'SELL' ? '➖' : '➕';
+      return `${sign} ${t.company_name || t.ticker} ${t.quantity}주 @ ${Number(t.price).toLocaleString()}원`;
+    });
+
+    // 계좌 미정이면 — 계좌 선택 버튼만 먼저 보냄
+    if (!autoAccount) {
+      const text =
+        `📈 <b>주식 거래내역 분석</b> (${prepared.length}건)\n\n${summary.join('\n')}\n\n어느 계좌에 등록할까요?`;
+      const buttons = accounts.map((a) => [
+        { text: a.broker_name, callback_data: `pickacc:${pending.id}:${a.id}` },
+      ]);
+      buttons.push([{ text: '❌ 취소', callback_data: `cancel:${pending.id}` }]);
+      await sendTelegramMessage(tg.bot_token, chatId, text, {
+        reply_markup: { inline_keyboard: buttons },
+      });
+      return NextResponse.json({ ok: true, pending: pending.id, awaiting: 'account' });
+    }
+
+    // 계좌 자동 매칭 됐으면 바로 등록/취소 버튼
     const text =
-      `📈 <b>주식 거래내역 분석</b> (${prepared.length}건)\n\n${summary.join('\n')}\n\n등록할까요?`;
+      `📈 <b>주식 거래내역 분석</b> (${prepared.length}건)\n계좌: <b>${autoAccount.broker_name}</b>\n\n${summary.join('\n')}\n\n등록할까요?`;
     await sendTelegramMessage(tg.bot_token, chatId, text, {
       reply_markup: {
         inline_keyboard: [
