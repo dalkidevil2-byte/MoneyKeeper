@@ -20,48 +20,58 @@ export default function AssetHistoryChart() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [range, setRange] = useState<string>('30d');
   const [loading, setLoading] = useState(true);
-  const [backfilling, setBackfilling] = useState(false);
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
-
-  const reload = () => {
-    const days = RANGES.find((r) => r.key === range)?.days ?? 30;
-    const start = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
-    setLoading(true);
-    fetch(`/api/stocks/asset-history?start_date=${start}`)
-      .then((r) => r.json())
-      .then((j) => setHistory(j.history ?? []))
-      .catch(() => setHistory([]))
-      .finally(() => setLoading(false));
-  };
 
   useEffect(() => {
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
-
-  const runBackfill = async () => {
-    if (backfilling) return;
+    let cancelled = false;
     const days = RANGES.find((r) => r.key === range)?.days ?? 30;
-    setBackfilling(true);
-    setBackfillMsg(null);
-    try {
-      const res = await fetch(`/api/stocks/asset-history/backfill?days=${days}`, {
-        method: 'POST',
-      });
-      const j = await res.json();
-      if (j.ok) {
-        setBackfillMsg(`✅ ${j.days_filled}일 채움`);
-        reload();
-      } else {
-        setBackfillMsg(`⚠️ ${j.error ?? '실패'}`);
+    const start = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        // 1) 기존 기록 로드
+        const r1 = await fetch(`/api/stocks/asset-history?start_date=${start}`);
+        const j1 = await r1.json();
+        const existing: HistoryPoint[] = j1.history ?? [];
+        if (cancelled) return;
+
+        // 2) 데이터가 sparse 하면 (영업일 대비 70% 미만) 자동 backfill
+        const expectedBusinessDays = Math.round(days * (5 / 7));
+        const isSparse = existing.length < expectedBusinessDays * 0.7;
+
+        if (isSparse) {
+          setHistory(existing); // 일단 기존 데이터로 보여주고
+          // 백그라운드 backfill
+          try {
+            const r2 = await fetch(`/api/stocks/asset-history/backfill?days=${days}`, {
+              method: 'POST',
+            });
+            const j2 = await r2.json();
+            if (cancelled) return;
+            if (j2.ok) {
+              const r3 = await fetch(`/api/stocks/asset-history?start_date=${start}`);
+              const j3 = await r3.json();
+              if (cancelled) return;
+              setHistory(j3.history ?? existing);
+            }
+          } catch {
+            /* fallback to existing */
+          }
+        } else {
+          setHistory(existing);
+        }
+      } catch {
+        if (!cancelled) setHistory([]);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (e) {
-      setBackfillMsg(`⚠️ ${e instanceof Error ? e.message : '실패'}`);
-    } finally {
-      setBackfilling(false);
-      setTimeout(() => setBackfillMsg(null), 4000);
-    }
-  };
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [range]);
 
   if (loading) {
     return (
@@ -157,23 +167,10 @@ export default function AssetHistoryChart() {
           {pct.toFixed(2)}%)
         </div>
       </div>
-      <div className="text-[11px] text-gray-400 mb-2 flex items-center justify-between">
-        <span>
-          {dayjs(history[0].date).format('M/D')} ~ {dayjs(history[history.length - 1].date).format('M/D')}
-          · {history.length}일 기록
-        </span>
-        <button
-          onClick={runBackfill}
-          disabled={backfilling}
-          className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100 disabled:opacity-50"
-          title="과거 영업일 종가로 빈 곳 채우기"
-        >
-          {backfilling ? '채우는 중…' : '🔄 빈날 채우기'}
-        </button>
+      <div className="text-[11px] text-gray-400 mb-2">
+        {dayjs(history[0].date).format('M/D')} ~ {dayjs(history[history.length - 1].date).format('M/D')}
+        · {history.length}일 기록
       </div>
-      {backfillMsg && (
-        <div className="text-[11px] text-indigo-600 mb-2">{backfillMsg}</div>
-      )}
 
       <ResponsiveContainer width="100%" height={180}>
         <LineChart data={history}>
