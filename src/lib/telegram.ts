@@ -55,9 +55,42 @@ export async function sendTelegramMessage(
   token: string,
   chatId: string | number,
   text: string,
+  options?: {
+    reply_markup?: {
+      inline_keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
+    };
+  },
 ): Promise<TelegramMessage> {
-  return tgRequest<TelegramMessage>(token, 'sendMessage', {
+  const params: Record<string, unknown> = {
     chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+  };
+  if (options?.reply_markup) params.reply_markup = options.reply_markup;
+  return tgRequest<TelegramMessage>(token, 'sendMessage', params);
+}
+
+export async function answerCallbackQuery(
+  token: string,
+  callbackQueryId: string,
+  text?: string,
+): Promise<unknown> {
+  return tgRequest(token, 'answerCallbackQuery', {
+    callback_query_id: callbackQueryId,
+    text,
+  });
+}
+
+export async function editTelegramMessage(
+  token: string,
+  chatId: string | number,
+  messageId: number,
+  text: string,
+): Promise<unknown> {
+  return tgRequest(token, 'editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
     text,
     parse_mode: 'HTML',
     disable_web_page_preview: true,
