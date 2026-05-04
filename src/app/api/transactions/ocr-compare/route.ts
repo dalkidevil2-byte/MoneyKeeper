@@ -73,7 +73,7 @@ async function parseClovaText(rawText: string) {
       messages: [
         {
           role: 'user',
-          content: `한국 영수증 OCR raw 텍스트에서 정보 추출. 가능한 만큼 채워줘.
+          content: `한국 영수증 OCR raw 텍스트에서 정보 추출해서 JSON 으로만 응답.
 
 [OCR 텍스트]
 ${rawText}
@@ -85,7 +85,7 @@ ${rawText}
 - total = "결제금액" / "카드결제" / "총합계" 옆 숫자 중 하나 (가장 큰 값)
 - 가게명/날짜는 명확하면 채우고 아니면 빈 문자열
 
-응답:
+응답 JSON 형식:
 {
   "store_name": "...",
   "date": "YYYY-MM-DD",

@@ -63,7 +63,7 @@ async function parseReceiptTextWithGPT(
       messages: [
         {
           role: 'user',
-          content: `한국 영수증 OCR raw 텍스트 → 가게명/날짜/품목/금액/합계 + 카테고리.
+          content: `한국 영수증 OCR raw 텍스트 → 가게명/날짜/품목/금액/합계 + 카테고리. JSON 으로 응답.
 
 [OCR 텍스트]
 ${rawText}
