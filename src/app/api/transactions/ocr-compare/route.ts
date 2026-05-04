@@ -55,17 +55,32 @@ async function parseClovaText(rawText: string) {
       messages: [
         {
           role: 'user',
-          content: `OCR raw 텍스트에서 영수증 정보 추출해 JSON. 명시된 것만, 추측 금지.
+          content: `한국 영수증을 OCR 한 raw 텍스트야. 가게명/날짜/품목/금액/합계 추출.
 
-[텍스트]
+[OCR 텍스트]
 ${rawText}
+
+[한국 마트 영수증 컬럼 구조]
+한 줄 형식: <상품명> <단가> <수량> <금액>
+예: "카스캔500ML  2,300  2  4,600"
+- 단가: 1개당 가격 (보통 4자리+ 숫자, 쉼표 포함)
+- 수량: 구매 개수 (보통 1~2자리 작은 숫자, 1/2/3 등)
+- 금액: 단가×수량 = 그 품목의 총 금액 ⭐️ 이 값을 amount 로
+
+⚠️ 수량(2 같은 작은 숫자)을 amount 로 읽으면 안 됨. **반드시 줄에서 가장 큰 숫자 = 그 품목 금액**.
+⚠️ 합계(TOTAL/합계/총액/계) 줄은 items 에 포함 X.
+⚠️ 부가세/봉투 같은 부수 항목도 items 에 포함 X (단, 별도 결제 항목이면 OK).
+
+[검증]
+- 모든 items.amount 합 ≈ total 이어야 함. 안 맞으면 amount 다시 골라.
+- 추측 금지. 명확히 안 보이면 그 품목 생략.
 
 응답:
 {
-  "store_name": "가게명",
+  "store_name": "...",
   "date": "YYYY-MM-DD",
-  "items": [{"name":"...", "amount":숫자}],
-  "total": 숫자
+  "items": [{"name":"카스캔500ML", "amount":4600}],
+  "total": 23710
 }`,
         },
       ],
