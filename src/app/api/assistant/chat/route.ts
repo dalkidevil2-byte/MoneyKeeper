@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runAssistant, type ChatHistoryItem } from '@/lib/assistant-chat';
 import { classifyImage } from '@/lib/image-classifier';
 import { createServerSupabaseClient } from '@/lib/supabase';
+import { runStockOcr } from '@/lib/stock-ocr';
 import dayjs from 'dayjs';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -94,38 +95,26 @@ async function prepareStockTradesPending(imageUrl: string): Promise<{
 } | null> {
   const supabase = createServerSupabaseClient();
 
-  // stock OCR 호출 (같은 origin)
-  const origin =
-    process.env.NEXT_PUBLIC_BASE_URL ?? 'https://money-keeper-zgo7.vercel.app';
-  let ocrJson: {
-    trades?: Array<{
-      type?: string;
-      date?: string;
-      ticker?: string;
-      company_name?: string;
-      quantity?: number;
-      price?: number;
-      fee?: number;
-      tax?: number;
-      broker_hint?: string;
-    }>;
-    accounts?: Array<{ id: string; broker_name: string; owner_id: string }>;
-  };
+  let trades: Array<{
+    type?: string;
+    date?: string;
+    ticker?: string;
+    company_name?: string;
+    quantity?: number;
+    price?: number;
+    fee?: number;
+    tax?: number;
+    broker_hint?: string;
+  }> = [];
+  let accounts: Array<{ id: string; broker_name: string; owner_id: string }> = [];
   try {
-    const ocrRes = await fetch(`${origin}/api/stocks/transactions/ocr`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl, household_id: HOUSEHOLD_ID }),
-    });
-    if (!ocrRes.ok) return null;
-    ocrJson = await ocrRes.json();
+    const r = await runStockOcr(imageUrl, HOUSEHOLD_ID);
+    trades = r.trades;
+    accounts = r.accounts;
   } catch (e) {
     console.warn('[stock OCR]', e);
     return null;
   }
-
-  const trades = ocrJson.trades ?? [];
-  const accounts = ocrJson.accounts ?? [];
   if (trades.length === 0) return null;
   if (accounts.length === 0) {
     return {

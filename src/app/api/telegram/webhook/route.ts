@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import OpenAI from 'openai';
 import { logAiUsage } from '@/lib/ai-usage';
 import { classifyImage } from '@/lib/image-classifier';
+import { runStockOcr } from '@/lib/stock-ocr';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -466,31 +467,7 @@ async function handleStockBrokeragePhoto(chatId: string, imageUrl: string) {
   await sendTelegramMessage(tg.bot_token, chatId, '📈 증권사 거래내역 분석 중…');
 
   try {
-    const origin =
-      process.env.NEXT_PUBLIC_BASE_URL ??
-      'https://money-keeper-zgo7.vercel.app';
-    const ocrRes = await fetch(`${origin}/api/stocks/transactions/ocr`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl, household_id: householdId }),
-    });
-    if (!ocrRes.ok) {
-      throw new Error(`stock OCR ${ocrRes.status}`);
-    }
-    const { trades = [], accounts = [] } = (await ocrRes.json()) as {
-      trades: Array<{
-        type?: string;
-        date?: string;
-        ticker?: string;
-        company_name?: string;
-        quantity?: number;
-        price?: number;
-        fee?: number;
-        tax?: number;
-        broker_hint?: string;
-      }>;
-      accounts: Array<{ id: string; broker_name: string; owner_id: string }>;
-    };
+    const { trades, accounts } = await runStockOcr(imageUrl, householdId);
 
     if (trades.length === 0) {
       await sendTelegramMessage(
@@ -591,7 +568,8 @@ async function handleStockBrokeragePhoto(chatId: string, imageUrl: string) {
       chatId,
       `⚠️ 주식 거래내역 처리 오류: ${e instanceof Error ? e.message : ''}`,
     );
-    return NextResponse.json({ ok: false }, { status: 500 });
+    // 200 으로 응답해 텔레그램 재시도 폭탄 방지
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'fail' });
   }
 }
 
