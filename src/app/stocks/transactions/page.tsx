@@ -307,6 +307,14 @@ export default function StockTransactionsPage() {
                                     realized.quantity * realized.avgCostAtSell
                                   ).toLocaleString('ko-KR')}
                                 </span>
+                                {q && (
+                                  <>
+                                    {' · '}현재가{' '}
+                                    <span className="font-semibold text-gray-700">
+                                      {fmtPrice(q.price)}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
