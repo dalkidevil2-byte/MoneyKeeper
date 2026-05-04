@@ -20,6 +20,23 @@ export async function classifyImage(
   caption?: string,
 ): Promise<{ kind: ImageKind; confidence: number; reason: string }> {
   const captionHint = caption ? `\n\n사용자가 적은 캡션: "${caption}"` : '';
+
+  // 외부 URL (텔레그램 CDN 등) → base64 로 변환해 OpenAI 가 직접 디코드하도록
+  let finalUrl = imageUrl;
+  if (imageUrl.startsWith('http')) {
+    try {
+      const r = await fetch(imageUrl);
+      if (r.ok) {
+        const ab = await r.arrayBuffer();
+        const b64 = Buffer.from(ab).toString('base64');
+        const mt = r.headers.get('content-type') ?? 'image/jpeg';
+        finalUrl = `data:${mt};base64,${b64}`;
+      }
+    } catch {
+      /* keep original */
+    }
+  }
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     max_tokens: 200,
@@ -28,7 +45,7 @@ export async function classifyImage(
       {
         role: 'user',
         content: [
-          { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+          { type: 'image_url', image_url: { url: finalUrl, detail: 'low' } },
           {
             type: 'text',
             text: `이 이미지가 어떤 종류인지 분류해 JSON 으로만 답해.
