@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from 'recharts';
 import dayjs from 'dayjs';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 interface HistoryPoint {
   date: string;
   total_value: number;
+  seed_money?: number;
+  pnl?: number;
 }
 
 const RANGES = [
@@ -172,7 +174,7 @@ export default function AssetHistoryChart() {
         · {history.length}일 기록
       </div>
 
-      <ResponsiveContainer width="100%" height={180}>
+      <ResponsiveContainer width="100%" height={220}>
         <LineChart data={history}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
           <XAxis
@@ -192,13 +194,38 @@ export default function AssetHistoryChart() {
             width={45}
           />
           <Tooltip
-            formatter={(v) => [Number(v).toLocaleString('ko-KR') + '원', '총 평가']}
+            formatter={(v, name) => {
+              const label =
+                name === 'total_value'
+                  ? '총 평가'
+                  : name === 'seed_money'
+                    ? '시드머니'
+                    : '손익';
+              return [Number(v).toLocaleString('ko-KR') + '원', label];
+            }}
             labelFormatter={(d) => dayjs(String(d)).format('YYYY-MM-DD (ddd)')}
             contentStyle={{ fontSize: 12 }}
           />
-          {history.length > 1 && (
-            <ReferenceLine y={first} stroke="#9ca3af" strokeDasharray="4 4" />
-          )}
+          <Legend
+            wrapperStyle={{ fontSize: 11 }}
+            formatter={(value) =>
+              value === 'total_value'
+                ? '총 평가'
+                : value === 'seed_money'
+                  ? '시드머니'
+                  : '손익'
+            }
+          />
+          <ReferenceLine y={0} stroke="#d1d5db" strokeDasharray="2 2" />
+          <Line
+            type="monotone"
+            dataKey="seed_money"
+            stroke="#9ca3af"
+            strokeWidth={1.5}
+            strokeDasharray="4 2"
+            dot={false}
+            activeDot={{ r: 3 }}
+          />
           <Line
             type="monotone"
             dataKey="total_value"
@@ -206,6 +233,14 @@ export default function AssetHistoryChart() {
             strokeWidth={2}
             dot={history.length <= 14 ? { r: 2 } : false}
             activeDot={{ r: 4 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="pnl"
+            stroke="#10b981"
+            strokeWidth={1.5}
+            dot={false}
+            activeDot={{ r: 3 }}
           />
         </LineChart>
       </ResponsiveContainer>
