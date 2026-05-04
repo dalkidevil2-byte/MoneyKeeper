@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { createServerSupabaseClient } from './supabase';
 import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
 import { logAiUsage } from './ai-usage';
+import { isClovaConfigured, runClovaReceiptOcr } from './clova-ocr';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -31,6 +32,98 @@ export type ReceiptOcrResult = {
  * Telegram CDN 등은 가끔 application/octet-stream 으로 응답함 → OpenAI 가 거부.
  * URL 확장자 우선, response header 는 fallback.
  */
+/**
+ * CLOVA 가 추출한 raw 품목 → gpt-4o-mini 로 카테고리만 분류.
+ * 시각 인식 안 하니까 mini 로 충분 + 매우 저렴.
+ */
+async function classifyItemsWithGPT(
+  rawItems: Array<{ name: string; count?: number; unitPrice?: number; price: number }>,
+  householdId: string,
+): Promise<ReceiptOcrItem[]> {
+  if (rawItems.length === 0) return [];
+
+  const supabase = createServerSupabaseClient();
+  const { data: customCats } = await supabase
+    .from('custom_categories')
+    .select('category_main, category_sub')
+    .eq('household_id', householdId);
+  const customMains = (customCats ?? [])
+    .map((c) => c.category_main)
+    .filter((m, i, arr) => m && arr.indexOf(m) === i);
+  const allMains = [
+    ...CATEGORY_MAIN_OPTIONS.filter((m) => m !== '수입'),
+    ...customMains.filter(
+      (m) => !(CATEGORY_MAIN_OPTIONS as readonly string[]).includes(m),
+    ),
+  ];
+  const subHints: Record<string, string[]> = {};
+  for (const m of allMains) {
+    const defaults = (CATEGORY_SUB_MAP as Record<string, readonly string[]>)[m] ?? [];
+    const customs = (customCats ?? [])
+      .filter((c) => c.category_main === m && c.category_sub)
+      .map((c) => c.category_sub as string);
+    subHints[m] = [...defaults, ...customs].filter(
+      (s, i, arr) => arr.indexOf(s) === i,
+    );
+  }
+  const guide = allMains
+    .map((m) => `${m}${subHints[m]?.length ? `(${subHints[m].slice(0, 5).join(',')})` : ''}`)
+    .join(', ');
+
+  try {
+    const itemsForPrompt = rawItems.map((r) => r.name).join('\n');
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 800,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'user',
+          content: `다음 영수증 품목 ${rawItems.length}개를 카테고리 분류해. 입력 순서 그대로 categories 배열로.
+
+품목:
+${itemsForPrompt}
+
+카테고리 가이드:
+${guide}
+
+응답:
+{ "categories": [{"main": "식비", "sub": "마트"}, ...] }`,
+        },
+      ],
+    });
+    void logAiUsage({
+      model: 'gpt-4o-mini',
+      feature: 'parse',
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      householdId,
+      meta: { kind: 'receipt_categorize', items: rawItems.length },
+    });
+    const raw = response.choices[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(raw) as { categories?: Array<{ main?: string; sub?: string }> };
+    const cats = parsed.categories ?? [];
+    return rawItems.map((r, i) => ({
+      name: r.name,
+      amount: r.price,
+      quantity: r.count ?? 1,
+      unit: '개',
+      category_main: cats[i]?.main ?? '식비',
+      category_sub: cats[i]?.sub ?? '',
+    }));
+  } catch (e) {
+    console.warn('[receipt classify] fallback no-category', e);
+    return rawItems.map((r) => ({
+      name: r.name,
+      amount: r.price,
+      quantity: r.count ?? 1,
+      unit: '개',
+      category_main: '식비',
+      category_sub: '',
+    }));
+  }
+}
+
 function inferImageMime(url: string, headerType?: string | null): string {
   const ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   const lower = url.toLowerCase();
@@ -82,6 +175,29 @@ export async function runReceiptOcr(
     } catch {
       /* keep */
     }
+  }
+
+  // ─── CLOVA OCR 우선 사용 (한국 영수증 특화) ───
+  if (isClovaConfigured()) {
+    const clova = await runClovaReceiptOcr(finalUrl);
+    if (clova && clova.items.length > 0) {
+      // 품목들을 gpt-4o-mini 한테 카테고리 분류만 요청
+      const categorized = await classifyItemsWithGPT(clova.items, householdId);
+      void logAiUsage({
+        model: 'clova-ocr',
+        feature: 'ocr',
+        meta: { kind: 'receipt', source: 'clova', items: clova.items.length },
+      });
+      return {
+        store_name: clova.storeName ?? '',
+        date: clova.date ?? '',
+        items: categorized,
+        total: clova.total,
+        payment_hint: clova.paymentMethod ?? '',
+      };
+    }
+    // CLOVA 실패 시 gpt-4o vision 으로 fallback
+    console.warn('[receipt-ocr] CLOVA failed, fallback to gpt-4o');
   }
 
   const supabase = createServerSupabaseClient();
