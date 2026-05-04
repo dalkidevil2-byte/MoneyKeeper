@@ -239,10 +239,17 @@ export default function StockTransactionsPage() {
                       ? Math.round(n).toLocaleString('ko-KR')
                       : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
                   return (
-                    <li key={t.id}>
+                    <li
+                      key={t.id}
+                      className={
+                        isBuy
+                          ? 'bg-red-50/40 border-l-2 border-red-300'
+                          : 'bg-blue-50/40 border-l-2 border-blue-300'
+                      }
+                    >
                       <button
                         onClick={() => setSheet({ mode: 'edit', tx: t })}
-                        className="w-full text-left px-5 py-3 active:bg-gray-50"
+                        className="w-full text-left px-5 py-3 active:bg-black/5"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
