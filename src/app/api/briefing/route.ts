@@ -52,7 +52,8 @@ async function handle(req: NextRequest) {
           .select('bot_token, chat_id, is_active')
           .eq('household_id', householdId)
           .maybeSingle();
-        if (tg?.bot_token && tg.is_active !== false) {
+        // is_active 기본값이 FALSE 라 무시. bot_token + chat_id 있으면 발송.
+        if (tg?.bot_token) {
           // 발송 대상 chat_id 들 수집 (중복 제거)
           const chatIds = new Set<string>();
           // 1) telegram_settings 의 chat_id (싱글 사용자)
