@@ -49,29 +49,35 @@ async function handle(req: NextRequest) {
         const supabase = createServerSupabaseClient();
         const { data: tg } = await supabase
           .from('telegram_settings')
-          .select('bot_token, enabled')
+          .select('bot_token, chat_id, is_active')
           .eq('household_id', householdId)
           .maybeSingle();
-        if (tg?.bot_token && tg.enabled !== false) {
-          // chat_id 있는 활성 멤버들한테 발송
+        if (tg?.bot_token && tg.is_active !== false) {
+          // 발송 대상 chat_id 들 수집 (중복 제거)
+          const chatIds = new Set<string>();
+          // 1) telegram_settings 의 chat_id (싱글 사용자)
+          if (tg.chat_id) chatIds.add(String(tg.chat_id));
+          // 2) members 의 telegram_chat_id (다중 가족)
           const { data: members } = await supabase
             .from('members')
             .select('telegram_chat_id, name')
             .eq('household_id', householdId)
-            .eq('is_active', true)
-            .not('telegram_chat_id', 'is', null);
+            .eq('is_active', true);
+          for (const m of members ?? []) {
+            const cid = m.telegram_chat_id as string | null;
+            if (cid && cid.trim()) chatIds.add(cid.trim());
+          }
+
           let sent = 0;
           let failed = 0;
-          for (const m of members ?? []) {
-            const chatId = m.telegram_chat_id as string;
-            if (!chatId) continue;
+          for (const chatId of chatIds) {
             try {
               const text = `<b>${title}</b>\n\n${body}`;
               await sendTelegramMessage(tg.bot_token, chatId, text);
               sent++;
             } catch (e) {
               failed++;
-              console.warn('[briefing tg]', m.name, (e as Error).message);
+              console.warn('[briefing tg]', chatId, (e as Error).message);
             }
           }
           telegram = { sent, failed };
