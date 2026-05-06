@@ -352,11 +352,30 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       fd.append('base64', base64);
       fd.append('mimeType', mimeType);
       const res = await fetch('/api/transactions/ocr', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (data.result) setOcrResult(data.result);
-      else alert('영수증을 인식하지 못했어요. 다시 시도해주세요.');
-    } catch {
-      alert('OCR 오류가 발생했어요.');
+      const text = await res.text();
+      let data: { result?: unknown; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        alert(`서버 응답 파싱 실패 (HTTP ${res.status}). 응답: ${text.slice(0, 200)}`);
+        return;
+      }
+      if (!res.ok) {
+        alert(`OCR 실패 (${res.status}): ${data.error ?? '알 수 없는 오류'}`);
+        return;
+      }
+      if (data.result) {
+        const r = data.result as { items?: unknown[] };
+        if (!r.items || r.items.length === 0) {
+          alert('영수증에서 항목을 못 찾았어요. 더 선명한 사진으로 다시 시도해주세요.');
+          return;
+        }
+        setOcrResult(data.result);
+      } else {
+        alert('영수증을 인식하지 못했어요. 다시 시도해주세요.');
+      }
+    } catch (e) {
+      alert(`OCR 오류: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setOcrLoading(false);
       if (ocrFileRef.current) ocrFileRef.current.value = '';
