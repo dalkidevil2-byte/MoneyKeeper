@@ -190,20 +190,13 @@ export default function OcrReviewSheet({ result, paymentMethods, accounts = [], 
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none"
                 >
                   <option value="">선택 안함</option>
-                  {paymentMethods.length > 0 && (
-                    <optgroup label="💳 결제수단">
-                      {paymentMethods.map((pm) => (
-                        <option key={pm.id} value={pm.id}>{pm.name}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {accounts.length > 0 && (
-                    <optgroup label="🏦 계좌">
-                      {accounts.map((a) => (
-                        <option key={a.id} value={`account:${a.id}`}>{a.name}</option>
-                      ))}
-                    </optgroup>
-                  )}
+                  {/* optgroup 안 쓰고 prefix 로 구분 (모바일 호환성) */}
+                  {paymentMethods.map((pm) => (
+                    <option key={pm.id} value={pm.id}>💳 {pm.name}</option>
+                  ))}
+                  {accounts.map((a) => (
+                    <option key={a.id} value={`account:${a.id}`}>🏦 {a.name}</option>
+                  ))}
                 </select>
               </div>
             </div>

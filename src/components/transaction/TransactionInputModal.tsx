@@ -854,31 +854,16 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                       const mine = memberId ? paymentMethods.filter((pm) => pm.member_id === memberId) : [];
                       const shared = paymentMethods.filter((pm) => !pm.member_id);
                       const others = memberId ? paymentMethods.filter((pm) => pm.member_id && pm.member_id !== memberId) : [];
-                      const pmList = !memberId ? paymentMethods.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>) : (
-                        <>
-                          {mine.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-                          {shared.length > 0 && (
-                            <optgroup label="공용 카드/현금">
-                              {shared.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-                            </optgroup>
-                          )}
-                          {others.length > 0 && (
-                            <optgroup label="다른 구성원">
-                              {others.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-                            </optgroup>
-                          )}
-                        </>
-                      );
+                      // optgroup 모바일(삼성인터넷 등) 호환성 안 좋아서 제거 + emoji prefix 로 구분
+                      const ordered = memberId ? [...mine, ...shared, ...others] : paymentMethods;
                       return (
                         <>
-                          {pmList}
-                          {accounts.length > 0 && (
-                            <optgroup label="🏦 계좌 (직접출금)">
-                              {accounts.map((acc: any) => (
-                                <option key={acc.id} value={`account:${acc.id}`}>{acc.name}</option>
-                              ))}
-                            </optgroup>
-                          )}
+                          {ordered.map((pm) => (
+                            <option key={pm.id} value={pm.id}>💳 {pm.name}</option>
+                          ))}
+                          {accounts.map((acc) => (
+                            <option key={acc.id} value={`account:${acc.id}`}>🏦 {acc.name} (직접출금)</option>
+                          ))}
                         </>
                       );
                     })()}
