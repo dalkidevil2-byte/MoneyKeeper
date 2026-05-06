@@ -156,6 +156,87 @@ export async function generateBriefing(
     .neq('status', 'cancelled');
   const monthSpent = (mTxs ?? []).reduce((s, t) => s + (t.amount as number), 0);
 
+  // 7-pre) 활성 목표 진행률
+  const { data: goals } = await supabase
+    .from('goals')
+    .select('emoji, title, target_value, current_value, target_date, status')
+    .eq('household_id', householdId)
+    .eq('status', 'active')
+    .limit(5);
+  const goalSummary = (goals ?? []).map((g) => {
+    const tv = Number(g.target_value) || 0;
+    const cv = Number(g.current_value) || 0;
+    const pct = tv > 0 ? Math.round((cv / tv) * 100) : 0;
+    return {
+      title: `${g.emoji ?? '🎯'} ${g.title}`,
+      pct,
+      target_date: g.target_date as string | null,
+    };
+  });
+
+  // 7-pre2) 이번 달 예산 (대분류 기준)
+  const { data: budgets } = await supabase
+    .from('budgets')
+    .select('category_main, amount')
+    .eq('household_id', householdId)
+    .eq('month', today.format('YYYY-MM'));
+  const budgetByMain: Record<string, number> = {};
+  for (const b of budgets ?? []) {
+    budgetByMain[b.category_main as string] = Number(b.amount) || 0;
+  }
+  // 이번 달 카테고리별 누적 지출 (대분류)
+  const { data: mTxsByCat } = await supabase
+    .from('transactions')
+    .select('amount, category_main')
+    .eq('household_id', householdId)
+    .gte('date', monthStart)
+    .lte('date', todayKey)
+    .eq('type', 'variable_expense')
+    .neq('status', 'cancelled');
+  const spentByMain: Record<string, number> = {};
+  for (const t of mTxsByCat ?? []) {
+    const k = (t.category_main as string) || '기타';
+    spentByMain[k] = (spentByMain[k] ?? 0) + (t.amount as number);
+  }
+  const budgetStatus = Object.entries(budgetByMain)
+    .map(([k, limit]) => {
+      const spent = spentByMain[k] ?? 0;
+      const ratio = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+      return { category: k, spent, limit, ratio };
+    })
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 5);
+
+  // 7-pre3) 주식 포트폴리오 (간단 손익) — 최신 1건
+  const { data: latestAsset } = await supabase
+    .from('stock_asset_history')
+    .select('total_value, date')
+    .eq('household_id', householdId)
+    .order('date', { ascending: false })
+    .limit(1);
+  let stockSummary: { value: number; date: string } | null = null;
+  if (latestAsset && latestAsset.length > 0) {
+    stockSummary = {
+      value: Number(latestAsset[0].total_value) || 0,
+      date: latestAsset[0].date as string,
+    };
+  }
+
+  // 7-pre4) 카드 청구서 임박 (7일 이내 결제일)
+  const sevenDaysLater = today.add(7, 'day').format('YYYY-MM-DD');
+  const { data: cards } = await supabase
+    .from('card_statements')
+    .select('card_name, amount_due, due_date')
+    .eq('household_id', householdId)
+    .gte('due_date', todayKey)
+    .lte('due_date', sevenDaysLater)
+    .eq('paid', false);
+  const upcomingCards = (cards ?? []).map((c) => ({
+    name: c.card_name as string,
+    amount: Number(c.amount_due) || 0,
+    date: c.due_date as string,
+  }));
+
   // 7) 최근 24시간 새 컬렉션 항목
   const since24h = today.subtract(24, 'hour').toISOString();
   const { data: archEntries } = await supabase
@@ -213,6 +294,18 @@ ${tomorrowEvents.slice(0, 5).map((e) => `- ${e.title}`).join('\n') || '없음'}
 - 총 ${yesterdaySpent.toLocaleString('ko-KR')}원${yesterdayTopCats.length > 0 ? ` (${yesterdayTopCats.map(([c, a]) => `${c} ${a.toLocaleString('ko-KR')}원`).join(', ')})` : ''}
 - 이번 달 누적: ${monthSpent.toLocaleString('ko-KR')}원
 
+## 예산 (대분류 Top 5)
+${budgetStatus.length === 0 ? '예산 미설정' : budgetStatus.map((b) => `- ${b.category}: ${b.ratio}% 사용 (${b.spent.toLocaleString('ko-KR')}/${b.limit.toLocaleString('ko-KR')}원)`).join('\n')}
+
+## 카드 청구서 임박 (7일 내)
+${upcomingCards.length === 0 ? '없음' : upcomingCards.map((c) => `- ${c.date} ${c.name} ${c.amount.toLocaleString('ko-KR')}원`).join('\n')}
+
+## 활성 목표
+${goalSummary.length === 0 ? '없음' : goalSummary.map((g) => `- ${g.title}: ${g.pct}%${g.target_date ? ` (${g.target_date}까지)` : ''}`).join('\n')}
+
+## 주식 자산 (최근 스냅샷)
+${stockSummary ? `- ${stockSummary.date} 기준 ${stockSummary.value.toLocaleString('ko-KR')}원` : '없음'}
+
 ## 최근 컬렉션 등록 (24시간)
 ${recentArchive.map((a) => `- ${a.emoji} ${a.collection}: ${a.title}`).join('\n') || '없음'}`
       : `# 오늘 마감 데이터 (${todayKey} ${today.format('dddd')})
@@ -241,6 +334,18 @@ ${actList.map((a) => `- ${a.name}: ${a.minutes}분`).join('\n') || '없음'}
 ## 어제 지출 + 이번 달 누적
 - 어제 ${yesterdaySpent.toLocaleString('ko-KR')}원
 - 이번 달 누적: ${monthSpent.toLocaleString('ko-KR')}원
+
+## 예산 사용률 (Top 5)
+${budgetStatus.length === 0 ? '예산 미설정' : budgetStatus.map((b) => `- ${b.category}: ${b.ratio}%`).join('\n')}
+
+## 활성 목표 진행
+${goalSummary.length === 0 ? '없음' : goalSummary.map((g) => `- ${g.title}: ${g.pct}%`).join('\n')}
+
+## 카드 청구서 임박 (7일 내)
+${upcomingCards.length === 0 ? '없음' : upcomingCards.map((c) => `- ${c.date} ${c.name} ${c.amount.toLocaleString('ko-KR')}원`).join('\n')}
+
+## 주식 자산 (최근 스냅샷)
+${stockSummary ? `- ${stockSummary.value.toLocaleString('ko-KR')}원 (${stockSummary.date})` : '없음'}
 
 ## 최근 컬렉션 등록 (24시간)
 ${recentArchive.map((a) => `- ${a.emoji} ${a.collection}`).join('\n') || '없음'}`;
