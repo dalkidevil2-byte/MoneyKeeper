@@ -41,6 +41,42 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   const [inputMode, setInputMode] = useState<'text' | 'ocr'>('text');
   const [inputText, setInputText] = useState('');
   const [form, setForm] = useState<Partial<CreateTransactionInput>>({});
+  const [suggestionApplied, setSuggestionApplied] = useState<string | null>(null);
+
+  // 항목명/가맹점명 입력 시 → 과거 학습 데이터로 카테고리/결제수단 자동 채우기 (debounced)
+  useEffect(() => {
+    const name = (form.name ?? '').trim();
+    const merchant = (form.merchant_name ?? '').trim();
+    if (name.length < 2 && merchant.length < 2) {
+      setSuggestionApplied(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const param = name.length >= 2 ? `name=${encodeURIComponent(name)}` : `merchant=${encodeURIComponent(merchant)}`;
+        const res = await fetch(`/api/transactions/suggest?${param}`);
+        const j = await res.json();
+        if (!j.ok || !j.suggestion) return;
+        const s = j.suggestion;
+        setForm((f) => {
+          const next = { ...f };
+          // 빈 필드만 채움 (사용자 입력 보호)
+          if (!f.merchant_name && s.merchant_name) next.merchant_name = s.merchant_name;
+          if (!f.category_main && s.category_main) next.category_main = s.category_main;
+          if (!f.category_sub && s.category_sub) next.category_sub = s.category_sub;
+          if (!f.payment_method_id && !f.account_from_id) {
+            if (s.payment_method_id) next.payment_method_id = s.payment_method_id;
+            else if (s.account_from_id) next.account_from_id = s.account_from_id;
+          }
+          return next;
+        });
+        setSuggestionApplied(`${s.frequency}회 자동 입력됨`);
+      } catch {
+        /* skip */
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.name, form.merchant_name]);
 
   // 세부 품목
   // 구매단위만 (용량/규격은 품목명에 포함: 예 "맥주 500ml")
@@ -787,6 +823,11 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                     placeholder={form.type === 'income' ? '예: 4월 월급, 상여금, 배당금' : '무엇을?'}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                   />
+                  {suggestionApplied && (
+                    <div className="text-[10px] text-indigo-500 mt-1">
+                      ✨ 과거 기록 기반으로 카테고리/결제수단 자동 채워짐 ({suggestionApplied})
+                    </div>
+                  )}
                 </div>
 
                 {/* 카테고리 */}
