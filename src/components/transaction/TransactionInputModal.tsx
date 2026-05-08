@@ -476,7 +476,18 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       }),
     });
 
-    if (!txRes.ok) { alert('저장 중 오류가 발생했어요.'); return; }
+    if (!txRes.ok) {
+      const txt = await txRes.text();
+      let errMsg = `HTTP ${txRes.status}`;
+      try {
+        const j = JSON.parse(txt);
+        if (j.error) errMsg = j.error;
+      } catch {
+        errMsg = txt.slice(0, 200) || errMsg;
+      }
+      alert(`저장 실패: ${errMsg}`);
+      return;
+    }
     const { transaction } = await txRes.json();
 
     // 2. 세부 품목 저장
