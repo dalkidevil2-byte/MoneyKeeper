@@ -98,14 +98,15 @@ export default function OcrReviewSheet({ result, paymentMethods, accounts = [], 
       track: false,
     }))
   );
-  // OCR 날짜 검증: 형식 불량이거나 오늘보다 뒤이거나 3년 이전이면 오늘 날짜로 fallback
+  // OCR 날짜 검증: 영수증은 보통 최근 (1개월 이내).
+  // 형식 불량 / 미래 / 60일 이전 → 오늘로 fallback (사용자 직접 수정 가능)
   const today = dayjs();
   const sanitizeDate = (raw: string | undefined): string => {
     if (!raw) return today.format('YYYY-MM-DD');
     const m = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? dayjs(raw) : null;
     if (!m || !m.isValid()) return today.format('YYYY-MM-DD');
     if (m.isAfter(today, 'day')) return today.format('YYYY-MM-DD');
-    if (today.diff(m, 'year') > 3) return today.format('YYYY-MM-DD');
+    if (today.diff(m, 'day') > 60) return today.format('YYYY-MM-DD');
     return m.format('YYYY-MM-DD');
   };
   const [date, setDate] = useState(sanitizeDate(result.date));
