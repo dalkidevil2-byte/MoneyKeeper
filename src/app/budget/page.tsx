@@ -55,7 +55,7 @@ export default function HomePage() {
     endDate: endOfPrevMonth,
   });
   const { budgets } = useBudgets();
-  const { templates: fixedTemplates } = useFixedExpenseTemplates();
+  const { templates: fixedTemplates, loading: tmpLoading } = useFixedExpenseTemplates();
 
   const monthlyVarExpense = transactions
     .filter((t) => t.type === 'variable_expense')
@@ -103,8 +103,8 @@ export default function HomePage() {
     'text-emerald-300';
 
   // 미등록 정기 거래 계산 (오늘 이전 날짜인데 이번달 거래내역 없는 항목)
-  // 거래 데이터 로딩 중엔 계산 X — 깜빡임 방지 (로딩 중 banner 잘못 떴다 사라지는 현상)
-  const unregisteredFixed = txLoading
+  // 양쪽(거래/템플릿) 로딩 끝나기 전엔 계산 X — 깜빡임 방지
+  const unregisteredFixed = (txLoading || tmpLoading)
     ? []
     : fixedTemplates.filter((ft) => {
         const dueDate = today.date(ft.due_day);
