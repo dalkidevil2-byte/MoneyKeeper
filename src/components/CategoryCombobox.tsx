@@ -18,6 +18,8 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
   const [adding, setAdding] = useState(false);
   const [dropUp, setDropUp] = useState(false);
   const [maxHeight, setMaxHeight] = useState(288);
+  // dropdown 절대 위치 (parent overflow 탈출)
+  const [popupRect, setPopupRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -29,19 +31,30 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
     if (open) {
       setQuery('');
       setTimeout(() => inputRef.current?.focus(), 50);
-      // 위/아래 어디 띄울지 + 최대 높이 결정
+      // 위/아래 어디 띄울지 + 최대 높이 + 위치 (viewport 좌표 — fixed 용)
       const rect = buttonRef.current?.getBoundingClientRect();
       if (rect) {
         const spaceBelow = window.innerHeight - rect.bottom - 16;
         const spaceAbove = rect.top - 16;
+        let useDropUp = false;
+        let h: number;
         if (spaceBelow >= 200 || spaceBelow >= spaceAbove) {
-          setDropUp(false);
-          setMaxHeight(Math.min(380, Math.max(160, spaceBelow)));
+          useDropUp = false;
+          h = Math.min(380, Math.max(160, spaceBelow));
         } else {
-          setDropUp(true);
-          setMaxHeight(Math.min(380, Math.max(160, spaceAbove)));
+          useDropUp = true;
+          h = Math.min(380, Math.max(160, spaceAbove));
         }
+        setDropUp(useDropUp);
+        setMaxHeight(h);
+        setPopupRect({
+          top: useDropUp ? rect.top - 4 - h : rect.bottom + 4,
+          left: rect.left,
+          width: rect.width,
+        });
       }
+    } else {
+      setPopupRect(null);
     }
   }, [open]);
 
@@ -85,11 +98,14 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
         <ChevronDown size={15} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
+      {open && popupRect && (
         <div
-          className={`absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden ${
-            dropUp ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}
+          className="fixed z-[60] bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+          style={{
+            top: popupRect.top,
+            left: popupRect.left,
+            width: popupRect.width,
+          }}
         >
           {/* 검색 입력 */}
           <div className="p-2 border-b border-gray-100">
