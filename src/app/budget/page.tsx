@@ -57,6 +57,20 @@ export default function HomePage() {
   const { budgets } = useBudgets();
   const { templates: fixedTemplates, loading: tmpLoading } = useFixedExpenseTemplates();
 
+  // 카테고리별 집계 — 세부 품목 우선 (마트 한 번에 식비+의류 산 경우 분리 집계)
+  const [categorySummary, setCategorySummary] = useState<{
+    byMain: Record<string, number>;
+    bySub: Record<string, number>;
+  }>({ byMain: {}, bySub: {} });
+  useEffect(() => {
+    fetch(`/api/transactions/category-summary?start_date=${startOfMonth}&end_date=${endOfMonth}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.byMain) setCategorySummary({ byMain: d.byMain, bySub: d.bySub ?? {} });
+      })
+      .catch(() => {});
+  }, [startOfMonth, endOfMonth, transactions]);
+
   const monthlyVarExpense = transactions
     .filter((t) => t.type === 'variable_expense')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -146,12 +160,16 @@ export default function HomePage() {
     refetch();
   };
 
-  // 예산 알림 계산 (80% 이상인 카테고리)
+  // 예산 알림 계산 — 세부품목 카테고리 우선 사용
+  const getSpentByMain = (main: string) =>
+    categorySummary.byMain[main] ??
+    transactions
+      .filter((t) => t.type === 'variable_expense' && t.category_main === main)
+      .reduce((sum, t) => sum + t.amount, 0);
+
   const budgetAlerts = subBudgets
     .map((b) => {
-      const spent = transactions
-        .filter((t) => t.type === 'variable_expense' && t.category_main === b.category_main)
-        .reduce((sum, t) => sum + t.amount, 0);
+      const spent = getSpentByMain(b.category_main);
       const rate = b.amount > 0 ? Math.round((spent / b.amount) * 100) : 0;
       return { category: b.category_main, rate, amount: spent, budget: b.amount, emoji: getCategoryEmoji(b.category_main) };
     })
@@ -358,13 +376,8 @@ export default function HomePage() {
               {subBudgets.length > 0 ? (
                 subBudgets.map((budget, idx) => {
                   const rate = budget.usage_rate ?? 0;
-                  // 카테고리 기준 실제 지출
-                  const catExpense = transactions
-                    .filter((t) =>
-                      t.type === 'variable_expense' &&
-                      t.category_main === budget.category_main
-                    )
-                    .reduce((sum, t) => sum + t.amount, 0);
+                  // 카테고리 기준 실제 지출 — 세부 품목 카테고리 우선
+                  const catExpense = getSpentByMain(budget.category_main);
                   const catRate = budget.amount > 0 ? Math.min(Math.round((catExpense / budget.amount) * 100), 100) : 0;
 
                   return (
