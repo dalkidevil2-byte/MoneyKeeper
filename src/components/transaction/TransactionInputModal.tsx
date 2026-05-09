@@ -85,14 +85,21 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [showLineItems, setShowLineItems] = useState(false);
   const addLineItem = () => setLineItems((p) => [...p, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개', track: false, category_main: '', category_sub: '' }]);
-  const removeLineItem = (id: string) => setLineItems((p) => p.filter((i) => i.id !== id));
+  const removeLineItem = (id: string) => {
+    const next = lineItems.filter((i) => i.id !== id);
+    setLineItems(next);
+    // 삭제 시에도 합계 재계산
+    const total = next.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
+    if (next.length > 0) setForm((f) => ({ ...f, amount: total }));
+  };
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
     const next = lineItems.map((i) => (i.id === id ? { ...i, [field]: value } : i));
     setLineItems(next);
-    // 품목 합계를 거래 금액에 자동 반영
+    // 품목 합계를 항상 거래 금액에 반영 (작아져도 따라감)
     const total = next.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
-    if (total > 0) setForm((f) => ({ ...f, amount: total }));
+    setForm((f) => ({ ...f, amount: total }));
   };
+
 
   // 음성 인식
   const [listening, setListening] = useState(false);
@@ -833,8 +840,13 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                 {/* 카테고리 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="flex items-center gap-1.5 mb-1">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                       <label className="text-xs text-gray-400">대분류</label>
+                      {lineItems.some((i) => i.category_main) && (
+                        <span className="text-[10px] text-gray-400">
+                          (세부품목 분류 있으면 비워둬도 OK)
+                        </span>
+                      )}
                       {categoryHint && (
                         <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-medium">
                           학습됨 {categoryHint.count}회
