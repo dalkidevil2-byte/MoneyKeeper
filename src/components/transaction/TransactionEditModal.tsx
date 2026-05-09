@@ -162,7 +162,17 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   }, [tx.id]);
 
   const updateItem = (id: string, fields: Partial<ItemRow>) => {
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, ...fields } : i));
+    setItems((prev) => {
+      const next = prev.map((i) => i.id === id ? { ...i, ...fields } : i);
+      // 가격 변경 시 거래 전체 금액도 합산으로 업데이트
+      if ('price' in fields) {
+        const total = next.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
+        if (total > 0) {
+          setForm((f) => ({ ...f, amount: total, amountStr: String(total) }));
+        }
+      }
+      return next;
+    });
   };
 
   const isLocalNewItem = (id: string) => id.startsWith('new-');
@@ -185,10 +195,21 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
     setExpandedItemId(localId);
   };
 
+  const recalcTotalAfter = (after: ItemRow[]) => {
+    const total = after.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
+    if (after.length > 0) {
+      setForm((f) => ({ ...f, amount: total, amountStr: String(total) }));
+    }
+  };
+
   const removeItem = async (item: ItemRow) => {
     if (isLocalNewItem(item.id)) {
       // 미저장 로컬 행은 그냥 제거
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setItems((prev) => {
+        const next = prev.filter((i) => i.id !== item.id);
+        recalcTotalAfter(next);
+        return next;
+      });
       return;
     }
     if (!confirm('이 품목을 삭제할까요?')) return;
@@ -199,7 +220,11 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
         { method: 'DELETE' }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setItems((prev) => {
+        const next = prev.filter((i) => i.id !== item.id);
+        recalcTotalAfter(next);
+        return next;
+      });
     } catch (e) {
       setItemError((e as Error).message);
     } finally {
