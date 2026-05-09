@@ -103,12 +103,15 @@ export default function HomePage() {
     'text-emerald-300';
 
   // 미등록 정기 거래 계산 (오늘 이전 날짜인데 이번달 거래내역 없는 항목)
-  const unregisteredFixed = fixedTemplates.filter((ft) => {
-    const dueDate = today.date(ft.due_day);
-    if (dueDate.isAfter(today)) return false;
-    const txType = ft.type ?? 'fixed_expense';
-    return !transactions.some((t) => t.type === txType && t.name === ft.name);
-  });
+  // 거래 데이터 로딩 중엔 계산 X — 깜빡임 방지 (로딩 중 banner 잘못 떴다 사라지는 현상)
+  const unregisteredFixed = txLoading
+    ? []
+    : fixedTemplates.filter((ft) => {
+        const dueDate = today.date(ft.due_day);
+        if (dueDate.isAfter(today)) return false;
+        const txType = ft.type ?? 'fixed_expense';
+        return !transactions.some((t) => t.type === txType && t.name === ft.name);
+      });
 
   const handleBulkRegister = async () => {
     if (bulkRegistering || unregisteredFixed.length === 0) return;
