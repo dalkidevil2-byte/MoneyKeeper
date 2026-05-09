@@ -1151,7 +1151,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                             ? Math.round(item.price / item.quantity)
                             : null;
                           return (
-                            <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                            <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-visible">
                               {/* 품목명 + 금액 */}
                               <div className="flex items-center gap-2 px-3 py-2">
                                 <input
