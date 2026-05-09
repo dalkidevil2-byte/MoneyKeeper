@@ -597,7 +597,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                       onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
                       className="w-full flex items-center justify-between px-3 py-2.5"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isLocalNewItem(item.id) && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">
                             신규
@@ -610,11 +610,21 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                         >
                           {item.name || '품목명 미입력'}
                         </span>
-                        <span className="text-xs text-gray-400 flex-shrink-0">
-                          {item.quantity}{item.unit} · {item.price.toLocaleString('ko-KR')}원
-                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {/* 인라인 가격 편집 (탭 안 펼쳐도 빠른 수정) */}
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={item.price ? item.price.toLocaleString('ko-KR') : ''}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                          updateItem(item.id, { price: n });
+                        }}
+                        placeholder="금액"
+                        className="w-24 text-sm text-right font-semibold border border-gray-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
                         {item.category_main && (
                           <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">{item.category_main}</span>
                         )}
