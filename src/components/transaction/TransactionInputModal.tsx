@@ -81,10 +81,10 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   // 세부 품목
   // 구매단위만 (용량/규격은 품목명에 포함: 예 "맥주 500ml")
   const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
-  interface LineItem { id: string; name: string; quantity: number; price: number; unit: string; track: boolean }
+  interface LineItem { id: string; name: string; quantity: number; price: number; unit: string; track: boolean; category_main?: string; category_sub?: string }
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [showLineItems, setShowLineItems] = useState(false);
-  const addLineItem = () => setLineItems((p) => [...p, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개', track: false }]);
+  const addLineItem = () => setLineItems((p) => [...p, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개', track: false, category_main: '', category_sub: '' }]);
   const removeLineItem = (id: string) => setLineItems((p) => p.filter((i) => i.id !== id));
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
     const next = lineItems.map((i) => (i.id === id ? { ...i, [field]: value } : i));
@@ -1205,6 +1205,33 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                                   />
                                   <span>📊 품목 추적에 추가</span>
                                 </label>
+                                {/* 항목별 카테고리 (대분류 / 소분류) */}
+                                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                  <select
+                                    value={item.category_main ?? ''}
+                                    onChange={(e) => {
+                                      updateLineItem(item.id, 'category_main', e.target.value);
+                                      updateLineItem(item.id, 'category_sub', '');
+                                    }}
+                                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                  >
+                                    <option value="">분류 (거래 기본 사용)</option>
+                                    {CATEGORY_MAIN_OPTIONS.filter((c) => c !== '수입').map((c) => (
+                                      <option key={c} value={c}>{c}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={item.category_sub ?? ''}
+                                    onChange={(e) => updateLineItem(item.id, 'category_sub', e.target.value)}
+                                    disabled={!item.category_main}
+                                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-gray-50"
+                                  >
+                                    <option value="">소분류</option>
+                                    {item.category_main && (CATEGORY_SUB_MAP as Record<string, readonly string[]>)[item.category_main]?.map((s) => (
+                                      <option key={s} value={s}>{s}</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
                             </div>
                           );
