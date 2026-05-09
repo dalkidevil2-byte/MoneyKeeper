@@ -771,6 +771,16 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                   </div>
                 ))}
               </div>
+              {/* 리스트 하단에도 추가 버튼 — 길어졌을 때 위로 스크롤 안 해도 됨 */}
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={addNewItem}
+                  className="w-full mt-2 py-2 border-2 border-dashed border-indigo-200 text-indigo-600 text-xs font-semibold rounded-xl hover:bg-indigo-50 active:bg-indigo-100 flex items-center justify-center gap-1"
+                >
+                  + 품목 추가
+                </button>
+              )}
           </div>
 
           {/* 메모 */}
