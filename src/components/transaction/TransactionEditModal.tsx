@@ -162,17 +162,8 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   }, [tx.id]);
 
   const updateItem = (id: string, fields: Partial<ItemRow>) => {
-    setItems((prev) => {
-      const next = prev.map((i) => i.id === id ? { ...i, ...fields } : i);
-      // 가격 변경 시 거래 전체 금액도 합산으로 업데이트
-      if ('price' in fields) {
-        const total = next.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
-        if (total > 0) {
-          setForm((f) => ({ ...f, amount: total, amountStr: String(total) }));
-        }
-      }
-      return next;
-    });
+    // 자동 재계산 안 함 — 사용자가 '🔄 재계산' 버튼으로 수동 동기화
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, ...fields } : i));
   };
 
   const isLocalNewItem = (id: string) => id.startsWith('new-');
@@ -195,21 +186,9 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
     setExpandedItemId(localId);
   };
 
-  const recalcTotalAfter = (after: ItemRow[]) => {
-    const total = after.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
-    if (after.length > 0) {
-      setForm((f) => ({ ...f, amount: total, amountStr: String(total) }));
-    }
-  };
-
   const removeItem = async (item: ItemRow) => {
     if (isLocalNewItem(item.id)) {
-      // 미저장 로컬 행은 그냥 제거
-      setItems((prev) => {
-        const next = prev.filter((i) => i.id !== item.id);
-        recalcTotalAfter(next);
-        return next;
-      });
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
       return;
     }
     if (!confirm('이 품목을 삭제할까요?')) return;
@@ -220,11 +199,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
         { method: 'DELETE' }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setItems((prev) => {
-        const next = prev.filter((i) => i.id !== item.id);
-        recalcTotalAfter(next);
-        return next;
-      });
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
     } catch (e) {
       setItemError((e as Error).message);
     } finally {
@@ -329,7 +304,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
 
         <div className="px-5 py-4 space-y-4">
           {/* 금액 */}
-          <div className="text-center py-2">
+          <div className="text-center py-2 relative">
             <input
               type="text"
               inputMode="numeric"
@@ -341,6 +316,23 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
               className="text-3xl font-bold text-center w-full border-b-2 border-indigo-400 outline-none pb-1 bg-transparent"
               placeholder="0"
             />
+            {(() => {
+              const itemsTotal = items.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
+              const mismatch = itemsTotal > 0 && itemsTotal !== form.amount;
+              if (!mismatch) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm((f) => ({ ...f, amount: itemsTotal, amountStr: String(itemsTotal) }));
+                  }}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] px-2 py-1 bg-indigo-50 text-indigo-600 font-semibold rounded-md hover:bg-indigo-100"
+                  title={`품목 합계 ${itemsTotal.toLocaleString('ko-KR')}원으로 변경`}
+                >
+                  🔄 재계산
+                </button>
+              );
+            })()}
             <p className="text-xs text-gray-400 mt-1">
               {form.amountStr ? `${Number(form.amountStr).toLocaleString('ko-KR')}원` : '원'}
             </p>
