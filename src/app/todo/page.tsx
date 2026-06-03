@@ -63,6 +63,24 @@ export default function TodoHomePage() {
     refetchTracks();
   };
 
+  // 진입 시 지나간 일정 자동 완료 처리 (할일/루틴 제외)
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/tasks/bulk-complete-past', { method: 'POST' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if ((d?.updated ?? 0) > 0) refetch();
+      })
+      .catch(() => {
+        /* 네트워크 오류 무시 */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 진입 시 노션 자동 sync (30분 throttle 은 서버에서)
   useEffect(() => {
     let cancelled = false;

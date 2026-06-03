@@ -3,6 +3,10 @@
     {
       "path": "/api/todo/telegram/dispatch",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/tasks/bulk-complete-past",
+      "schedule": "10 15 * * *"
     }
   ]
 }
