@@ -62,5 +62,42 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // 4) DB 결과 부족하면 Naver 검색 fallback (KRX 데이터 불완전 대비, 특히 우선주)
+  if (results.length < 5 && !isCode) {
+    try {
+      const url = `https://m.stock.naver.com/api/search/searchListPage?keyword=${encodeURIComponent(q)}&menu=stock`;
+      const r = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          Referer: 'https://m.stock.naver.com/',
+        },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const list: Array<{ itemCode?: string; reutersCode?: string; stockName?: string; nationCode?: string; marketCategory?: string }> =
+          j?.searchList ?? j?.stocks ?? [];
+        for (const it of list) {
+          const code = it.itemCode ?? '';
+          if (!/^\d{6}$/.test(code)) continue;
+          if (it.nationCode && it.nationCode !== 'KOR') continue;
+          if (seen.has(code)) continue;
+          const market = it.marketCategory === 'KOSDAQ' || it.marketCategory === 'KQ' ? 'KOSDAQ' : 'KOSPI';
+          const suffix = market === 'KOSDAQ' ? '.KQ' : '.KS';
+          results.push({
+            code,
+            ticker: `${code}${suffix}`,
+            name: it.stockName ?? code,
+            market,
+          });
+          seen.add(code);
+          if (results.length >= 20) break;
+        }
+      }
+    } catch (e) {
+      console.warn('[krx-search naver fallback]', (e as Error).message);
+    }
+  }
+
   return NextResponse.json(results.slice(0, 20));
 }
