@@ -64,11 +64,18 @@ export default function GoogleCalendarSection() {
     setSyncResult(null);
     try {
       const res = await fetch('/api/google-calendar/sync', { method: 'POST' });
-      if (!res.ok) {
-        setSyncResult('동기화 실패');
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.success === false) {
+        if (j?.needsReconnect) {
+          setSyncResult(
+            '⚠️ 구글 연결이 만료됐어요. 아래에서 다시 "구글 계정 연결"을 눌러 재연결해 주세요.',
+          );
+          await load(); // is_active=false 반영 → 연결 버튼 노출
+        } else {
+          setSyncResult(`동기화 실패${j?.error ? `: ${j.error}` : ''}`);
+        }
         return;
       }
-      const j = await res.json();
       const { pushed, pulled } = j;
       setSyncResult(
         `↑ 보냄 ${pushed} · ↓ 받음 신규 ${pulled.created}, 수정 ${pulled.updated}, 삭제 ${pulled.deleted}`,

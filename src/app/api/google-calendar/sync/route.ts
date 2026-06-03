@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { pullEventsToTasks, pushTaskToGoogle } from '@/lib/google-calendar';
+import { pullEventsToTasks, pushTaskToGoogle, GCalAuthError } from '@/lib/google-calendar';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import type { Task } from '@/types';
 
@@ -40,11 +40,22 @@ export async function POST() {
   }
 
   // 2) pull
-  const pullResult = await pullEventsToTasks(HOUSEHOLD_ID);
-
-  return NextResponse.json({
-    success: true,
-    pushed,
-    pulled: pullResult,
-  });
+  try {
+    const pullResult = await pullEventsToTasks(HOUSEHOLD_ID);
+    return NextResponse.json({
+      success: true,
+      pushed,
+      pulled: pullResult,
+    });
+  } catch (e) {
+    const needsReconnect = e instanceof GCalAuthError && e.needsReconnect;
+    return NextResponse.json(
+      {
+        success: false,
+        error: e instanceof Error ? e.message : '동기화 실패',
+        needsReconnect,
+      },
+      { status: needsReconnect ? 401 : 500 },
+    );
+  }
 }

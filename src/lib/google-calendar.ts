@@ -29,6 +29,16 @@ export type GCalSync = {
   last_synced_at: string | null;
 };
 
+/** 구글 인증 오류 — needsReconnect=true 면 사용자 재연결 필요 (refresh_token 폐기됨) */
+export class GCalAuthError extends Error {
+  needsReconnect: boolean;
+  constructor(message: string, needsReconnect = false) {
+    super(message);
+    this.name = 'GCalAuthError';
+    this.needsReconnect = needsReconnect;
+  }
+}
+
 export const GCAL_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
@@ -96,7 +106,9 @@ async function refreshAccessToken(refreshToken: string): Promise<{
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`refresh 실패: ${res.status} ${t}`);
+    // invalid_grant = refresh_token 폐기/만료 → 사용자 재연결 필요
+    const needsReconnect = t.includes('invalid_grant');
+    throw new GCalAuthError(`refresh 실패: ${res.status} ${t}`, needsReconnect);
   }
   return res.json();
 }
@@ -124,7 +136,20 @@ export async function getAccessToken(householdId: string): Promise<{
     return { accessToken: sync.access_token, sync };
   }
 
-  const { access_token, expires_in } = await refreshAccessToken(sync.refresh_token);
+  let access_token: string;
+  let expires_in: number;
+  try {
+    ({ access_token, expires_in } = await refreshAccessToken(sync.refresh_token));
+  } catch (e) {
+    // 토큰이 영구 폐기됐으면 연동을 비활성화 → UI 가 "재연결" 버튼을 노출
+    if (e instanceof GCalAuthError && e.needsReconnect) {
+      await supabase
+        .from('google_calendar_sync')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('household_id', householdId);
+    }
+    throw e;
+  }
   const newExp = new Date(now + expires_in * 1000).toISOString();
   await supabase
     .from('google_calendar_sync')
