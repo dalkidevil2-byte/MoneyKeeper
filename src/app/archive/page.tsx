@@ -26,6 +26,7 @@ export default function ArchivePage() {
   const [organizeMode, setOrganizeMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [autoBusy, setAutoBusy] = useState(false);
   // 항목(엔트리) 검색 결과
   const [entryResults, setEntryResults] = useState<EntryResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -49,6 +50,36 @@ export default function ArchivePage() {
       });
     } finally {
       setBusy(false);
+    }
+  };
+
+  // AI 자동 분류 — 성격별 카테고리를 만들고 컬렉션을 하위로 정리
+  const autoCategorize = async () => {
+    if (autoBusy) return;
+    if (
+      !confirm(
+        'AI가 컬렉션들을 성격별 카테고리로 자동 분류할까요?\n(이미 분류된 항목은 그대로 둡니다)',
+      )
+    )
+      return;
+    setAutoBusy(true);
+    try {
+      const res = await fetch('/api/archive/auto-categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ household_id: HOUSEHOLD_ID }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        alert(j.error ?? 'AI 분류 실패');
+        return;
+      }
+      alert(j.message ?? '완료');
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '실패');
+    } finally {
+      setAutoBusy(false);
     }
   };
 
@@ -328,8 +359,16 @@ export default function ArchivePage() {
         ) : organizeMode ? (
           /* ── 분류: 각 컬렉션에 상위 지정 ── */
           <div className="space-y-2">
+            <button
+              onClick={autoCategorize}
+              disabled={autoBusy}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
+            >
+              <Sparkles size={16} />
+              {autoBusy ? 'AI가 분류 중…' : 'AI로 성격별 자동 분류'}
+            </button>
             <p className="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
-              컬렉션을 성격별로 묶어보세요. 상위로 지정할 컬렉션을 골라 하위로 보낼 수 있어요 (2단계).
+              AI가 알아서 카테고리를 만들어 묶어줘요. 아래에서 직접 상위 컬렉션을 골라 조정할 수도 있어요 (2단계).
             </p>
             {collections.map((c) => {
               const hasChildren = (childCountMap.get(c.id) ?? 0) > 0;
