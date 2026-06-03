@@ -2,11 +2,20 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Plus, ChevronRight, Sparkles, Search, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Plus, ChevronRight, Sparkles, Search, ArrowUpDown, ChevronUp, ChevronDown, FolderTree } from 'lucide-react';
 import type { ArchiveCollection } from '@/types';
 import { ARCHIVE_TEMPLATES, BLANK_SCHEMA } from '@/lib/archive-templates';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
+
+type EntryResult = {
+  id: string;
+  collection_id: string;
+  collection_name: string;
+  collection_emoji: string;
+  collection_color: string;
+  title: string;
+};
 
 export default function ArchivePage() {
   const [collections, setCollections] = useState<ArchiveCollection[]>([]);
@@ -14,7 +23,12 @@ export default function ArchivePage() {
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [reorderMode, setReorderMode] = useState(false);
+  const [organizeMode, setOrganizeMode] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 항목(엔트리) 검색 결과
+  const [entryResults, setEntryResults] = useState<EntryResult[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const moveCollection = async (idx: number, dir: -1 | 1) => {
     if (busy) return;
@@ -38,7 +52,26 @@ export default function ArchivePage() {
     }
   };
 
-  const filtered = useMemo(() => {
+  // 상위 컬렉션 지정/해제
+  const setParent = async (id: string, parentId: string | null) => {
+    if (busy) return;
+    setBusy(true);
+    setCollections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, parent_id: parentId } : c)),
+    );
+    try {
+      await fetch(`/api/archive/collections/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent_id: parentId }),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 컬렉션 이름/설명 매칭 (클라이언트)
+  const filteredCollections = useMemo(() => {
     if (!search.trim()) return collections;
     const q = search.toLowerCase();
     return collections.filter(
@@ -47,6 +80,25 @@ export default function ArchivePage() {
         (c.description ?? '').toLowerCase().includes(q),
     );
   }, [collections, search]);
+
+  // 상/하위 그룹 구성 (2단계)
+  const { tops, childrenOf, childCountMap } = useMemo(() => {
+    const byId = new Map(collections.map((c) => [c.id, c]));
+    const childrenOf = new Map<string, ArchiveCollection[]>();
+    const tops: ArchiveCollection[] = [];
+    for (const c of collections) {
+      if (c.parent_id && byId.has(c.parent_id)) {
+        const arr = childrenOf.get(c.parent_id) ?? [];
+        arr.push(c);
+        childrenOf.set(c.parent_id, arr);
+      } else {
+        tops.push(c);
+      }
+    }
+    const childCountMap = new Map<string, number>();
+    for (const [pid, arr] of childrenOf) childCountMap.set(pid, arr.length);
+    return { tops, childrenOf, childCountMap };
+  }, [collections]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -60,6 +112,61 @@ export default function ArchivePage() {
     load();
   }, [load]);
 
+  // 항목 검색 (디바운스)
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) {
+      setEntryResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const h = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/archive/search?household_id=${HOUSEHOLD_ID}&q=${encodeURIComponent(q)}`,
+        );
+        const j = await res.json();
+        setEntryResults(Array.isArray(j.entries) ? j.entries : []);
+      } catch {
+        setEntryResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(h);
+  }, [search]);
+
+  const collectionCard = (c: ArchiveCollection, small = false) => (
+    <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div
+        className={`${small ? 'w-9 h-9 text-lg rounded-xl' : 'w-12 h-12 text-2xl rounded-2xl'} flex items-center justify-center shrink-0`}
+        style={{ backgroundColor: `${c.color}22` }}
+      >
+        {c.emoji}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={`${small ? 'text-[13px]' : 'text-sm'} font-bold text-gray-900 truncate`}>
+          {c.name}
+        </div>
+        <div className="text-[11px] text-gray-500 mt-0.5">
+          {(c.entry_count ?? 0).toLocaleString('ko-KR')}건
+          {c.description && ` · ${c.description}`}
+        </div>
+      </div>
+    </div>
+  );
+
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const isSearching = !!search.trim();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-white pb-24">
       {/* 헤더 */}
@@ -70,7 +177,18 @@ export default function ArchivePage() {
           </Link>
           <h1 className="text-lg font-bold text-gray-900 flex-1">📦 아카이브</h1>
           <div className="flex items-center gap-1 mr-12">
-            {collections.length > 1 && (
+            {collections.length > 1 && !reorderMode && (
+              <button
+                onClick={() => setOrganizeMode((v) => !v)}
+                className={`text-sm font-semibold inline-flex items-center gap-0.5 px-2 py-1 rounded-lg ${
+                  organizeMode ? 'bg-violet-600 text-white' : 'text-violet-600'
+                }`}
+                title="상/하위 분류"
+              >
+                <FolderTree size={14} /> {organizeMode ? '완료' : '분류'}
+              </button>
+            )}
+            {collections.length > 1 && !organizeMode && (
               <button
                 onClick={() => setReorderMode((v) => !v)}
                 className={`text-sm font-semibold inline-flex items-center gap-0.5 px-2 py-1 rounded-lg ${
@@ -81,7 +199,7 @@ export default function ArchivePage() {
                 <ArrowUpDown size={14} /> {reorderMode ? '완료' : '순서'}
               </button>
             )}
-            {!reorderMode && (
+            {!reorderMode && !organizeMode && (
               <button
                 onClick={() => setCreating(true)}
                 className="text-sm text-violet-600 font-semibold inline-flex items-center gap-1"
@@ -95,13 +213,13 @@ export default function ArchivePage() {
 
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-3">
         {/* 검색 */}
-        {!loading && collections.length > 0 && (
+        {!loading && collections.length > 0 && !reorderMode && !organizeMode && (
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="컬렉션 이름/설명 검색"
+              placeholder="컬렉션·항목 내용 검색"
               className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-100 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-violet-200"
             />
           </div>
@@ -109,10 +227,6 @@ export default function ArchivePage() {
 
         {loading ? (
           <div className="text-center text-sm text-gray-400 py-12">불러오는 중…</div>
-        ) : filtered.length === 0 && search ? (
-          <div className="text-center text-sm text-gray-400 py-12">
-            "{search}" 와 일치하는 컬렉션 없음
-          </div>
         ) : collections.length === 0 ? (
           <div className="text-center py-12 px-4">
             <div className="text-4xl mb-3">📦</div>
@@ -128,65 +242,171 @@ export default function ArchivePage() {
               <Plus size={14} /> 첫 컬렉션 만들기
             </button>
           </div>
-        ) : (
-          filtered.map((c) => {
-            const realIdx = collections.findIndex((x) => x.id === c.id);
-            const cardInner = (
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
-                  style={{ backgroundColor: `${c.color}22` }}
-                >
-                  {c.emoji}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-gray-900 truncate">
-                    {c.name}
-                  </div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">
-                    {(c.entry_count ?? 0).toLocaleString('ko-KR')}건
-                    {c.description && ` · ${c.description}`}
-                  </div>
-                </div>
+        ) : isSearching ? (
+          /* ── 검색 결과: 컬렉션 + 항목 ── */
+          <div className="space-y-4">
+            {/* 컬렉션 매칭 */}
+            {filteredCollections.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-gray-400 px-1">컬렉션</div>
+                {filteredCollections.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={`/archive/${c.id}`}
+                    className="flex items-center bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 gap-2"
+                  >
+                    {collectionCard(c)}
+                    <ChevronRight size={18} className="text-gray-300 shrink-0" />
+                  </Link>
+                ))}
               </div>
-            );
-            // 검색 중이면 reorder 비활성
-            const showReorder = reorderMode && !search.trim();
-            if (showReorder) {
+            )}
+
+            {/* 항목 매칭 */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-gray-400 px-1">
+                항목 {searching ? '검색 중…' : `(${entryResults.length})`}
+              </div>
+              {entryResults.map((e) => (
+                <Link
+                  key={e.id}
+                  href={`/archive/${e.collection_id}?q=${encodeURIComponent(search.trim())}`}
+                  className="flex items-center bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 gap-3"
+                >
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0"
+                    style={{ backgroundColor: `${e.collection_color}22` }}
+                  >
+                    {e.collection_emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-gray-900 truncate">
+                      {e.title}
+                    </div>
+                    <div className="text-[11px] text-gray-400 mt-0.5 truncate">
+                      {e.collection_name}
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-gray-300 shrink-0" />
+                </Link>
+              ))}
+              {!searching &&
+                entryResults.length === 0 &&
+                filteredCollections.length === 0 && (
+                  <div className="text-center text-sm text-gray-400 py-8">
+                    "{search}" 검색 결과가 없어요.
+                  </div>
+                )}
+            </div>
+          </div>
+        ) : reorderMode ? (
+          /* ── 순서 변경: 평면 리스트 ── */
+          collections.map((c, realIdx) => (
+            <div
+              key={c.id}
+              className="flex items-center bg-white rounded-2xl border border-amber-200 px-3 py-2.5 gap-2"
+            >
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button
+                  onClick={() => moveCollection(realIdx, -1)}
+                  disabled={realIdx === 0 || busy}
+                  className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                >
+                  <ChevronUp size={16} />
+                </button>
+                <button
+                  onClick={() => moveCollection(realIdx, 1)}
+                  disabled={realIdx === collections.length - 1 || busy}
+                  className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+              {collectionCard(c)}
+            </div>
+          ))
+        ) : organizeMode ? (
+          /* ── 분류: 각 컬렉션에 상위 지정 ── */
+          <div className="space-y-2">
+            <p className="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+              컬렉션을 성격별로 묶어보세요. 상위로 지정할 컬렉션을 골라 하위로 보낼 수 있어요 (2단계).
+            </p>
+            {collections.map((c) => {
+              const hasChildren = (childCountMap.get(c.id) ?? 0) > 0;
+              // 상위가 될 수 있는 후보: 최상위(자식 가능)이면서 자기 자신 아님
+              const parentOptions = collections.filter(
+                (p) => p.id !== c.id && !p.parent_id,
+              );
               return (
                 <div
                   key={c.id}
-                  className="flex items-center bg-white rounded-2xl border border-amber-200 px-3 py-2.5 gap-2"
+                  className="bg-white rounded-2xl border border-violet-100 px-3 py-2.5 space-y-2"
                 >
-                  <div className="flex flex-col gap-0.5 shrink-0">
-                    <button
-                      onClick={() => moveCollection(realIdx, -1)}
-                      disabled={realIdx === 0 || busy}
-                      className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
+                  {collectionCard(c, true)}
+                  {hasChildren ? (
+                    <div className="text-[11px] text-gray-400 pl-1">
+                      하위 컬렉션 {childCountMap.get(c.id)}개 보유 — 최상위로 유지됩니다.
+                    </div>
+                  ) : (
+                    <select
+                      value={c.parent_id ?? ''}
+                      onChange={(e) => setParent(c.id, e.target.value || null)}
+                      disabled={busy}
+                      className="w-full text-[13px] px-3 py-2 rounded-xl bg-violet-50 border border-violet-100 focus:outline-none disabled:opacity-50"
                     >
-                      <ChevronUp size={16} />
-                    </button>
-                    <button
-                      onClick={() => moveCollection(realIdx, 1)}
-                      disabled={realIdx === collections.length - 1 || busy}
-                      className="p-1 rounded text-amber-600 disabled:opacity-30 active:bg-amber-50"
-                    >
-                      <ChevronDown size={16} />
-                    </button>
-                  </div>
-                  {cardInner}
+                      <option value="">📂 최상위 (분류 없음)</option>
+                      {parentOptions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.emoji} {p.name} 의 하위로
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               );
-            }
+            })}
+          </div>
+        ) : (
+          /* ── 기본: 상/하위 그룹 렌더링 ── */
+          tops.map((c) => {
+            const children = childrenOf.get(c.id) ?? [];
+            const hasChildren = children.length > 0;
+            const isCollapsed = collapsed.has(c.id);
             return (
-              <Link
-                key={c.id}
-                href={`/archive/${c.id}`}
-                className="flex items-center bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 gap-2"
-              >
-                {cardInner}
-                <ChevronRight size={18} className="text-gray-300 shrink-0" />
-              </Link>
+              <div key={c.id} className="space-y-1.5">
+                <div className="flex items-center gap-1">
+                  <Link
+                    href={`/archive/${c.id}`}
+                    className="flex items-center bg-white rounded-2xl border border-gray-100 px-4 py-3 active:bg-gray-50 gap-2 flex-1 min-w-0"
+                  >
+                    {collectionCard(c)}
+                    <ChevronRight size={18} className="text-gray-300 shrink-0" />
+                  </Link>
+                  {hasChildren && (
+                    <button
+                      onClick={() => toggleCollapse(c.id)}
+                      className="p-2 rounded-xl text-gray-400 active:bg-gray-100 shrink-0"
+                      title={isCollapsed ? '펼치기' : '접기'}
+                    >
+                      {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                    </button>
+                  )}
+                </div>
+                {hasChildren && !isCollapsed && (
+                  <div className="ml-5 pl-3 border-l-2 border-gray-100 space-y-1.5">
+                    {children.map((ch) => (
+                      <Link
+                        key={ch.id}
+                        href={`/archive/${ch.id}`}
+                        className="flex items-center bg-white rounded-xl border border-gray-100 px-3 py-2 active:bg-gray-50 gap-2"
+                      >
+                        {collectionCard(ch, true)}
+                        <ChevronRight size={16} className="text-gray-300 shrink-0" />
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })
         )}

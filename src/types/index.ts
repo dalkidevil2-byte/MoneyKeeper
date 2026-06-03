@@ -767,6 +767,8 @@ export interface ArchiveCollection {
   schema: ArchiveProperty[];
   is_active: boolean;
   position: number;
+  // 상/하위 분류 — null 이면 최상위, 값이 있으면 해당 컬렉션의 하위
+  parent_id?: string | null;
   // 카드 레이아웃 — 'list' (텍스트만) | 'gallery' (사진 표지)
   card_layout?: 'list' | 'gallery';
   created_at: string;

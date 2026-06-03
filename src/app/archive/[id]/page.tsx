@@ -42,7 +42,11 @@ export default function ArchiveCollectionPage({ params }: { params: Promise<Para
     sourceTitle: string;
   } | null>(null);
   const [editingSchema, setEditingSchema] = useState(false);
-  const [search, setSearch] = useState('');
+  // 아카이브 검색에서 넘어온 경우 ?q= 로 초기 검색어 주입
+  const [search, setSearch] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('q') ?? '';
+  });
   // 컬럼별 필터 — { schemaKey: value }
   // select: string | undefined
   // multiselect: string[] (none = 전체)
