@@ -18,7 +18,9 @@ export async function GET(req: NextRequest) {
   const startDate = searchParams.get('start_date');
   const endDate = searchParams.get('end_date');
   const type = searchParams.get('type');
-  const limit = parseInt(searchParams.get('limit') ?? '50');
+  // 날짜 범위 명시되면 제한 큼 (기간 내 모두 보여줘야 함), 아니면 50
+  const hasDateRange = !!(searchParams.get('start_date') && searchParams.get('end_date'));
+  const limit = parseInt(searchParams.get('limit') ?? (hasDateRange ? '2000' : '50'));
   const offset = parseInt(searchParams.get('offset') ?? '0');
 
   try {
