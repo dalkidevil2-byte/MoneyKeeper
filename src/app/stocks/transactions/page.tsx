@@ -6,6 +6,7 @@ import { ChevronLeft, Plus, Camera } from 'lucide-react';
 import dayjs from 'dayjs';
 import StockTransactionSheet, {
   type ExistingTx,
+  type PrefillTx,
 } from '@/components/stock/StockTransactionSheet';
 import StockImportFromImage from '@/components/stock/StockImportFromImage';
 import { computeRealizedTrades, type StockTx } from '@/lib/stock-holdings';
@@ -27,12 +28,28 @@ export default function StockTransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<
-    | { mode: 'create' }
+    | { mode: 'create'; prefill?: PrefillTx }
     | { mode: 'edit'; tx: ExistingTx }
     | null
   >(null);
   const [importing, setImporting] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+
+  // 매수 잔여분 → 매도 입력창을 현재가/잔여수량으로 미리 채워 열기
+  const openSell = useCallback((t: TxRow, remainQty: number, price?: number) => {
+    setSheet({
+      mode: 'create',
+      prefill: {
+        account_id: t.account_id,
+        ticker: t.ticker,
+        company_name: t.company_name,
+        type: 'SELL',
+        date: dayjs().format('YYYY-MM-DD'),
+        quantity: remainQty,
+        price,
+      },
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -373,6 +390,21 @@ export default function StockTransactionsPage() {
                           </div>
                         </div>
                       </button>
+
+                      {/* 매수 잔여분 → 매도 입력 바로가기 */}
+                      {isBuy && remainQty > 0 && (
+                        <div className="px-5 pb-2.5 -mt-1">
+                          <button
+                            onClick={() => openSell(t, remainQty, q?.price)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 bg-white active:bg-blue-50"
+                          >
+                            📉 매도 입력
+                            <span className="text-blue-400 font-normal">
+                              ({remainQty}주{q ? ` · ${fmtPrice(q.price)}` : ''})
+                            </span>
+                          </button>
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -458,6 +490,7 @@ export default function StockTransactionsPage() {
         <StockTransactionSheet
           mode={sheet.mode}
           tx={sheet.mode === 'edit' ? sheet.tx : undefined}
+          prefill={sheet.mode === 'create' ? sheet.prefill : undefined}
           onClose={() => setSheet(null)}
           onSaved={load}
         />
