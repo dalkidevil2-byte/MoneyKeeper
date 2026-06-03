@@ -258,18 +258,17 @@ export async function generateBriefing(
           .sort((a, b) => b.invested - a.invested)
           .slice(0, 3)
           .filter((h) => h.companyName && h.companyName.trim());
-        // 최근 2일 이내 뉴스만 "중요/최신" 으로 간주
-        const cutoff = today.subtract(2, 'day').valueOf();
+        // 최근 4일 이내 뉴스를 "최신" 으로 간주 (수주/공시 등은 며칠 전이어도 중요)
+        const cutoff = today.subtract(4, 'day').valueOf();
         const results = await Promise.all(
           topHoldings.map(async (h) => {
-            const items = await searchStockNews(h.companyName, 5);
+            const items = await searchStockNews(h.companyName, 12);
             const recent = items
-              .filter((n) => {
-                if (!n.publishedAt) return false;
-                const t = new Date(n.publishedAt).valueOf();
-                return !Number.isNaN(t) && t >= cutoff;
-              })
-              .slice(0, 2);
+              .map((n) => ({ n, t: new Date(n.publishedAt).valueOf() }))
+              .filter((x) => !Number.isNaN(x.t) && x.t >= cutoff)
+              .sort((a, b) => b.t - a.t) // 최신순
+              .slice(0, 3)
+              .map((x) => x.n);
             return { company: h.companyName, news: recent };
           }),
         );
@@ -364,7 +363,7 @@ ${goalSummary.length === 0 ? '없음' : goalSummary.map((g) => `- ${g.title}: ${
 ## 주식 자산 (최근 스냅샷)
 ${stockSummary ? `- ${stockSummary.date} 기준 ${stockSummary.value.toLocaleString('ko-KR')}원` : '없음'}
 
-## 보유 종목 관련 최신 뉴스 (최근 2일)
+## 보유 종목 관련 최신 뉴스 (최근 4일)
 ${
   holdingNews.length === 0
     ? '특이 뉴스 없음'
