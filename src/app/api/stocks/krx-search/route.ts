@@ -62,32 +62,33 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 4) DB 결과 부족하면 Naver 검색 fallback (KRX 데이터 불완전 대비, 특히 우선주)
-  if (results.length < 5 && !isCode) {
+  // 4) DB 결과 부족하면 외부 fallback (Yahoo + Naver 동시 시도)
+  if (results.length < 5) {
+    const headers = {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+    };
+
+    // 4-1) Yahoo Finance search
     try {
-      const url = `https://m.stock.naver.com/api/search/searchListPage?keyword=${encodeURIComponent(q)}&menu=stock`;
-      const r = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          Referer: 'https://m.stock.naver.com/',
-        },
-      });
-      if (r.ok) {
-        const j = await r.json();
-        const list: Array<{ itemCode?: string; reutersCode?: string; stockName?: string; nationCode?: string; marketCategory?: string }> =
-          j?.searchList ?? j?.stocks ?? [];
-        for (const it of list) {
-          const code = it.itemCode ?? '';
-          if (!/^\d{6}$/.test(code)) continue;
-          if (it.nationCode && it.nationCode !== 'KOR') continue;
+      const yUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&lang=ko-KR&region=KR&quotesCount=10`;
+      const yr = await fetch(yUrl, { headers });
+      if (yr.ok) {
+        const yj = await yr.json();
+        const quotes: Array<{ symbol?: string; shortname?: string; longname?: string; exchange?: string; quoteType?: string }> =
+          yj?.quotes ?? [];
+        for (const qt of quotes) {
+          const sym = qt.symbol ?? '';
+          // 한국 주식 형식: 005935.KS, 035420.KQ
+          const m = sym.match(/^(\d{6})\.(KS|KQ)$/);
+          if (!m) continue;
+          const code = m[1];
           if (seen.has(code)) continue;
-          const market = it.marketCategory === 'KOSDAQ' || it.marketCategory === 'KQ' ? 'KOSDAQ' : 'KOSPI';
-          const suffix = market === 'KOSDAQ' ? '.KQ' : '.KS';
+          const market = m[2] === 'KQ' ? 'KOSDAQ' : 'KOSPI';
           results.push({
             code,
-            ticker: `${code}${suffix}`,
-            name: it.stockName ?? code,
+            ticker: sym,
+            name: qt.shortname ?? qt.longname ?? code,
             market,
           });
           seen.add(code);
@@ -95,7 +96,38 @@ export async function GET(req: NextRequest) {
         }
       }
     } catch (e) {
-      console.warn('[krx-search naver fallback]', (e as Error).message);
+      console.warn('[krx-search yahoo]', (e as Error).message);
+    }
+
+    // 4-2) Naver search (총합 검색)
+    if (results.length < 5) {
+      try {
+        const nUrl = `https://m.stock.naver.com/front-api/search/autoComplete?query=${encodeURIComponent(q)}&target=stock`;
+        const nr = await fetch(nUrl, { headers: { ...headers, Referer: 'https://m.stock.naver.com/' } });
+        if (nr.ok) {
+          const nj = await nr.json();
+          const items: Array<{ code?: string; nameKor?: string; name?: string; nationType?: string; reutersCode?: string }> =
+            nj?.result?.items ?? nj?.items ?? [];
+          for (const it of items) {
+            const code = it.code ?? '';
+            if (!/^\d{6}$/.test(code)) continue;
+            if (it.nationType && it.nationType !== 'KOR') continue;
+            if (seen.has(code)) continue;
+            const reuters = it.reutersCode ?? '';
+            const suffix = reuters.endsWith('.KS') || reuters.endsWith('.KQ') ? reuters.slice(-3) : '.KS';
+            results.push({
+              code,
+              ticker: `${code}${suffix}`,
+              name: it.nameKor ?? it.name ?? code,
+              market: suffix === '.KQ' ? 'KOSDAQ' : 'KOSPI',
+            });
+            seen.add(code);
+            if (results.length >= 20) break;
+          }
+        }
+      } catch (e) {
+        console.warn('[krx-search naver]', (e as Error).message);
+      }
     }
   }
 
