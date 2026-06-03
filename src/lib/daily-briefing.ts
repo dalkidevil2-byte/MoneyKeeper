@@ -4,6 +4,8 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { createServerSupabaseClient } from './supabase';
 import { logAiUsage } from './ai-usage';
+import { computeHoldings, aggregateByTicker } from './stock-holdings';
+import { searchStockNews, type NewsItem } from './stock-news';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -222,6 +224,62 @@ export async function generateBriefing(
     };
   }
 
+  // 7-pre3b) 보유 종목 + 최신 뉴스 (아침 브리핑 전용)
+  // household → owners → accounts → transactions → computeHoldings.
+  // 보유 비중 상위 종목에 대해 Google News RSS 로 최근 뉴스를 수집한다.
+  let holdingNews: Array<{ company: string; news: NewsItem[] }> = [];
+  if (mode === 'morning') {
+    try {
+      const { data: stockOwners } = await supabase
+        .from('stock_owners')
+        .select('id')
+        .eq('household_id', householdId);
+      const ownerIds = (stockOwners ?? []).map((o) => o.id as string);
+      let stockTxs: unknown[] = [];
+      if (ownerIds.length > 0) {
+        const { data: accs } = await supabase
+          .from('stock_accounts')
+          .select('id')
+          .in('owner_id', ownerIds);
+        const accIds = (accs ?? []).map((a) => a.id as string);
+        if (accIds.length > 0) {
+          const { data } = await supabase
+            .from('stock_transactions')
+            .select('id, account_id, ticker, company_name, type, date, quantity, price, created_at')
+            .in('account_id', accIds)
+            .order('date', { ascending: true });
+          stockTxs = data ?? [];
+        }
+      }
+      if (stockTxs.length > 0) {
+        const holdings = aggregateByTicker(computeHoldings(stockTxs as never));
+        // 보유금액(invested) 상위 3종목만 뉴스 조회 (속도/노이즈 고려)
+        const topHoldings = holdings
+          .sort((a, b) => b.invested - a.invested)
+          .slice(0, 3)
+          .filter((h) => h.companyName && h.companyName.trim());
+        // 최근 2일 이내 뉴스만 "중요/최신" 으로 간주
+        const cutoff = today.subtract(2, 'day').valueOf();
+        const results = await Promise.all(
+          topHoldings.map(async (h) => {
+            const items = await searchStockNews(h.companyName, 5);
+            const recent = items
+              .filter((n) => {
+                if (!n.publishedAt) return false;
+                const t = new Date(n.publishedAt).valueOf();
+                return !Number.isNaN(t) && t >= cutoff;
+              })
+              .slice(0, 2);
+            return { company: h.companyName, news: recent };
+          }),
+        );
+        holdingNews = results.filter((r) => r.news.length > 0);
+      }
+    } catch (e) {
+      console.warn('[briefing holdingNews]', (e as Error).message);
+    }
+  }
+
   // 7-pre4) 카드 청구서 임박 (7일 이내 결제일)
   const sevenDaysLater = today.add(7, 'day').format('YYYY-MM-DD');
   const { data: cards } = await supabase
@@ -306,6 +364,18 @@ ${goalSummary.length === 0 ? '없음' : goalSummary.map((g) => `- ${g.title}: ${
 ## 주식 자산 (최근 스냅샷)
 ${stockSummary ? `- ${stockSummary.date} 기준 ${stockSummary.value.toLocaleString('ko-KR')}원` : '없음'}
 
+## 보유 종목 관련 최신 뉴스 (최근 2일)
+${
+  holdingNews.length === 0
+    ? '특이 뉴스 없음'
+    : holdingNews
+        .map(
+          (h) =>
+            `### ${h.company}\n${h.news.map((n) => `- ${n.title}${n.publisher ? ` (${n.publisher})` : ''}`).join('\n')}`,
+        )
+        .join('\n')
+}
+
 ## 최근 컬렉션 등록 (24시간)
 ${recentArchive.map((a) => `- ${a.emoji} ${a.collection}: ${a.title}`).join('\n') || '없음'}`
       : `# 오늘 마감 데이터 (${todayKey} ${today.format('dddd')})
@@ -367,6 +437,12 @@ ${recentArchive.map((a) => `- ${a.emoji} ${a.collection}`).join('\n') || '없음
 3. 상황에 맞는 격려 / 힘이 나는 말 (구체적으로)
 4. 실용 조언 (컨디션·시간배분·작은 팁)
 5. 마지막 응원
+
+보유 종목 뉴스 처리 (있을 때만):
+- '보유 종목 관련 최신 뉴스' 에 항목이 있으면, **정말 중요해 보이는 1~2건만** 골라 짧게 언급.
+- "어제 ○○ 관련해서 ~한 소식이 있었어요" 정도로 자연스럽게. 종목명은 언급 OK.
+- 단정/투자권유 절대 X. "참고만 하세요" 톤. 주가 예측 X.
+- 뉴스가 '특이 뉴스 없음' 이면 주식 얘기 자체를 생략.
 
 데이터 사용 원칙 (러프하게):
 - 가계부/컬렉션 등록은 **러프하게만 참고**. 구체적 항목명/금액 단정 X.
