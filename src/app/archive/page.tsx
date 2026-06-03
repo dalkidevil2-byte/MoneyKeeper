@@ -83,6 +83,36 @@ export default function ArchivePage() {
     }
   };
 
+  // 빈 카테고리 직접 생성
+  const createCategory = async () => {
+    if (busy) return;
+    const name = prompt('새 카테고리 이름 (예: 관리)')?.trim();
+    if (!name) return;
+    const emoji = prompt('카테고리 이모지 1개 (예: 🗂️)', '🗂️')?.trim() || '🗂️';
+    setBusy(true);
+    try {
+      const res = await fetch('/api/archive/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          household_id: HOUSEHOLD_ID,
+          name,
+          emoji,
+          description: '카테고리',
+          schema: [],
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error ?? '카테고리 생성 실패');
+        return;
+      }
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // 상위 컬렉션 지정/해제
   const setParent = async (id: string, parentId: string | null) => {
     if (busy) return;
@@ -385,16 +415,25 @@ export default function ArchivePage() {
             );
             return (
               <div className="space-y-3">
-                <button
-                  onClick={autoCategorize}
-                  disabled={autoBusy}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
-                >
-                  <Sparkles size={16} />
-                  {autoBusy ? 'AI가 분류 중…' : 'AI로 성격별 자동 분류'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={autoCategorize}
+                    disabled={autoBusy || busy}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
+                  >
+                    <Sparkles size={16} />
+                    {autoBusy ? 'AI가 분류 중…' : 'AI 자동 분류'}
+                  </button>
+                  <button
+                    onClick={createCategory}
+                    disabled={busy || autoBusy}
+                    className="shrink-0 px-4 py-3 rounded-xl bg-white border border-violet-200 text-violet-700 text-sm font-bold inline-flex items-center justify-center gap-1 disabled:opacity-50"
+                  >
+                    <Plus size={16} /> 카테고리
+                  </button>
+                </div>
                 <p className="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
-                  AI가 알아서 카테고리를 만들어 묶어줘요. 잘못 분류된 컬렉션은 아래 드롭다운에서 올바른 카테고리로 옮기세요.
+                  AI가 알아서 묶어주거나, "카테고리"로 직접 만들 수 있어요. 잘못 분류된 컬렉션은 아래 드롭다운에서 올바른 카테고리로 옮기세요.
                 </p>
 
                 {/* 카테고리별 그룹 */}
