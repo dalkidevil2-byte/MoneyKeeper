@@ -21,6 +21,7 @@ export function middleware(req: NextRequest) {
     '/api/todo/telegram/dispatch',
     '/api/todo/telegram/debug',
     '/api/telegram/webhook',
+    '/api/slack/events',
     '/api/stocks/asset-history/snapshot',
     '/api/stocks/asset-history/backfill',
     '/api/transactions/ocr-debug',
