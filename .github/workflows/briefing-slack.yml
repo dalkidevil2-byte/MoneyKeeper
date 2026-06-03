@@ -1,0 +1,64 @@
+name: Daily Briefing to Slack
+
+# 매일 정해진 시각에 MoneyKeeper 브리핑을 생성해 슬랙(집사-클코)으로 발송.
+# GitHub Actions cron 은 UTC 기준이라 KST = UTC + 9.
+#   - 07:00 KST = 22:00 UTC (전날)  → 아침 브리핑(morning)
+#   - 22:00 KST = 13:00 UTC         → 저녁 브리핑(evening)
+# 비밀값 없이 공개 엔드포인트(?slack=1)만 호출 → 슬랙 토큰은 Vercel env 에만 존재.
+
+on:
+  schedule:
+    - cron: '0 22 * * *' # 07:00 KST → morning
+    - cron: '0 13 * * *' # 22:00 KST → evening
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '수동 실행 모드'
+        required: true
+        default: morning
+        type: choice
+        options:
+          - morning
+          - evening
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine mode
+        id: m
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${{ github.event.inputs.mode }}"
+          elif [ "${{ github.event.schedule }}" = "0 22 * * *" ]; then
+            MODE="morning"
+          else
+            MODE="evening"
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Selected mode: $MODE"
+
+      - name: Trigger briefing → Slack
+        run: |
+          set -e
+          URL="https://money-keeper-zgo7.vercel.app/api/briefing?mode=${{ steps.m.outputs.mode }}&slack=1"
+          echo "Calling: $URL"
+          HTTP=$(curl -sS --max-time 120 "$URL" -o response.json -w "%{http_code}")
+          echo "HTTP status: $HTTP"
+          echo "--- response (truncated) ---"
+          head -c 800 response.json || true
+          echo
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Briefing endpoint returned $HTTP"
+            exit 1
+          fi
+          # slack.sent 확인 (jq 없으면 grep fallback)
+          if command -v jq >/dev/null 2>&1; then
+            SENT=$(jq -r '.slack.sent // 0' response.json)
+            REASON=$(jq -r '.slack.reason // ""' response.json)
+            echo "slack.sent=$SENT reason=$REASON"
+            if [ "$SENT" != "1" ]; then
+              echo "::error::Slack delivery failed: $REASON"
+              exit 1
+            fi
+          fi
