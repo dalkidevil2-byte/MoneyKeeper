@@ -113,7 +113,7 @@ export default function ArchivePage() {
   }, [collections, search]);
 
   // 상/하위 그룹 구성 (2단계)
-  const { tops, childrenOf, childCountMap } = useMemo(() => {
+  const { tops, childrenOf, childCountMap, categories, uncategorized } = useMemo(() => {
     const byId = new Map(collections.map((c) => [c.id, c]));
     const childrenOf = new Map<string, ArchiveCollection[]>();
     const tops: ArchiveCollection[] = [];
@@ -128,7 +128,13 @@ export default function ArchivePage() {
     }
     const childCountMap = new Map<string, number>();
     for (const [pid, arr] of childrenOf) childCountMap.set(pid, arr.length);
-    return { tops, childrenOf, childCountMap };
+    // 카테고리 = 자식을 가졌거나 "카테고리"로 표시된 컬렉션
+    const isCategory = (c: ArchiveCollection) =>
+      (childCountMap.get(c.id) ?? 0) > 0 || c.description === '카테고리';
+    const categories = collections.filter(isCategory);
+    // 미분류 = parent 없음 + 카테고리 아님
+    const uncategorized = collections.filter((c) => !c.parent_id && !isCategory(c));
+    return { tops, childrenOf, childCountMap, categories, uncategorized };
   }, [collections]);
 
   const load = useCallback(() => {
@@ -357,54 +363,94 @@ export default function ArchivePage() {
             </div>
           ))
         ) : organizeMode ? (
-          /* ── 분류: 각 컬렉션에 상위 지정 ── */
-          <div className="space-y-2">
-            <button
-              onClick={autoCategorize}
-              disabled={autoBusy}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
-            >
-              <Sparkles size={16} />
-              {autoBusy ? 'AI가 분류 중…' : 'AI로 성격별 자동 분류'}
-            </button>
-            <p className="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
-              AI가 알아서 카테고리를 만들어 묶어줘요. 아래에서 직접 상위 컬렉션을 골라 조정할 수도 있어요 (2단계).
-            </p>
-            {collections.map((c) => {
-              const hasChildren = (childCountMap.get(c.id) ?? 0) > 0;
-              // 상위가 될 수 있는 후보: 최상위(자식 가능)이면서 자기 자신 아님
-              const parentOptions = collections.filter(
-                (p) => p.id !== c.id && !p.parent_id,
-              );
-              return (
-                <div
-                  key={c.id}
-                  className="bg-white rounded-2xl border border-violet-100 px-3 py-2.5 space-y-2"
+          /* ── 분류: 카테고리별로 묶어 보여주고, 각 컬렉션의 카테고리를 바꿀 수 있음 ── */
+          (() => {
+            // 카테고리 선택 드롭다운 (자기 자신 제외)
+            const categorySelect = (c: ArchiveCollection) => (
+              <select
+                value={c.parent_id ?? ''}
+                onChange={(e) => setParent(c.id, e.target.value || null)}
+                disabled={busy}
+                className="w-full text-[13px] px-3 py-2 rounded-xl bg-violet-50 border border-violet-100 focus:outline-none disabled:opacity-50"
+              >
+                <option value="">📂 미분류 (카테고리 없음)</option>
+                {categories
+                  .filter((p) => p.id !== c.id)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.emoji} {p.name}
+                    </option>
+                  ))}
+              </select>
+            );
+            return (
+              <div className="space-y-3">
+                <button
+                  onClick={autoCategorize}
+                  disabled={autoBusy}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
                 >
-                  {collectionCard(c, true)}
-                  {hasChildren ? (
-                    <div className="text-[11px] text-gray-400 pl-1">
-                      하위 컬렉션 {childCountMap.get(c.id)}개 보유 — 최상위로 유지됩니다.
-                    </div>
-                  ) : (
-                    <select
-                      value={c.parent_id ?? ''}
-                      onChange={(e) => setParent(c.id, e.target.value || null)}
-                      disabled={busy}
-                      className="w-full text-[13px] px-3 py-2 rounded-xl bg-violet-50 border border-violet-100 focus:outline-none disabled:opacity-50"
+                  <Sparkles size={16} />
+                  {autoBusy ? 'AI가 분류 중…' : 'AI로 성격별 자동 분류'}
+                </button>
+                <p className="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2">
+                  AI가 알아서 카테고리를 만들어 묶어줘요. 잘못 분류된 컬렉션은 아래 드롭다운에서 올바른 카테고리로 옮기세요.
+                </p>
+
+                {/* 카테고리별 그룹 */}
+                {categories.map((cat) => {
+                  const children = (childrenOf.get(cat.id) ?? []).filter(
+                    (ch) => !categories.some((x) => x.id === ch.id),
+                  );
+                  return (
+                    <div
+                      key={cat.id}
+                      className="bg-white rounded-2xl border border-violet-100 overflow-hidden"
                     >
-                      <option value="">📂 최상위 (분류 없음)</option>
-                      {parentOptions.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.emoji} {p.name} 의 하위로
-                        </option>
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-violet-50/60 border-b border-violet-100">
+                        <span className="text-lg">{cat.emoji}</span>
+                        <span className="text-[13px] font-bold text-gray-900">{cat.name}</span>
+                        <span className="text-[11px] text-gray-400">· {children.length}개</span>
+                      </div>
+                      <div className="p-2 space-y-2">
+                        {children.length === 0 ? (
+                          <div className="text-[11px] text-gray-400 px-2 py-1.5">
+                            비어 있어요. 아래 미분류에서 옮겨오세요.
+                          </div>
+                        ) : (
+                          children.map((ch) => (
+                            <div key={ch.id} className="space-y-1.5 rounded-xl bg-gray-50 p-2">
+                              {collectionCard(ch, true)}
+                              {categorySelect(ch)}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* 미분류 */}
+                {uncategorized.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                      <span className="text-lg">📂</span>
+                      <span className="text-[13px] font-bold text-gray-900">미분류</span>
+                      <span className="text-[11px] text-gray-400">· {uncategorized.length}개</span>
+                    </div>
+                    <div className="p-2 space-y-2">
+                      {uncategorized.map((c) => (
+                        <div key={c.id} className="space-y-1.5 rounded-xl bg-gray-50 p-2">
+                          {collectionCard(c, true)}
+                          {categorySelect(c)}
+                        </div>
                       ))}
-                    </select>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         ) : (
           /* ── 기본: 상/하위 그룹 렌더링 ── */
           tops.map((c) => {
