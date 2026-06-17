@@ -62,7 +62,12 @@ export type NxtQuote = {
 };
 
 /**
- * Naver 의 통합 종목 endpoint 에서 NXT 가격 추출 시도.
+ * Naver 의 종목 basic endpoint 에서 시간외/프리장/NXT 연장세션 가격 추출.
+ * - basic 응답의 `overMarketPriceInfo` 가 정규장 외(프리/애프터/NXT 연장) 체결가를 담음.
+ *   · tradingSessionType: BEFORE_MARKET(프리) / AFTER_MARKET(애프터·NXT 연장)
+ *   · overMarketStatus:   OPEN / CLOSE
+ *   · overPrice:          체결가 (string, 콤마 포함)
+ * - overMarketStatus 가 OPEN 일 때만 의미있는 가격으로 취급.
  * 응답 구조가 변경될 수 있으므로 실패해도 graceful 하게 null 반환.
  * 평일 8:00 ~ 20:00 사이에만 의미있음.
  */
@@ -71,43 +76,36 @@ export async function naverNxtFallback(symbol: string): Promise<NxtQuote | null>
   if (!match) return null;
   const code = match[1];
   try {
-    // integration 응답에 nxtBasic / dealStockInfos 같은 필드 존재 가능
-    const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
+    const url = `https://m.stock.naver.com/api/stock/${code}/basic`;
     const resp = await fetch(url, {
       headers: { 'User-Agent': randomUA(), Referer: 'https://m.stock.naver.com/' },
     });
     if (!resp.ok) return null;
     const data: Record<string, unknown> = await resp.json();
 
-    // 가능한 필드 후보들 — 네이버 응답 변경 대응
-    const candidates: Array<Record<string, unknown> | undefined> = [
-      data.nxtBasic as Record<string, unknown> | undefined,
-      data.nxt as Record<string, unknown> | undefined,
-      (data.dealStockInfos as Array<Record<string, unknown>> | undefined)?.find(
-        (d) =>
-          String(d.marketCategoryCode ?? d.market ?? '').toUpperCase().includes('NXT'),
-      ),
-    ];
-    for (const c of candidates) {
-      if (!c) continue;
-      const priceRaw =
-        c.closePrice ?? c.currentPrice ?? c.tradePrice ?? c.price ?? null;
-      const price = parseFloat(String(priceRaw ?? '0').replace(/,/g, ''));
-      if (!price || price <= 0) continue;
-      const changeAmt = parseFloat(
-        String(c.compareToPreviousClosePrice ?? c.change ?? '0').replace(/,/g, ''),
-      );
-      const changePct = parseFloat(
-        String(c.fluctuationsRatio ?? c.changeRate ?? '0').replace(/,/g, ''),
-      );
-      return {
-        symbol,
-        nxtPrice: price,
-        nxtChange: isNaN(changeAmt) ? undefined : changeAmt,
-        nxtChangePct: isNaN(changePct) ? undefined : changePct,
-      };
-    }
-    return null;
+    const over = data.overMarketPriceInfo as Record<string, unknown> | undefined;
+    if (!over) return null;
+
+    // 연장 세션이 열려있을 때만 (CLOSE 면 정규장 종가와 동일하므로 무의미)
+    const status = String(over.overMarketStatus ?? '').toUpperCase();
+    if (status && status !== 'OPEN') return null;
+
+    const priceRaw = over.overPrice ?? null;
+    const price = parseFloat(String(priceRaw ?? '0').replace(/,/g, ''));
+    if (!price || price <= 0) return null;
+
+    const changeAmt = parseFloat(
+      String(over.compareToPreviousClosePrice ?? '0').replace(/,/g, ''),
+    );
+    const changePct = parseFloat(
+      String(over.fluctuationsRatio ?? '0').replace(/,/g, ''),
+    );
+    return {
+      symbol,
+      nxtPrice: price,
+      nxtChange: isNaN(changeAmt) ? undefined : changeAmt,
+      nxtChangePct: isNaN(changePct) ? undefined : changePct,
+    };
   } catch (e) {
     console.warn('[naverNxtFallback]', symbol, (e as Error).message);
     return null;
