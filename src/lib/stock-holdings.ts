@@ -13,6 +13,8 @@ export type StockTx = {
   date: string;          // YYYY-MM-DD
   quantity: number;
   price: number;
+  fee?: number;          // 거래 수수료 (매수/매도)
+  tax?: number;          // 거래세 (매도시)
   created_at: string;    // ISO
 };
 
@@ -103,7 +105,9 @@ export type RealizedTrade = {
   avgCostAtSell: number; // 매도 시점의 평단가
   proceeds: number;      // = quantity * sellPrice
   cost: number;          // = quantity * avgCostAtSell
-  pl: number;            // proceeds - cost
+  fee: number;           // 매도 수수료 (해당 매도 수량 비례)
+  tax: number;           // 거래세 (해당 매도 수량 비례)
+  pl: number;            // proceeds - cost - fee - tax (수수료·세금 차감 후 순실현손익)
   plPct: number;         // pl / cost * 100
 };
 
@@ -130,7 +134,11 @@ export function computeRealizedTrades(txs: StockTx[], accountId?: string): Reali
       if (sellQty > 0) {
         const proceeds = sellQty * tx.price;
         const cost = sellQty * h.avgPrice;
-        const pl = proceeds - cost;
+        // 매도 수수료·세금은 거래 전체 기준 → 실제 체결 수량(sellQty) 비례로 차감
+        const ratio = tx.quantity > 0 ? sellQty / tx.quantity : 1;
+        const fee = (tx.fee ?? 0) * ratio;
+        const tax = (tx.tax ?? 0) * ratio;
+        const pl = proceeds - cost - fee - tax;
         result.push({
           txId: tx.id,
           date: tx.date,
@@ -142,6 +150,8 @@ export function computeRealizedTrades(txs: StockTx[], accountId?: string): Reali
           avgCostAtSell: h.avgPrice,
           proceeds,
           cost,
+          fee,
+          tax,
           pl,
           plPct: cost > 0 ? (pl / cost) * 100 : 0,
         });

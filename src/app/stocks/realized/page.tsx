@@ -301,6 +301,12 @@ export default function RealizedPage() {
                                 {' · 평단 '}
                                 {Math.round(t.avgCostAtSell).toLocaleString('ko-KR')}
                               </div>
+                              {(t.fee > 0 || t.tax > 0) && (
+                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                  수수료·세금 −
+                                  {Math.round(t.fee + t.tax).toLocaleString('ko-KR')}원 차감
+                                </div>
+                              )}
                             </div>
                             <div className="text-right shrink-0">
                               <div
