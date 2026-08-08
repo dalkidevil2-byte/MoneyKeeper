@@ -1,21 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { X, ArrowRight, ChevronDown, CheckCircle, AlertCircle, Mic, MicOff, Camera, FileText, Package, Plus, Minus } from 'lucide-react';
-import type { ParsedTransaction, CreateTransactionInput } from '@/types';
 import {
-  TRANSACTION_TYPE_LABELS,
-  CATEGORY_MAIN_OPTIONS,
-  CATEGORY_SUB_MAP,
-} from '@/types';
-import { useParseText, useSaveTransaction } from '@/hooks/useTransactions';
+  X, ChevronDown, ChevronUp, CheckCircle, AlertCircle,
+  Mic, MicOff, Camera, Package, Plus, Minus, Lock,
+} from 'lucide-react';
+import type { CreateTransactionInput, ParsedTransaction } from '@/types';
+import { CATEGORY_MAIN_OPTIONS, CATEGORY_SUB_MAP } from '@/types';
+import { useSaveTransaction, useTransactions } from '@/hooks/useTransactions';
 import { useAccounts, usePaymentMethods, useMembers, useBudgets, useCustomCategories } from '@/hooks/useAccounts';
 import CategoryCombobox from '@/components/CategoryCombobox';
 import ReceiptAttachment from '@/components/ReceiptAttachment';
 import OcrReviewSheet from '@/components/transaction/OcrReviewSheet';
-// TransactionConfirmSheet는 Inbox 방식으로 대체됨
-import { useTransactions } from '@/hooks/useTransactions';
-import { formatAmount } from '@/lib/parser';
+import { formatAmount, parseTransactionText } from '@/lib/parser';
 import dayjs from 'dayjs';
 
 interface Props {
@@ -36,86 +33,68 @@ interface Props {
   } | null;
 }
 
+interface LineItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  unit: string;
+  track: boolean;
+  category_main?: string;
+  category_sub?: string;
+}
+
+/** 상단 유형 탭 — 고정지출은 '지출' 안의 토글로 접어 넣음 */
+const TABS = [
+  { key: 'expense', label: '지출' },
+  { key: 'income', label: '수입' },
+  { key: 'transfer', label: '이동' },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
+
+const INPUT_CLS =
+  'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300';
+
+/** 라벨 + 입력칸 한 줄 */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-gray-400 w-16 flex-shrink-0">{label}</span>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
 export default function TransactionInputModal({ open, onClose, onSaved, onSavedWithId, prefill }: Props) {
-  const [step, setStep] = useState<'input' | 'preview'>('input');
-  const [inputMode, setInputMode] = useState<'text' | 'ocr'>('text');
-  const [inputText, setInputText] = useState('');
+  // ── 핵심 상태 ──
+  const [quickText, setQuickText] = useState('');
   const [form, setForm] = useState<Partial<CreateTransactionInput>>({});
+  const [parsed, setParsed] = useState<ParsedTransaction | null>(null);
+  const [showMore, setShowMore] = useState(false);
   const [suggestionApplied, setSuggestionApplied] = useState<string | null>(null);
 
-  // 항목명/가맹점명 입력 시 → 과거 학습 데이터로 카테고리/결제수단 자동 채우기 (debounced)
-  useEffect(() => {
-    const name = (form.name ?? '').trim();
-    const merchant = (form.merchant_name ?? '').trim();
-    if (name.length < 2 && merchant.length < 2) {
-      setSuggestionApplied(null);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      try {
-        const param = name.length >= 2 ? `name=${encodeURIComponent(name)}` : `merchant=${encodeURIComponent(merchant)}`;
-        const res = await fetch(`/api/transactions/suggest?${param}`);
-        const j = await res.json();
-        if (!j.ok || !j.suggestion) return;
-        const s = j.suggestion;
-        setForm((f) => {
-          const next = { ...f };
-          // 빈 필드만 채움 (사용자 입력 보호)
-          if (!f.merchant_name && s.merchant_name) next.merchant_name = s.merchant_name;
-          if (!f.category_main && s.category_main) next.category_main = s.category_main;
-          if (!f.category_sub && s.category_sub) next.category_sub = s.category_sub;
-          if (!f.payment_method_id && !f.account_from_id) {
-            if (s.payment_method_id) next.payment_method_id = s.payment_method_id;
-            else if (s.account_from_id) next.account_from_id = s.account_from_id;
-          }
-          return next;
-        });
-        setSuggestionApplied(`${s.frequency}회 자동 입력됨`);
-      } catch {
-        /* skip */
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [form.name, form.merchant_name]);
+  /**
+   * 사용자가 직접 만진 필드는 자동 파싱이 덮어쓰지 않는다.
+   * (빠른 입력칸을 계속 고쳐도 손으로 고른 값이 유지되도록)
+   */
+  const touchedRef = useRef<Set<string>>(new Set());
+  const setField = useCallback(<K extends keyof CreateTransactionInput>(key: K, value: CreateTransactionInput[K] | undefined) => {
+    touchedRef.current.add(key as string);
+    setForm((f) => ({ ...f, [key]: value }));
+  }, []);
 
-  // 세부 품목
-  // 구매단위만 (용량/규격은 품목명에 포함: 예 "맥주 500ml")
-  const UNIT_OPTIONS = ['개', '캔', '병', '봉', '팩', '박스', '장', '구', '인분', '묶음', '롤', '포'];
-  interface LineItem { id: string; name: string; quantity: number; price: number; unit: string; track: boolean; category_main?: string; category_sub?: string }
+  // ── 세부 품목 ──
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [showLineItems, setShowLineItems] = useState(false);
-  const addLineItem = () => setLineItems((p) => [...p, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개', track: false, category_main: '', category_sub: '' }]);
-  const removeLineItem = (id: string) => {
-    const next = lineItems.filter((i) => i.id !== id);
-    setLineItems(next);
-    // 삭제 시에도 합계 재계산
-    const total = next.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
-    if (next.length > 0) setForm((f) => ({ ...f, amount: total }));
-  };
-  const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
-    const next = lineItems.map((i) => (i.id === id ? { ...i, [field]: value } : i));
-    setLineItems(next);
-    // 품목 합계를 항상 거래 금액에 반영 (작아져도 따라감)
-    const total = next.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
-    setForm((f) => ({ ...f, amount: total }));
-  };
 
-
-  // 음성 인식
+  // ── 음성 / OCR ──
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
-
-  // 저장 완료 토스트
-  const [savedToast, setSavedToast] = useState(false);
-
-  // OCR
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { parsed, parsing, parseText, clearParsed } = useParseText();
+  // ── 데이터 ──
   const { saveTransaction, saving, error: saveError } = useSaveTransaction();
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
@@ -123,7 +102,13 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   const { budgets } = useBudgets();
   const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
 
-  // 기본 + 커스텀 카테고리 머지
+  const today = dayjs();
+  const { transactions: monthTxs } = useTransactions({
+    startDate: today.startOf('month').format('YYYY-MM-DD'),
+    endDate: today.endOf('month').format('YYYY-MM-DD'),
+  });
+
+  // ── 카테고리 (기본 + 커스텀) ──
   const allMainCategories = useMemo(() => {
     const customs = customCategories
       .map((c) => c.category_main)
@@ -139,6 +124,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       .filter((s, i, arr) => arr.indexOf(s) === i && !defaults.includes(s));
     return [...defaults, ...customs];
   };
+
   const handleAddMainCategory = async (name: string) => {
     await fetch('/api/custom-categories', {
       method: 'POST',
@@ -158,13 +144,169 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
     refetchCategories();
   };
 
-  const today = dayjs();
-  const { transactions: monthTxs } = useTransactions({
-    startDate: today.startOf('month').format('YYYY-MM-DD'),
-    endDate:   today.endOf('month').format('YYYY-MM-DD'),
-  });
+  // ── 열릴 때 기본값 ──
+  useEffect(() => {
+    if (!open) return;
+    touchedRef.current = new Set();
+    setForm({ date: dayjs().format('YYYY-MM-DD'), type: 'variable_expense' });
+  }, [open]);
 
-  // 저장 직전 예산 초과 여부 확인
+  // ── prefill (고정지출 템플릿) — 손으로 채운 값으로 취급해 자동파싱이 덮지 않게 ──
+  useEffect(() => {
+    if (!open || !prefill) return;
+    touchedRef.current = new Set([
+      'type', 'amount', 'name', 'merchant_name', 'category_main',
+      'category_sub', 'payment_method_id', 'account_from_id', 'account_to_id',
+    ]);
+    setForm({
+      date: dayjs().format('YYYY-MM-DD'),
+      type: (prefill.type as any) ?? 'fixed_expense',
+      amount: prefill.amount || undefined,
+      name: prefill.name,
+      merchant_name: prefill.name,
+      category_main: prefill.category_main,
+      category_sub: prefill.category_sub,
+      payment_method_id: prefill.payment_method_id ?? undefined,
+      account_from_id: prefill.account_from_id ?? undefined,
+      account_to_id: prefill.account_to_id ?? undefined,
+    });
+  }, [open, prefill]);
+
+  // ── 빠른 입력칸 → 실시간 자동 채움 (로컬 규칙 파서, 서버 호출 없음) ──
+  useEffect(() => {
+    const text = quickText.trim();
+    if (!text) {
+      setParsed(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const p = parseTransactionText(text);
+      setParsed(p);
+
+      const matchedPM = paymentMethods.find(
+        (pm) =>
+          p.payment_method_hint &&
+          (pm.name.includes(p.payment_method_hint) ||
+            p.payment_method_hint.includes(pm.type.replace('_', ''))),
+      );
+      const matchedFrom = p.transfer_from_hint
+        ? accounts.find((a) => a.name.includes(p.transfer_from_hint) || p.transfer_from_hint.includes(a.name))
+        : matchedPM?.linked_account_id
+          ? accounts.find((a) => a.id === matchedPM.linked_account_id)
+          : undefined;
+      const matchedTo = p.transfer_to_hint
+        ? accounts.find((a) => a.name.includes(p.transfer_to_hint) || p.transfer_to_hint.includes(a.name))
+        : undefined;
+
+      setForm((f) => {
+        const next: Partial<CreateTransactionInput> = { ...f };
+        const put = (key: string, value: unknown) => {
+          if (value === undefined || value === null || value === '') return;
+          if (touchedRef.current.has(key)) return;
+          (next as any)[key] = value;
+        };
+        put('amount', p.amount ?? undefined);
+        put('type', p.type);
+        put('date', p.date);
+        put('name', p.name);
+        put('merchant_name', p.merchant_name);
+        put('category_main', p.category_main);
+        put('category_sub', p.category_sub);
+        put('payment_method_id', matchedPM?.id);
+        put('account_from_id', matchedFrom?.id);
+        put('account_to_id', matchedTo?.id);
+        return next;
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [quickText, paymentMethods, accounts]);
+
+  // ── 과거 기록 학습 → 빈 필드만 자동 채움 ──
+  useEffect(() => {
+    const name = (form.name ?? '').trim();
+    const merchant = (form.merchant_name ?? '').trim();
+    if (name.length < 2 && merchant.length < 2) {
+      setSuggestionApplied(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const param = name.length >= 2
+          ? `name=${encodeURIComponent(name)}`
+          : `merchant=${encodeURIComponent(merchant)}`;
+        const res = await fetch(`/api/transactions/suggest?${param}`);
+        const j = await res.json();
+        if (!j.ok || !j.suggestion) return;
+        const s = j.suggestion;
+        setForm((f) => {
+          const next = { ...f };
+          // 빈 필드만 채움 (사용자 입력 보호)
+          if (!f.merchant_name && s.merchant_name) next.merchant_name = s.merchant_name;
+          if (!f.category_main && s.category_main) next.category_main = s.category_main;
+          if (!f.category_sub && s.category_sub) next.category_sub = s.category_sub;
+          if (!f.payment_method_id && !f.account_from_id) {
+            if (s.payment_method_id) next.payment_method_id = s.payment_method_id;
+            else if (s.account_from_id) next.account_from_id = s.account_from_id;
+          }
+          return next;
+        });
+        setSuggestionApplied(`과거 ${s.frequency}회 기록에서 자동 입력`);
+      } catch {
+        /* skip */
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.name, form.merchant_name]);
+
+  // ── 세부 품목 조작 ──
+  const addLineItem = () =>
+    setLineItems((p) => [
+      ...p,
+      { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, unit: '개', track: false, category_main: '', category_sub: '' },
+    ]);
+
+  const syncAmountFromItems = (items: LineItem[]) => {
+    const total = items.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
+    touchedRef.current.add('amount');
+    setForm((f) => ({ ...f, amount: total }));
+  };
+
+  const removeLineItem = (id: string) => {
+    const next = lineItems.filter((i) => i.id !== id);
+    setLineItems(next);
+    if (next.length > 0) syncAmountFromItems(next);
+  };
+
+  const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
+    const next = lineItems.map((i) => (i.id === id ? { ...i, [field]: value } : i));
+    setLineItems(next);
+    syncAmountFromItems(next);
+  };
+
+  const openLineItems = async () => {
+    setShowLineItems((v) => !v);
+    if (showLineItems || lineItems.length > 0) return;
+
+    const defaultName = form.merchant_name || form.name || '';
+    const sub = (form.category_sub || '').toLowerCase();
+    const nameLower = (form.name || '').toLowerCase();
+    let defaultUnit = '개';
+    if (sub.includes('주유') || nameLower.includes('주유') || nameLower.includes('휘발유') || nameLower.includes('경유')) defaultUnit = 'L';
+    else if (nameLower.includes('세제') || nameLower.includes('샴푸') || nameLower.includes('린스')) defaultUnit = 'ml';
+    else if (nameLower.includes('쌀') || nameLower.includes('밀가루')) defaultUnit = 'kg';
+    else if (nameLower.includes('우유') || nameLower.includes('음료') || nameLower.includes('주스')) defaultUnit = 'L';
+
+    if (defaultName) {
+      try {
+        const res = await fetch(`/api/items/unit-hint?name=${encodeURIComponent(defaultName)}`);
+        const { hint } = await res.json();
+        if (hint?.unit) defaultUnit = hint.unit;
+      } catch {}
+    }
+    setLineItems([{ id: crypto.randomUUID(), name: defaultName, quantity: 1, price: 0, unit: defaultUnit, track: false }]);
+  };
+
+  // ── 예산 경고 ──
   const [budgetWarningMsg, setBudgetWarningMsg] = useState<string | null>(null);
   const [ignoreWarning, setIgnoreWarning] = useState(false);
 
@@ -178,105 +320,19 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
     const newTotal = alreadySpent + (f.amount ?? 0);
     const rate = Math.round((newTotal / budget.amount) * 100);
     if (rate >= 100) return `${f.category_main} 예산을 초과해요! (${formatAmount(newTotal)} / ${formatAmount(budget.amount)})`;
-    if (rate >= 80)  return `${f.category_main} 예산의 ${rate}%에 도달해요 (${formatAmount(budget.amount - alreadySpent)} 남음)`;
+    if (rate >= 80) return `${f.category_main} 예산의 ${rate}%에 도달해요 (${formatAmount(budget.amount - alreadySpent)} 남음)`;
     return null;
   };
 
-  // prefill (정기 거래 템플릿) → 폼 초기화
-  useEffect(() => {
-    if (!open || !prefill) return;
-    setForm({
-      date: dayjs().format('YYYY-MM-DD'),
-      type: (prefill.type as any) ?? 'fixed_expense',
-      amount: prefill.amount,
-      name: prefill.name,
-      merchant_name: prefill.name,
-      category_main: prefill.category_main,
-      category_sub: prefill.category_sub,
-      payment_method_id: prefill.payment_method_id ?? undefined,
-      account_from_id: prefill.account_from_id ?? undefined,
-      account_to_id: prefill.account_to_id ?? undefined,
-    });
-    setStep('preview');
-  }, [open, prefill]);
-
-  const [categoryHint, setCategoryHint] = useState<{ category_main: string; category_sub: string; count: number } | null>(null);
-
-  // 파싱 결과 → 폼 초기화
-  useEffect(() => {
-    if (!parsed) return;
-
-    // 결제수단 힌트로 매칭
-    const matchedPM = paymentMethods.find((pm) =>
-      pm.name.includes(parsed.payment_method_hint) ||
-      parsed.payment_method_hint.includes(pm.type.replace('_', ''))
-    );
-
-    // 계좌 힌트 매칭 (이동)
-    const matchedFromAccount = parsed.transfer_from_hint
-      ? accounts.find((a) => a.name.includes(parsed.transfer_from_hint) || parsed.transfer_from_hint.includes(a.name))
-      : matchedPM?.linked_account_id
-      ? accounts.find((a) => a.id === matchedPM.linked_account_id)
-      : undefined;
-
-    const matchedToAccount = parsed.transfer_to_hint
-      ? accounts.find((a) => a.name.includes(parsed.transfer_to_hint) || parsed.transfer_to_hint.includes(a.name))
-      : undefined;
-
-    const baseForm = {
-      date: parsed.date,
-      type: parsed.type,
-      amount: parsed.amount ?? undefined,
-      name: parsed.name,
-      merchant_name: parsed.merchant_name,
-      category_main: parsed.category_main,
-      category_sub: parsed.category_sub,
-      payment_method_id: matchedPM?.id,
-      account_from_id: matchedFromAccount?.id,
-      account_to_id: matchedToAccount?.id,
-      input_type: 'text' as const,
-      raw_input: inputText,
-    };
-
-    setForm(baseForm);
-    setStep('preview');
-    setCategoryHint(null);
-
-    // 가맹점명으로 카테고리 힌트 조회
-    const merchantKey = parsed.merchant_name || parsed.name;
-    if (merchantKey) {
-      fetch(`/api/transactions/category-hint?merchant=${encodeURIComponent(merchantKey)}`)
-        .then((r) => r.json())
-        .then(({ hint }) => {
-          if (hint) {
-            setCategoryHint(hint);
-            setForm((f) => ({ ...f, category_main: hint.category_main, category_sub: hint.category_sub }));
-          }
-        });
-    }
-  }, [parsed]);
-
-  const handleParse = () => {
-    if (!inputText.trim()) return;
-    parseText(inputText);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleParse();
-    }
-  };
-
+  // ── 저장 ──
   const handleSave = async () => {
     if (!form.amount || !form.date) return;
 
-    // 예산 경고 체크 (처음 저장 시도 시)
     if (!ignoreWarning) {
       const warning = checkBudget(form);
       if (warning) {
         setBudgetWarningMsg(warning);
-        return; // 저장 막고 경고 표시
+        return;
       }
     }
 
@@ -298,12 +354,11 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       memo: form.memo ?? '',
       receipt_url: form.receipt_url ?? '',
       input_type: 'text',
-      raw_input: inputText,
+      raw_input: quickText,
     };
 
     const tx = await saveTransaction(input);
     if (tx) {
-      // 세부 품목 저장
       const validItems = lineItems.filter((i) => i.name.trim() && i.price > 0);
       if (validItems.length > 0) {
         await fetch(`/api/transactions/${tx.id}/items`, {
@@ -319,40 +374,41 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   };
 
   const handleClose = () => {
-    setStep('input');
-    setInputMode('text');
-    setInputText('');
+    setQuickText('');
     setForm({});
+    setParsed(null);
+    setShowMore(false);
     setOcrResult(null);
     setListening(false);
-    setCategoryHint(null);
     setLineItems([]);
     setShowLineItems(false);
+    setSuggestionApplied(null);
+    touchedRef.current = new Set();
     if (recognitionRef.current) recognitionRef.current.stop();
-    clearParsed();
     setBudgetWarningMsg(null);
     setIgnoreWarning(false);
     onClose();
   };
 
-  // 음성 인식 토글
+  // ── 음성 인식 (저장은 항상 사용자가 직접 누름) ──
   const toggleVoice = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert('이 브라우저는 음성 인식을 지원하지 않아요.'); return; }
-
+    if (!SpeechRecognition) {
+      alert('이 브라우저는 음성 인식을 지원하지 않아요.');
+      return;
+    }
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
       return;
     }
-
     const rec = new SpeechRecognition();
     rec.lang = 'ko-KR';
     rec.continuous = false;
     rec.interimResults = false;
     rec.onresult = (e: any) => {
       const transcript = e.results[0][0].transcript;
-      setInputText((prev) => prev ? prev + ' ' + transcript : transcript);
+      setQuickText((prev) => (prev ? prev + ' ' + transcript : transcript));
       setListening(false);
     };
     rec.onerror = () => setListening(false);
@@ -362,9 +418,9 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
     setListening(true);
   }, [listening]);
 
-  // 이미지 압축 (최대 1200px, 품질 80%)
-  const compressImage = (file: File): Promise<{ base64: string; mimeType: string }> => {
-    return new Promise((resolve, reject) => {
+  // ── OCR ──
+  const compressImage = (file: File): Promise<{ base64: string; mimeType: string }> =>
+    new Promise((resolve, reject) => {
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
@@ -372,11 +428,12 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
         const MAX = 1200;
         let { width, height } = img;
         if (width > MAX || height > MAX) {
-          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-          else { width = Math.round(width * MAX / height); height = MAX; }
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
         }
         const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
+        canvas.width = width;
+        canvas.height = height;
         canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
         const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
         resolve({ base64, mimeType: 'image/jpeg' });
@@ -384,9 +441,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       img.onerror = reject;
       img.src = url;
     });
-  };
 
-  // OCR 이미지 처리 (File 객체 직접)
   const handleOcrFileRaw = async (file: File) => {
     setOcrLoading(true);
     try {
@@ -425,45 +480,16 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
     }
   };
 
-  // OCR input onChange 핸들러
   const handleOcrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     await handleOcrFileRaw(file);
   };
 
-  // 갤러리에서 열기 (showOpenFilePicker → 파일 선택창 강제)
-  const handleGalleryOpen = async () => {
-    try {
-      if (typeof window !== 'undefined' && 'showOpenFilePicker' in window) {
-        const [fileHandle] = await (window as any).showOpenFilePicker({
-          types: [{ description: '이미지', accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'] } }],
-          multiple: false,
-        });
-        const file = await fileHandle.getFile();
-        await handleOcrFileRaw(file);
-      } else {
-        // 폴백: 일반 파일 input 클릭
-        galleryInputRef.current?.click();
-      }
-    } catch (err: any) {
-      // 사용자가 취소한 경우 무시
-      if (err?.name !== 'AbortError') {
-        galleryInputRef.current?.click();
-      }
-    }
-  };
-
   // OCR 확인 후 등록: 거래 1건 + items 테이블
   const handleOcrConfirm = async (
     items: any[],
-    meta: {
-      date: string;
-      payment_method_id: string;
-      account_from_id?: string;
-      member_id: string;
-      saveImage: boolean;
-    },
+    meta: { date: string; payment_method_id: string; account_from_id?: string; member_id: string; saveImage: boolean },
   ) => {
     const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
     const storeName = ocrResult?.store_name || '마트';
@@ -475,29 +501,21 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       const k = i.category_main || '기타';
       mainWeight[k] = (mainWeight[k] ?? 0) + Math.abs(i.amount);
     });
-    const topCat =
-      Object.entries(mainWeight).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '식비';
+    const topCat = Object.entries(mainWeight).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '식비';
 
     // 소분류: topCat에 해당하는 품목 중 금액 가중치로 최빈값
     const subWeight: Record<string, number> = {};
     items
       .filter((i: any) => (i.category_main || '기타') === topCat && i.category_sub)
       .forEach((i: any) => {
-        subWeight[i.category_sub] =
-          (subWeight[i.category_sub] ?? 0) + Math.abs(i.amount);
+        subWeight[i.category_sub] = (subWeight[i.category_sub] ?? 0) + Math.abs(i.amount);
       });
-    const topSub =
-      Object.entries(subWeight).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+    const topSub = Object.entries(subWeight).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
     // 거래 대표 품목명: 첫 품목 + 외 N건 (가맹점과 별개)
     const representativeName =
-      items.length === 1
-        ? items[0].name
-        : items.length > 1
-          ? `${items[0].name} 외 ${items.length - 1}건`
-          : ''; // items 0개는 onConfirm에서 이미 막혀 있음
+      items.length === 1 ? items[0].name : items.length > 1 ? `${items[0].name} 외 ${items.length - 1}건` : '';
 
-    // 1. 거래 1건 생성 (총액)
     const txRes = await fetch('/api/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -533,7 +551,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
     }
     const { transaction } = await txRes.json();
 
-    // 2. 세부 품목 저장
     await fetch(`/api/transactions/${transaction.id}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -558,15 +575,12 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
 
   if (!open) return null;
 
-  // 모달 밖에 배치 - 안드로이드 input 트리거 문제 방지
+  // 모달 밖에 배치 - 안드로이드 input 트리거 문제 방지.
+  // capture 속성을 빼면 모바일이 '카메라 / 사진첩' 선택창을 직접 띄워준다.
   const fileInputs = (
-    <>
-      <input id="ocr-camera-input" type="file" accept="image/*" capture="environment" onChange={handleOcrFile} className="hidden" />
-      <input id="ocr-gallery-input" ref={galleryInputRef} type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
-    </>
+    <input id="ocr-image-input" ref={ocrFileRef} type="file" accept="image/*" onChange={handleOcrFile} className="hidden" />
   );
 
-  // OCR 결과 확인 시트
   if (ocrResult) {
     return (
       <OcrReviewSheet
@@ -580,337 +594,247 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
     );
   }
 
+  // 현재 탭 (고정지출은 '지출' 탭 + 자물쇠 토글로 표현)
+  const tab: TabKey =
+    form.type === 'income' ? 'income' : form.type === 'transfer' ? 'transfer' : 'expense';
+  const isFixed = form.type === 'fixed_expense';
+  const isExpense = tab === 'expense';
+
+  const setTab = (t: TabKey) => {
+    touchedRef.current.add('type');
+    setForm((f) => ({
+      ...f,
+      type: t === 'income' ? 'income' : t === 'transfer' ? 'transfer' : isFixed ? 'fixed_expense' : 'variable_expense',
+    }));
+  };
+
+  const itemsTotal = lineItems.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
+  const amountLocked = itemsTotal > 0;
+  const validItemCount = lineItems.filter((i) => i.name.trim() && i.price > 0).length;
+
   return (
     <>
-    {fileInputs}
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh]">
-        {/* 핸들 */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 bg-gray-300 rounded-full" />
-        </div>
+      {fileInputs}
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm">
+        <div className="w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[92vh]">
+          {/* 핸들 */}
+          <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+            <div className="w-10 h-1 bg-gray-300 rounded-full" />
+          </div>
 
-        {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 py-3 flex-shrink-0">
-          <h2 className="text-lg font-bold text-gray-900">
-            {step === 'input' ? '거래 입력' : '내용 확인'}
-          </h2>
-          <button onClick={handleClose} className="p-2 rounded-full hover:bg-gray-100 active:bg-gray-200">
-            <X size={20} className="text-gray-500" />
-          </button>
-        </div>
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-5 py-2 flex-shrink-0">
+            <h2 className="text-lg font-bold text-gray-900">거래 입력</h2>
+            <button onClick={handleClose} className="p-2 rounded-full hover:bg-gray-100 active:bg-gray-200">
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
 
-        <div className="px-5 pb-6 space-y-4 overflow-y-auto flex-1">
-          {/* ── STEP 1: 입력 ── */}
-          {step === 'input' && (
-            <>
-              {/* 입력 모드 탭 */}
-              <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-                <button
-                  onClick={() => setInputMode('text')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                    inputMode === 'text' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'
-                  }`}
+          <div className="px-5 pb-6 space-y-3.5 overflow-y-auto flex-1">
+            {/* ── 빠른 입력칸: 말하듯 쓰면 아래가 자동으로 채워짐 ── */}
+            <div className="relative">
+              <input
+                type="text"
+                value={quickText}
+                onChange={(e) => setQuickText(e.target.value)}
+                placeholder="스타벅스 4500 카드"
+                autoFocus
+                className="w-full border border-indigo-200 bg-indigo-50/50 rounded-2xl pl-4 pr-24 py-3.5 text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <label
+                  htmlFor="ocr-image-input"
+                  className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 active:bg-gray-100 cursor-pointer"
+                  title="영수증 촬영 / 사진첩"
                 >
-                  <FileText size={14} /> 텍스트
-                </button>
+                  <Camera size={16} />
+                </label>
                 <button
-                  onClick={() => setInputMode('ocr')}
-                  className={`flex-1 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                    inputMode === 'ocr' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'
+                  type="button"
+                  onClick={toggleVoice}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                    listening ? 'bg-rose-500 text-white animate-pulse' : 'bg-white border border-gray-200 text-gray-500 active:bg-gray-100'
                   }`}
+                  title="음성 입력"
                 >
-                  <Camera size={14} /> 영수증 OCR
+                  {listening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
               </div>
+            </div>
 
-              {inputMode === 'text' ? (
-                <>
-                  <div className="relative">
-                    <p className="text-sm text-gray-500 mb-2">
-                      자연어로 입력하면 자동으로 분류해드려요
-                    </p>
-                    <textarea
-                      ref={inputRef}
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={'스타벅스 4500 카드\n이마트 장보기 38000원\n카카오페이 3만원 충전'}
-                      className="w-full border border-gray-200 rounded-2xl p-4 pr-12 text-base resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 h-28 bg-gray-50 placeholder-gray-400"
-                      autoFocus
-                    />
-                    {/* 음성 버튼 */}
-                    <button
-                      type="button"
-                      onClick={toggleVoice}
-                      className={`absolute right-3 bottom-3 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                        listening
-                          ? 'bg-rose-500 text-white animate-pulse'
-                          : 'bg-gray-200 text-gray-500 hover:bg-indigo-100 hover:text-indigo-600'
-                      }`}
-                    >
-                      {listening ? <MicOff size={16} /> : <Mic size={16} />}
-                    </button>
-                  </div>
-                  {listening && (
-                    <p className="text-xs text-rose-500 text-center -mt-2 flex items-center justify-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
-                      듣고 있어요... 말씀해주세요
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-400 -mt-1">Enter 키 또는 아래 버튼으로 분석 · 🎤 마이크로 음성 입력</p>
+            {listening ? (
+              <p className="text-xs text-rose-500 text-center flex items-center justify-center gap-1">
+                <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" /> 듣고 있어요...
+              </p>
+            ) : ocrLoading ? (
+              <p className="text-xs text-indigo-500 text-center flex items-center justify-center gap-1.5">
+                <span className="w-3 h-3 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                영수증 분석 중...
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 text-center">
+                말하듯 쓰면 아래가 자동으로 채워져요 · 📷 영수증 · 🎤 음성
+              </p>
+            )}
 
+            {/* ── 금액 ── */}
+            <div className="text-center pt-1">
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="0"
+                readOnly={amountLocked}
+                value={form.amount ? form.amount.toLocaleString() : ''}
+                onChange={(e) => {
+                  if (amountLocked) return;
+                  const v = parseInt(e.target.value.replace(/[^0-9]/g, ''));
+                  setField('amount', isNaN(v) ? undefined : v);
+                }}
+                className={`text-4xl font-bold text-center w-full border-b-2 outline-none pb-1 ${
+                  amountLocked ? 'border-indigo-200 text-indigo-500' : 'border-indigo-400 text-gray-900'
+                }`}
+              />
+              <p className="text-xs mt-1 h-4">
+                {amountLocked ? (
+                  <span className="text-indigo-400">품목 합계 자동계산</span>
+                ) : parsed?.confidence === 'low' && quickText.trim() ? (
+                  <span className="text-amber-500">금액을 확인해주세요</span>
+                ) : (
+                  <span className="text-gray-300">원</span>
+                )}
+              </p>
+            </div>
+
+            {/* ── 유형 탭 (+ 고정지출 토글) ── */}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 bg-gray-100 rounded-xl p-1 flex-1">
+                {TABS.map((t) => (
                   <button
-                    onClick={handleParse}
-                    disabled={!inputText.trim() || parsing}
-                    className="w-full py-4 bg-indigo-600 text-white font-semibold rounded-2xl active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {parsing ? (
-                      <span className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        분석 중...
-                      </span>
-                    ) : (
-                      <>분석하기 <ArrowRight size={18} /></>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setForm({ date: dayjs().format('YYYY-MM-DD'), type: 'variable_expense' });
-                      setStep('preview');
-                    }}
-                    className="w-full py-2.5 text-sm text-gray-400 hover:text-indigo-500 transition-colors"
-                  >
-                    직접 입력하기
-                  </button>
-
-                  <div>
-                    <p className="text-xs text-gray-400 mb-2">빠른 입력 예시</p>
-                    <div className="flex flex-wrap gap-2">
-                      {['스타벅스 4500 카드', '편의점 2300', '월급 350만원', '카카오페이 3만원 충전'].map((ex) => (
-                        <button
-                          key={ex}
-                          onClick={() => setInputText(ex)}
-                          className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full active:bg-gray-200"
-                        >
-                          {ex}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                /* OCR 모드 */
-                <div className="space-y-3">
-                  <p className="text-sm text-gray-500">마트/식당 영수증을 촬영하거나 사진첩에서 가져오면 품목을 자동으로 추출해요.</p>
-
-                  {ocrLoading ? (
-                    <div className="w-full border-2 border-dashed border-indigo-200 rounded-2xl py-10 flex flex-col items-center gap-3">
-                      <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                      <p className="text-sm font-medium text-indigo-600">영수증 분석 중...</p>
-                      <p className="text-xs text-indigo-400">GPT-4o가 품목을 추출하고 있어요</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      <label htmlFor="ocr-camera-input" className="border-2 border-dashed border-indigo-200 rounded-2xl py-8 flex flex-col items-center gap-2 text-indigo-400 active:bg-indigo-50 cursor-pointer">
-                        <Camera size={28} />
-                        <p className="text-sm font-medium text-center">카메라 촬영</p>
-                      </label>
-                      <label
-                        htmlFor="ocr-gallery-input"
-                        className="border-2 border-dashed border-emerald-300 rounded-2xl py-8 flex flex-col items-center gap-2 text-emerald-500 active:bg-emerald-50 cursor-pointer w-full"
-                      >
-                        <FileText size={28} />
-                        <p className="text-sm font-medium text-center">갤러리 선택</p>
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ── STEP 2: 미리보기 / 수정 ── */}
-          {step === 'preview' && (
-            <>
-              {/* 금액 (크게) */}
-              {(() => {
-                const itemsTotal = lineItems.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0);
-                const autoCalc = itemsTotal > 0;
-                return (
-                  <div className="text-center py-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="금액 입력"
-                      readOnly={autoCalc}
-                      value={form.amount ? form.amount.toLocaleString() : ''}
-                      className={`text-3xl font-bold text-center w-full border-b-2 outline-none pb-1 ${
-                        autoCalc
-                          ? 'border-indigo-200 text-indigo-500 bg-transparent'
-                          : 'border-indigo-400 text-gray-900'
-                      }`}
-                      onChange={(e) => {
-                        if (autoCalc) return;
-                        const v = parseInt(e.target.value.replace(/[^0-9]/g, ''));
-                        setForm((f) => ({ ...f, amount: isNaN(v) ? undefined : v }));
-                      }}
-                    />
-                    {autoCalc && (
-                      <p className="text-xs text-indigo-400 mt-1">품목 합계 자동계산</p>
-                    )}
-                    {parsed?.confidence === 'low' && (
-                      <p className="text-xs text-amber-500 mt-1">⚠️ 금액을 확인해주세요</p>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* 거래 유형 탭 */}
-              <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-                {(['income', 'variable_expense', 'fixed_expense', 'transfer'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setForm((f) => ({ ...f, type: t }))}
-                    className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                      form.type === t
-                        ? 'bg-white shadow text-indigo-600'
-                        : 'text-gray-500'
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                      tab === t.key ? 'bg-white shadow text-indigo-600' : 'text-gray-500'
                     }`}
                   >
-                    {TRANSACTION_TYPE_LABELS[t]}
+                    {t.label}
                   </button>
                 ))}
               </div>
+              {isExpense && (
+                <button
+                  onClick={() => {
+                    touchedRef.current.add('type');
+                    setForm((f) => ({ ...f, type: isFixed ? 'variable_expense' : 'fixed_expense' }));
+                  }}
+                  className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                    isFixed ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-400 border-gray-200'
+                  }`}
+                  title="매달 반복되는 지출(통신비·보험료 등)이면 켜세요"
+                >
+                  <Lock size={12} /> 고정
+                </button>
+              )}
+            </div>
 
-              {/* 폼 필드들 */}
-              <div className="space-y-3">
-                {/* 날짜 + 거래명 */}
+            {/* ── 기본 필드 ── */}
+            <div className="space-y-2.5">
+              <Row label={tab === 'income' ? '무엇' : '어디서/무엇'}>
+                <input
+                  type="text"
+                  value={form.name ?? ''}
+                  onChange={(e) => setField('name', e.target.value)}
+                  placeholder={tab === 'income' ? '예: 4월 월급' : '예: 스타벅스'}
+                  className={INPUT_CLS}
+                />
+              </Row>
+
+              <Row label="분류">
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">날짜</label>
-                    <input
-                      type="date"
-                      value={form.date ?? dayjs().format('YYYY-MM-DD')}
-                      onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">
-                      {form.type === 'income' ? '지급처' : '가맹점'}
-                    </label>
-                    <input
-                      type="text"
-                      value={form.merchant_name ?? ''}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, merchant_name: e.target.value }))
-                      }
-                      placeholder={form.type === 'income' ? '어디로부터? (회사/은행)' : '어디서?'}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                  </div>
-                </div>
-
-                {/* 거래명 / 수입 종류 */}
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">
-                    {form.type === 'income' ? '수입 종류' : (
-                      <>
-                        구매항목 <span className="text-gray-300">(가맹점과 별도)</span>
-                      </>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    value={form.name ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder={form.type === 'income' ? '예: 4월 월급, 상여금, 배당금' : '무엇을?'}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  <CategoryCombobox
+                    value={form.category_main ?? ''}
+                    onChange={(v) => {
+                      touchedRef.current.add('category_main');
+                      touchedRef.current.add('category_sub');
+                      setForm((f) => ({ ...f, category_main: v, category_sub: '' }));
+                    }}
+                    options={allMainCategories as unknown as string[]}
+                    placeholder="대분류"
+                    onAddOption={handleAddMainCategory}
                   />
-                  {suggestionApplied && (
-                    <div className="text-[10px] text-indigo-500 mt-1">
-                      ✨ 과거 기록 기반으로 카테고리/결제수단 자동 채워짐 ({suggestionApplied})
-                    </div>
-                  )}
+                  <CategoryCombobox
+                    value={form.category_sub ?? ''}
+                    onChange={(v) => setField('category_sub', v)}
+                    options={getSubOptions(form.category_main ?? '')}
+                    placeholder="소분류"
+                    disabled={!form.category_main}
+                    onAddOption={form.category_main ? handleAddSubCategory : undefined}
+                  />
                 </div>
+              </Row>
 
-                {/* 카테고리 */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                      <label className="text-xs text-gray-400">대분류</label>
-                      {lineItems.some((i) => i.category_main) && (
-                        <span className="text-[10px] text-gray-400">
-                          (세부품목 분류 있으면 비워둬도 OK)
-                        </span>
-                      )}
-                      {categoryHint && (
-                        <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-medium">
-                          학습됨 {categoryHint.count}회
-                        </span>
-                      )}
-                    </div>
-                    <CategoryCombobox
-                      value={form.category_main ?? ''}
-                      onChange={(v) => setForm((f) => ({ ...f, category_main: v, category_sub: '' }))}
-                      options={allMainCategories as unknown as string[]}
-                      placeholder="선택"
-                      onAddOption={handleAddMainCategory}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">소분류</label>
-                    <CategoryCombobox
-                      value={form.category_sub ?? ''}
-                      onChange={(v) => setForm((f) => ({ ...f, category_sub: v }))}
-                      options={getSubOptions(form.category_main ?? '')}
-                      placeholder="선택"
-                      disabled={!form.category_main}
-                      onAddOption={form.category_main ? handleAddSubCategory : undefined}
-                    />
-                  </div>
-                </div>
+              {/* 수입: 입금 계좌 */}
+              {tab === 'income' && (
+                <Row label="입금">
+                  <select
+                    value={form.account_to_id ?? ''}
+                    onChange={(e) => setField('account_to_id', e.target.value || undefined)}
+                    className={`${INPUT_CLS} bg-white`}
+                  >
+                    <option value="">계좌 선택</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </Row>
+              )}
 
-                {/* 수입일 때: 입금 계좌 select */}
-                {form.type === 'income' && (
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">💰 입금 계좌</label>
+              {/* 이동: 출금 → 입금 */}
+              {tab === 'transfer' && (
+                <>
+                  <Row label="출금">
                     <select
-                      value={form.account_to_id ?? ''}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, account_to_id: e.target.value || undefined }))
-                      }
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                      value={form.account_from_id ?? ''}
+                      onChange={(e) => setField('account_from_id', e.target.value || undefined)}
+                      className={`${INPUT_CLS} bg-white`}
                     >
-                      <option value="">선택</option>
+                      <option value="">계좌 선택</option>
                       {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
+                        <option key={a.id} value={a.id}>{a.name}</option>
                       ))}
                     </select>
-                  </div>
-                )}
+                  </Row>
+                  <Row label="입금">
+                    <select
+                      value={form.account_to_id ?? ''}
+                      onChange={(e) => setField('account_to_id', e.target.value || undefined)}
+                      className={`${INPUT_CLS} bg-white`}
+                    >
+                      <option value="">계좌 선택</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  </Row>
+                </>
+              )}
 
-                {/* 결제수단 (수입 외) */}
-                {form.type !== 'income' && (
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">결제수단</label>
+              {/* 지출: 결제수단 */}
+              {isExpense && (
+                <Row label="결제">
                   <select
                     value={form.payment_method_id ?? (form.account_from_id ? `account:${form.account_from_id}` : '')}
                     onChange={(e) => {
                       const val = e.target.value;
+                      touchedRef.current.add('payment_method_id');
+                      touchedRef.current.add('account_from_id');
                       if (val.startsWith('account:')) {
-                        const accountId = val.replace('account:', '');
-                        setForm((f) => ({ ...f, payment_method_id: undefined, account_from_id: accountId }));
+                        setForm((f) => ({ ...f, payment_method_id: undefined, account_from_id: val.replace('account:', '') }));
                       } else {
                         setForm((f) => ({ ...f, payment_method_id: val || undefined, account_from_id: undefined }));
                       }
                     }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                    className={`${INPUT_CLS} bg-white`}
                   >
                     <option value="">선택 안함</option>
                     {(() => {
@@ -918,7 +842,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                       const mine = memberId ? paymentMethods.filter((pm) => pm.member_id === memberId) : [];
                       const shared = paymentMethods.filter((pm) => !pm.member_id);
                       const others = memberId ? paymentMethods.filter((pm) => pm.member_id && pm.member_id !== memberId) : [];
-                      // optgroup 모바일(삼성인터넷 등) 호환성 안 좋아서 제거 + emoji prefix 로 구분
+                      // optgroup 모바일 호환성 문제로 emoji prefix 사용
                       const ordered = memberId ? [...mine, ...shared, ...others] : paymentMethods;
                       return (
                         <>
@@ -932,405 +856,363 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                       );
                     })()}
                   </select>
+                </Row>
+              )}
 
-                  {/* 계좌이체 결제수단 선택 시: 출금 계좌 select */}
-                  {(() => {
-                    const selectedPM = paymentMethods.find((pm) => pm.id === form.payment_method_id);
-                    if (selectedPM?.type !== 'bank_transfer') return null;
-                    return (
-                      <div className="mt-2 bg-emerald-50 rounded-xl p-2.5">
-                        <label className="text-xs text-emerald-700 font-medium mb-1 block">
-                          🏦 출금 계좌
-                        </label>
-                        <select
-                          value={form.account_from_id ?? ''}
-                          onChange={(e) =>
-                            setForm((f) => ({ ...f, account_from_id: e.target.value || undefined }))
-                          }
-                          className="w-full border border-emerald-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                        >
-                          <option value="">선택</option>
-                          {accounts.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  })()}
-                </div>
+              {/* 계좌이체 결제수단이면 출금 계좌 지정 */}
+              {isExpense && paymentMethods.find((pm) => pm.id === form.payment_method_id)?.type === 'bank_transfer' && (
+                <Row label="출금">
+                  <select
+                    value={form.account_from_id ?? ''}
+                    onChange={(e) => setField('account_from_id', e.target.value || undefined)}
+                    className={`${INPUT_CLS} bg-white`}
+                  >
+                    <option value="">계좌 선택</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </Row>
+              )}
+
+              {suggestionApplied && (
+                <p className="text-[11px] text-indigo-500 pl-[76px]">✨ {suggestionApplied}</p>
+              )}
+            </div>
+
+            {/* ── 자세히 (접힘) ── */}
+            <div className="border-t border-gray-100 pt-2">
+              <button
+                onClick={() => setShowMore((v) => !v)}
+                className="w-full flex items-center justify-center gap-1 py-2 text-sm text-gray-500 font-medium"
+              >
+                {showMore ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                자세히
+                <span className="text-xs text-gray-300">
+                  (날짜{members.length > 1 ? '·구성원' : ''}{isExpense ? '·품목' : ''}·메모)
+                </span>
+                {validItemCount > 0 && (
+                  <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-semibold">
+                    품목 {validItemCount}
+                  </span>
                 )}
+              </button>
 
-                {/* 자금이동 전용: 계좌 선택 */}
-                {form.type === 'transfer' && (
-                  <div className="bg-blue-50 rounded-xl p-3 space-y-2">
-                    <p className="text-xs font-medium text-blue-600">🔄 자금 이동 계좌</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-500 mb-1 block">출금 계좌 (from)</label>
-                        <select
-                          value={form.account_from_id ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, account_from_id: e.target.value || undefined }))}
-                          className="w-full border border-blue-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        >
-                          <option value="">선택</option>
-                          {accounts.map((a) => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 mb-1 block">입금 계좌 (to)</label>
-                        <select
-                          value={form.account_to_id ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, account_to_id: e.target.value || undefined }))}
-                          className="w-full border border-blue-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        >
-                          <option value="">선택</option>
-                          {accounts.map((a) => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              {showMore && (
+                <div className="space-y-2.5 pt-1 pb-1">
+                  <Row label="날짜">
+                    <input
+                      type="date"
+                      value={form.date ?? dayjs().format('YYYY-MM-DD')}
+                      onChange={(e) => setField('date', e.target.value)}
+                      className={INPUT_CLS}
+                    />
+                  </Row>
 
-                {/* 결제자 + 대상 */}
-                {members.length > 1 && (
-                  <div className="bg-gray-50 rounded-xl p-3 space-y-3">
-                    {/* 결제자 */}
-                    <div>
-                      <label className="text-xs font-medium mb-2 block text-gray-500">💳 결제자</label>
-                      <div className="flex gap-2 flex-wrap">
-                        {members.map((m) => (
-                          <button
-                            key={m.id}
-                            onClick={() => setForm((f) => ({ ...f, member_id: f.member_id === m.id ? undefined : m.id }))}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                              form.member_id === m.id ? 'text-white border-transparent' : 'bg-white border-gray-200 text-gray-500'
-                            }`}
-                            style={form.member_id === m.id ? { backgroundColor: m.color, borderColor: m.color } : {}}
-                          >
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: form.member_id === m.id ? 'rgba(255,255,255,0.7)' : m.color }} />
-                            {m.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {/* 지출 대상 (다중 선택) */}
-                    <div>
-                      <label className="text-xs font-medium mb-2 block text-gray-500">
-                        🎯 지출 대상 <span className="text-gray-300">(공용 또는 특정 인원)</span>
-                      </label>
-                      <div className="flex gap-2 flex-wrap">
-                        <button
-                          onClick={() =>
-                            setForm((f) => ({
-                              ...f,
-                              target_member_id: undefined,
-                              target_member_ids: [],
-                            }))
-                          }
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                            !form.target_member_ids?.length
-                              ? 'bg-slate-600 text-white border-transparent'
-                              : 'bg-white border-gray-200 text-gray-500'
-                          }`}
-                          title="가족 모두를 위한 지출 (식자재, 관리비 등)"
-                        >
-                          🏠 공용
-                        </button>
-                        {members.map((m) => {
-                          const selected = (form.target_member_ids ?? []).includes(m.id);
-                          return (
+                  <Row label={tab === 'income' ? '지급처' : '가맹점'}>
+                    <input
+                      type="text"
+                      value={form.merchant_name ?? ''}
+                      onChange={(e) => setField('merchant_name', e.target.value)}
+                      placeholder={tab === 'income' ? '회사/은행 (선택)' : '가게 이름을 따로 남길 때 (선택)'}
+                      className={INPUT_CLS}
+                    />
+                  </Row>
+
+                  <Row label="메모">
+                    <input
+                      type="text"
+                      value={form.memo ?? ''}
+                      onChange={(e) => setField('memo', e.target.value)}
+                      placeholder="추가 메모 (선택)"
+                      className={INPUT_CLS}
+                    />
+                  </Row>
+
+                  {/* 결제자 + 지출 대상 */}
+                  {members.length > 1 && (
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-3">
+                      <div>
+                        <label className="text-xs font-medium mb-2 block text-gray-500">💳 결제자</label>
+                        <div className="flex gap-2 flex-wrap">
+                          {members.map((m) => (
                             <button
                               key={m.id}
-                              onClick={() =>
-                                setForm((f) => {
-                                  const cur = f.target_member_ids ?? [];
-                                  const next = selected
-                                    ? cur.filter((id) => id !== m.id)
-                                    : [...cur, m.id];
-                                  return {
-                                    ...f,
-                                    target_member_ids: next,
-                                    target_member_id: next[0],
-                                  };
-                                })
-                              }
+                              onClick={() => setField('member_id', form.member_id === m.id ? undefined : m.id)}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                                selected
-                                  ? 'text-white border-transparent'
-                                  : 'bg-white border-gray-200 text-gray-500'
+                                form.member_id === m.id ? 'text-white border-transparent' : 'bg-white border-gray-200 text-gray-500'
                               }`}
-                              style={
-                                selected ? { backgroundColor: m.color, borderColor: m.color } : {}
-                              }
+                              style={form.member_id === m.id ? { backgroundColor: m.color, borderColor: m.color } : {}}
                             >
                               <span
                                 className="w-2 h-2 rounded-full"
-                                style={{
-                                  backgroundColor: selected
-                                    ? 'rgba(255,255,255,0.8)'
-                                    : m.color,
-                                }}
+                                style={{ backgroundColor: form.member_id === m.id ? 'rgba(255,255,255,0.7)' : m.color }}
                               />
                               {m.name}
-                              {selected && <span className="text-[11px] ml-0.5">✓</span>}
                             </button>
-                          );
-                        })}
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium mb-2 block text-gray-500">
+                          🎯 지출 대상 <span className="text-gray-300">(공용 또는 특정 인원)</span>
+                        </label>
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            onClick={() => {
+                              touchedRef.current.add('target_member_ids');
+                              setForm((f) => ({ ...f, target_member_id: undefined, target_member_ids: [] }));
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                              !form.target_member_ids?.length
+                                ? 'bg-slate-600 text-white border-transparent'
+                                : 'bg-white border-gray-200 text-gray-500'
+                            }`}
+                            title="가족 모두를 위한 지출 (식자재, 관리비 등)"
+                          >
+                            🏠 공용
+                          </button>
+                          {members.map((m) => {
+                            const selected = (form.target_member_ids ?? []).includes(m.id);
+                            return (
+                              <button
+                                key={m.id}
+                                onClick={() => {
+                                  touchedRef.current.add('target_member_ids');
+                                  setForm((f) => {
+                                    const cur = f.target_member_ids ?? [];
+                                    const next = selected ? cur.filter((id) => id !== m.id) : [...cur, m.id];
+                                    return { ...f, target_member_ids: next, target_member_id: next[0] };
+                                  });
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                                  selected ? 'text-white border-transparent' : 'bg-white border-gray-200 text-gray-500'
+                                }`}
+                                style={selected ? { backgroundColor: m.color, borderColor: m.color } : {}}
+                              >
+                                <span
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: selected ? 'rgba(255,255,255,0.8)' : m.color }}
+                                />
+                                {m.name}
+                                {selected && <span className="text-[11px] ml-0.5">✓</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* 메모 */}
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">메모 (선택)</label>
-                  <input
-                    type="text"
-                    value={form.memo ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))}
-                    placeholder="추가 메모..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  />
-                </div>
+                  {/* 세부 품목 */}
+                  {isExpense && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={openLineItems}
+                        className="w-full flex items-center justify-between px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 active:bg-gray-100"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Package size={14} className="text-indigo-400" />
+                          <span className="font-medium">세부 품목</span>
+                          {validItemCount > 0 && (
+                            <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">
+                              {validItemCount}개
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-xs text-gray-400">{showLineItems ? '닫기' : '단가 분석용'}</span>
+                      </button>
 
-                {/* 세부 품목 */}
-                {['variable_expense', 'fixed_expense'].includes(form.type ?? 'variable_expense') && (
-                  <div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setShowLineItems((v) => !v);
-                        if (!showLineItems && lineItems.length === 0) {
-                          const defaultName = form.merchant_name || form.name || '';
-                          // 규칙 기반 기본 단위
-                          const sub = (form.category_sub || '').toLowerCase();
-                          const nameLower = (form.name || '').toLowerCase();
-                          let defaultUnit = '개';
-                          if (sub.includes('주유') || nameLower.includes('주유') || nameLower.includes('휘발유') || nameLower.includes('경유')) defaultUnit = 'L';
-                          else if (nameLower.includes('세제') || nameLower.includes('샴푸') || nameLower.includes('린스')) defaultUnit = 'ml';
-                          else if (nameLower.includes('쌀') || nameLower.includes('밀가루')) defaultUnit = 'kg';
-                          else if (nameLower.includes('우유') || nameLower.includes('음료') || nameLower.includes('주스')) defaultUnit = 'L';
-
-                          // 학습된 단위 조회 (있으면 override)
-                          if (defaultName) {
-                            try {
-                              const res = await fetch(`/api/items/unit-hint?name=${encodeURIComponent(defaultName)}`);
-                              const { hint } = await res.json();
-                              if (hint?.unit) defaultUnit = hint.unit;
-                            } catch {}
-                          }
-
-                          setLineItems([{ id: crypto.randomUUID(), name: defaultName, quantity: 1, price: 0, unit: defaultUnit, track: false }]);
-                        }
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Package size={14} className="text-indigo-400" />
-                        <span className="font-medium">세부 품목 입력</span>
-                        {lineItems.filter((i) => i.name.trim() && i.price > 0).length > 0 && (
-                          <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">
-                            {lineItems.filter((i) => i.name.trim() && i.price > 0).length}개
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-xs text-gray-400">{showLineItems ? '닫기' : '단가 분석용'}</span>
-                    </button>
-
-                    {showLineItems && (
-                      <div className="mt-2 bg-gray-50 rounded-xl p-3 space-y-2">
-                        <p className="text-xs text-gray-400 mb-1">품목명에 용량 포함 (예: 맥주 500ml) · 단위는 구매단위 (캔/개 등)</p>
-                        {lineItems.map((item) => {
-                          const unitPrice = item.quantity > 1 && item.price > 0
-                            ? Math.round(item.price / item.quantity)
-                            : null;
-                          return (
-                            <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-visible">
-                              {/* 품목명 + 금액 */}
-                              <div className="flex items-center gap-2 px-3 py-2">
-                                <input
-                                  type="text"
-                                  value={item.name}
-                                  onChange={(e) => updateLineItem(item.id, 'name', e.target.value)}
-                                  placeholder="품목명 (예: 비엔나 소세지)"
-                                  className="flex-1 text-sm border-0 outline-none bg-transparent placeholder-gray-300"
-                                />
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={item.price || ''}
-                                  onChange={(e) => updateLineItem(item.id, 'price', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
-                                  placeholder="금액"
-                                  className="w-20 text-right text-sm border-0 outline-none bg-transparent placeholder-gray-300"
-                                />
-                                <span className="text-xs text-gray-400 flex-shrink-0">원</span>
-                                <button onClick={() => removeLineItem(item.id)} className="p-1 text-gray-300 hover:text-rose-400 flex-shrink-0">
-                                  <X size={13} />
-                                </button>
-                              </div>
-                              {/* 수량 / 단위 (항상 표시) */}
-                              <div className="px-3 pb-2 border-t border-gray-50 pt-2 space-y-1.5">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-400 w-8 flex-shrink-0">수량</span>
-                                  <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
-                                    <button onClick={() => updateLineItem(item.id, 'quantity', Math.max(0.01, +(item.quantity - 1).toFixed(2)))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Minus size={11} /></button>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={item.quantity}
-                                      onChange={(e) => {
-                                        // 숫자 + 소수점 1개만 허용
-                                        const raw = e.target.value
-                                          .replace(/[^0-9.]/g, '')
-                                          .replace(/(\..*)\./g, '$1');
-                                        updateLineItem(item.id, 'quantity', raw === '' || raw === '.' ? 1 : parseFloat(raw));
-                                      }}
-                                      onFocus={(e) => e.target.select()}
-                                      className="w-14 text-center text-sm py-1 focus:outline-none"
-                                    />
-                                    <button onClick={() => updateLineItem(item.id, 'quantity', +(item.quantity + 1).toFixed(2))} className="px-2 py-1 text-gray-500 hover:bg-gray-100"><Plus size={11} /></button>
-                                  </div>
-                                  {unitPrice && <p className="text-xs text-indigo-500 font-medium ml-auto">{unitPrice.toLocaleString()}원/{item.unit}</p>}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-400 w-8 flex-shrink-0">단위</span>
+                      {showLineItems && (
+                        <div className="mt-2 bg-gray-50 rounded-xl p-3 space-y-2">
+                          <p className="text-xs text-gray-400 mb-1">
+                            품목명에 용량 포함 (예: 맥주 500ml) · 단위는 구매단위 (캔/개 등)
+                          </p>
+                          {lineItems.map((item) => {
+                            const unitPrice = item.quantity > 1 && item.price > 0 ? Math.round(item.price / item.quantity) : null;
+                            return (
+                              <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-visible">
+                                <div className="flex items-center gap-2 px-3 py-2">
                                   <input
                                     type="text"
-                                    value={item.unit}
-                                    onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                    placeholder="개, 300g, 500ml, 캔 ..."
-                                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                    value={item.name}
+                                    onChange={(e) => updateLineItem(item.id, 'name', e.target.value)}
+                                    placeholder="품목명 (예: 비엔나 소세지)"
+                                    className="flex-1 text-sm border-0 outline-none bg-transparent placeholder-gray-300"
                                   />
-                                </div>
-                                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-500">
                                   <input
-                                    type="checkbox"
-                                    checked={item.track}
-                                    onChange={(e) => updateLineItem(item.id, 'track', e.target.checked)}
-                                    className="rounded border-gray-300 accent-indigo-500"
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={item.price || ''}
+                                    onChange={(e) => updateLineItem(item.id, 'price', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+                                    placeholder="금액"
+                                    className="w-20 text-right text-sm border-0 outline-none bg-transparent placeholder-gray-300"
                                   />
-                                  <span>📊 품목 추적에 추가</span>
-                                </label>
-                                {/* 항목별 카테고리 (대분류 / 소분류) — CategoryCombobox 로 교체 */}
-                                <div className="grid grid-cols-2 gap-1.5 pt-1">
-                                  <CategoryCombobox
-                                    value={item.category_main ?? ''}
-                                    onChange={(v) => {
-                                      setLineItems((prev) =>
-                                        prev.map((li) =>
-                                          li.id === item.id
-                                            ? { ...li, category_main: v, category_sub: '' }
-                                            : li,
-                                        ),
-                                      );
-                                    }}
-                                    options={allMainCategories as unknown as string[]}
-                                    placeholder="분류 (선택)"
-                                    onAddOption={handleAddMainCategory}
-                                  />
-                                  <CategoryCombobox
-                                    value={item.category_sub ?? ''}
-                                    onChange={(v) =>
-                                      updateLineItem(item.id, 'category_sub', v)
-                                    }
-                                    options={getSubOptions(item.category_main ?? '')}
-                                    placeholder="소분류"
-                                    disabled={!item.category_main}
-                                    onAddOption={item.category_main ? handleAddSubCategory : undefined}
-                                  />
+                                  <span className="text-xs text-gray-400 flex-shrink-0">원</span>
+                                  <button onClick={() => removeLineItem(item.id)} className="p-1 text-gray-300 hover:text-rose-400 flex-shrink-0">
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                                <div className="px-3 pb-2 border-t border-gray-50 pt-2 space-y-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400 w-8 flex-shrink-0">수량</span>
+                                    <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
+                                      <button
+                                        onClick={() => updateLineItem(item.id, 'quantity', Math.max(0.01, +(item.quantity - 1).toFixed(2)))}
+                                        className="px-2 py-1 text-gray-500 hover:bg-gray-100"
+                                      >
+                                        <Minus size={11} />
+                                      </button>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={item.quantity}
+                                        onChange={(e) => {
+                                          const raw = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                                          updateLineItem(item.id, 'quantity', raw === '' || raw === '.' ? 1 : parseFloat(raw));
+                                        }}
+                                        onFocus={(e) => e.target.select()}
+                                        className="w-14 text-center text-sm py-1 focus:outline-none"
+                                      />
+                                      <button
+                                        onClick={() => updateLineItem(item.id, 'quantity', +(item.quantity + 1).toFixed(2))}
+                                        className="px-2 py-1 text-gray-500 hover:bg-gray-100"
+                                      >
+                                        <Plus size={11} />
+                                      </button>
+                                    </div>
+                                    {unitPrice && (
+                                      <p className="text-xs text-indigo-500 font-medium ml-auto">
+                                        {unitPrice.toLocaleString()}원/{item.unit}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400 w-8 flex-shrink-0">단위</span>
+                                    <input
+                                      type="text"
+                                      value={item.unit}
+                                      onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                                      placeholder="개, 300g, 500ml, 캔 ..."
+                                      className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                    />
+                                  </div>
+                                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-500">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.track}
+                                      onChange={(e) => updateLineItem(item.id, 'track', e.target.checked)}
+                                      className="rounded border-gray-300 accent-indigo-500"
+                                    />
+                                    <span>📊 품목 추적에 추가</span>
+                                  </label>
+                                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                    <CategoryCombobox
+                                      value={item.category_main ?? ''}
+                                      onChange={(v) => {
+                                        setLineItems((prev) =>
+                                          prev.map((li) => (li.id === item.id ? { ...li, category_main: v, category_sub: '' } : li)),
+                                        );
+                                      }}
+                                      options={allMainCategories as unknown as string[]}
+                                      placeholder="분류 (선택)"
+                                      onAddOption={handleAddMainCategory}
+                                    />
+                                    <CategoryCombobox
+                                      value={item.category_sub ?? ''}
+                                      onChange={(v) => updateLineItem(item.id, 'category_sub', v)}
+                                      options={getSubOptions(item.category_main ?? '')}
+                                      placeholder="소분류"
+                                      disabled={!item.category_main}
+                                      onAddOption={item.category_main ? handleAddSubCategory : undefined}
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                        <button
-                          onClick={addLineItem}
-                          className="w-full py-2 border border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:bg-indigo-50 flex items-center justify-center gap-1"
-                        >
-                          <Plus size={12} /> 품목 추가
-                        </button>
-                        {lineItems.filter((i) => i.price > 0).length > 1 && (
-                          <p className="text-xs text-gray-400 text-right">
-                            합계 {lineItems.filter((i) => i.price > 0).reduce((s, i) => s + i.price, 0).toLocaleString()}원
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 참고 자료 */}
-                <ReceiptAttachment
-                  value={form.receipt_url ?? ''}
-                  onChange={(url) => setForm((f) => ({ ...f, receipt_url: url }))}
-                />
-              </div>
-
-              {/* 예산 경고 */}
-              {budgetWarningMsg && !ignoreWarning && (
-                <div className={`rounded-xl p-3 space-y-2 ${budgetWarningMsg.includes('초과') ? 'bg-rose-50 border border-rose-200' : 'bg-amber-50 border border-amber-200'}`}>
-                  <div className="flex items-start gap-2">
-                    <AlertCircle size={16} className={budgetWarningMsg.includes('초과') ? 'text-rose-500 flex-shrink-0 mt-0.5' : 'text-amber-500 flex-shrink-0 mt-0.5'} />
-                    <p className={`text-sm font-medium ${budgetWarningMsg.includes('초과') ? 'text-rose-700' : 'text-amber-700'}`}>
-                      {budgetWarningMsg}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setBudgetWarningMsg(null)}
-                      className="flex-1 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-xl"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={() => { setIgnoreWarning(true); handleSave(); }}
-                      className={`flex-1 py-2 text-xs font-medium text-white rounded-xl ${budgetWarningMsg.includes('초과') ? 'bg-rose-500' : 'bg-amber-500'}`}
-                    >
-                      그래도 저장
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* 저장 오류 */}
-              {saveError && (
-                <div className="flex items-center gap-2 text-rose-500 text-sm bg-rose-50 rounded-xl p-3">
-                  <AlertCircle size={16} />
-                  {saveError}
-                </div>
-              )}
-
-              {/* 버튼 */}
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => setStep('input')}
-                  className="flex-1 py-3.5 border border-gray-200 text-gray-600 font-medium rounded-2xl active:bg-gray-50"
-                >
-                  다시 입력
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={!form.amount || saving}
-                  className="flex-[2] py-3.5 bg-indigo-600 text-white font-semibold rounded-2xl active:bg-indigo-700 disabled:opacity-40 flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <><CheckCircle size={18} /> 저장하기</>
+                            );
+                          })}
+                          <button
+                            onClick={addLineItem}
+                            className="w-full py-2 border border-dashed border-indigo-200 rounded-xl text-xs text-indigo-500 hover:bg-indigo-50 flex items-center justify-center gap-1"
+                          >
+                            <Plus size={12} /> 품목 추가
+                          </button>
+                          {lineItems.filter((i) => i.price > 0).length > 1 && (
+                            <p className="text-xs text-gray-400 text-right">합계 {itemsTotal.toLocaleString()}원</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
-                </button>
+
+                  {/* 참고 자료 */}
+                  <ReceiptAttachment
+                    value={form.receipt_url ?? ''}
+                    onChange={(url) => setField('receipt_url', url)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 예산 경고 */}
+            {budgetWarningMsg && !ignoreWarning && (
+              <div
+                className={`rounded-xl p-3 space-y-2 ${
+                  budgetWarningMsg.includes('초과') ? 'bg-rose-50 border border-rose-200' : 'bg-amber-50 border border-amber-200'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <AlertCircle
+                    size={16}
+                    className={budgetWarningMsg.includes('초과') ? 'text-rose-500 flex-shrink-0 mt-0.5' : 'text-amber-500 flex-shrink-0 mt-0.5'}
+                  />
+                  <p className={`text-sm font-medium ${budgetWarningMsg.includes('초과') ? 'text-rose-700' : 'text-amber-700'}`}>
+                    {budgetWarningMsg}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBudgetWarningMsg(null)}
+                    className="flex-1 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-xl"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={() => { setIgnoreWarning(true); handleSave(); }}
+                    className={`flex-1 py-2 text-xs font-medium text-white rounded-xl ${
+                      budgetWarningMsg.includes('초과') ? 'bg-rose-500' : 'bg-amber-500'
+                    }`}
+                  >
+                    그래도 저장
+                  </button>
+                </div>
               </div>
-            </>
-          )}
+            )}
+
+            {/* 저장 오류 */}
+            {saveError && (
+              <div className="flex items-center gap-2 text-rose-500 text-sm bg-rose-50 rounded-xl p-3">
+                <AlertCircle size={16} />
+                {saveError}
+              </div>
+            )}
+
+            {/* 저장 */}
+            <button
+              onClick={handleSave}
+              disabled={!form.amount || saving}
+              className="w-full py-4 bg-indigo-600 text-white font-bold text-base rounded-2xl active:bg-indigo-700 disabled:opacity-40 flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              ) : (
+                <><CheckCircle size={18} /> 저장하기</>
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </>
   );
 }

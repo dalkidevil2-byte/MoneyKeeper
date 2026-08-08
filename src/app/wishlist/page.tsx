@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, ExternalLink, Trash2, CheckCircle, ChevronDown, ChevronUp, ShoppingBag } from 'lucide-react';
+import { Plus, ExternalLink, Trash2, CheckCircle, ChevronDown, ChevronUp, ShoppingBag, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 import dayjs from 'dayjs';
 import { formatAmount } from '@/lib/parser';
 import { usePaymentMethods, useMembers, useCustomCategories } from '@/hooks/useAccounts';
@@ -158,13 +159,18 @@ export default function WishlistPage() {
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-100 px-4 pt-5 pb-4 sticky top-0 z-10">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Link href="/more" className="p-2 -ml-2 rounded-xl active:bg-gray-100 shrink-0">
+              <ArrowLeft size={18} className="text-gray-500" />
+            </Link>
+            <div className="min-w-0">
             <h1 className="text-lg font-bold text-gray-900">위시리스트 💝</h1>
             {pending.length > 0 && (
               <p className="text-xs text-gray-400 mt-0.5">
                 {pending.length}개 · 합계 {formatAmount(totalPrice)}
               </p>
             )}
+            </div>
           </div>
           <button
             onClick={() => setAdding(true)}

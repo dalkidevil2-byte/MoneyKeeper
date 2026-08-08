@@ -7,7 +7,7 @@ import {
   Home,
   List,
   BarChart2,
-  Heart,
+  LayoutGrid,
   Settings,
   Briefcase,
   LineChart,
@@ -25,15 +25,22 @@ type Tab = {
   href: string;
   icon: typeof Home;
   label: string;
+  /** 이 탭이 대표하는 추가 경로들 (하위 페이지로 들어가도 탭이 활성 상태로 남게) */
+  covers?: string[];
 };
 
 // 가계부 섹션 바텀 네비 (홈 = 가계부 홈 /budget)
+// 위시리스트·고정지출·카드청구서·설정은 '더보기'(/more)로 묶음
 const BUDGET_TABS: Tab[] = [
-  { href: '/budget',       icon: Home,      label: '홈' },
-  { href: '/transactions', icon: List,      label: '거래내역' },
-  { href: '/stats',        icon: BarChart2, label: '통계' },
-  { href: '/wishlist',     icon: Heart,     label: '위시리스트' },
-  { href: '/settings',     icon: Settings,  label: '설정' },
+  { href: '/budget',       icon: Home,        label: '홈' },
+  { href: '/transactions', icon: List,        label: '내역' },
+  { href: '/stats',        icon: BarChart2,   label: '분석' },
+  {
+    href: '/more',
+    icon: LayoutGrid,
+    label: '더보기',
+    covers: ['/wishlist', '/settings', '/budget/fixed-expenses', '/budget/card-statements'],
+  },
 ];
 
 // 주식 섹션 바텀 네비 (홈 = 주식 홈 /stocks)
@@ -94,7 +101,7 @@ export default function BottomNav() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
       <div className="max-w-lg mx-auto bg-white border-t border-gray-100 flex pointer-events-auto">
-        {tabs.map(({ href, icon: Icon, label }) => {
+        {tabs.map(({ href, icon: Icon, label, covers }) => {
           // 섹션 홈(/budget, /stocks, /stocks/paper)은 exact match만.
           // 하위 경로가 있을 수 있는 탭은 prefix match 허용.
           const isSectionHome =
@@ -102,9 +109,11 @@ export default function BottomNav() {
             href === '/stocks' ||
             href === '/stocks/paper' ||
             href === '/todo';
-          const active = isSectionHome
-            ? pathname === href
-            : pathname === href || pathname.startsWith(href + '/');
+          const active =
+            (isSectionHome
+              ? pathname === href
+              : pathname === href || pathname.startsWith(href + '/')) ||
+            (covers ?? []).some((p) => pathname === p || pathname.startsWith(p + '/'));
 
           return (
             <Link

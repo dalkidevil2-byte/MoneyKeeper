@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, ChevronRight, Settings, Eye, EyeOff, TrendingUp, TrendingDown, Minus, Inbox, Home } from 'lucide-react';
+import { Plus, ChevronRight, Settings, Eye, EyeOff, TrendingUp, TrendingDown, Minus, Inbox, Home, Sparkles } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import Link from 'next/link';
@@ -12,7 +12,6 @@ import TransactionInboxSheet from '@/components/transaction/TransactionInboxShee
 import TransactionCard from '@/components/transaction/TransactionCard';
 import BudgetAlertBanner from '@/components/BudgetAlertBanner';
 import BudgetDetailSheet from '@/components/BudgetDetailSheet';
-import InsightCard from '@/components/InsightCard';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useBudgets, useFixedExpenseTemplates } from '@/hooks/useAccounts';
 import { formatAmount } from '@/lib/parser';
@@ -432,8 +431,20 @@ export default function HomePage() {
           </Link>
         )}
 
-        {/* 소비 인사이트 */}
-        <InsightCard />
+        {/* 분석 화면으로 안내 — 인사이트/카테고리 분석은 /stats 한 곳에 모음 */}
+        <Link
+          href="/stats"
+          className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 px-4 py-3.5 active:bg-gray-50 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+            <Sparkles size={18} className="text-violet-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900">이번 달 소비 분석</p>
+            <p className="text-xs text-gray-400 mt-0.5">어디에 썼는지 · 눈에 띄는 변화 · 예산 속도</p>
+          </div>
+          <ChevronRight size={18} className="text-gray-300 shrink-0" />
+        </Link>
 
         {/* 최근 거래 */}
         <section>
