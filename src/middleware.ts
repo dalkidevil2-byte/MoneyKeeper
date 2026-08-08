@@ -9,6 +9,12 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // 폰 카드알림 수신 — 폰은 로그인할 수 없으므로 통과시키고,
+  // route 내부에서 CARD_NOTIFY_SECRET 로 자체 검증한다.
+  if (pathname === '/api/transactions/notify') {
+    return NextResponse.next();
+  }
+
   // 외부 cron / webhook 전용 경로 — 항상 인증 우회 통과
   // (외부 스케줄러가 호출하는 endpoint들. cron-job.org 같은 데서 secret 없이 호출 가능)
   const cronPaths = [
