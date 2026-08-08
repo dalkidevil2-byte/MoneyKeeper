@@ -136,7 +136,7 @@ const MERCHANT_CATEGORY_MAP: Array<{
   { keywords: ['출장'], main: '출장', sub: '기타' },
 ];
 
-function inferCategory(text: string): { main: string; sub: string } {
+export function inferCategory(text: string): { main: string; sub: string } {
   for (const entry of MERCHANT_CATEGORY_MAP) {
     if (entry.keywords.some((k) => text.includes(k))) {
       return { main: entry.main, sub: entry.sub };
