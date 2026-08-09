@@ -146,30 +146,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5) 결제자 — 지정이 없으면 가구의 첫 활성 구성원
-    const { data: member } = await supabase
-      .from('members')
-      .select('id')
-      .eq('household_id', householdId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    // 6) 결제수단 — 카드 끝 4자리(삼성) 또는 카드 별칭(토스뱅크)이
+    // 5) 결제수단 — 카드 끝 4자리(삼성) 또는 카드 별칭(토스뱅크)이
     //    결제수단 이름에 들어있으면 자동 연결
     const cardKey = parsed.card_last4 || parsed.card_alias;
     let paymentMethodId: string | null = null;
+    let cardOwnerId: string | null = null;
     if (cardKey) {
       const { data: pm } = await supabase
         .from('payment_methods')
-        .select('id')
+        .select('id, member_id')
         .eq('household_id', householdId)
         .eq('is_active', true)
         .ilike('name', `%${cardKey}%`)
         .limit(1)
         .maybeSingle();
       paymentMethodId = pm?.id ?? null;
+      cardOwnerId = pm?.member_id ?? null;
+    }
+
+    // 6) 결제자 — 카드에 주인이 지정돼 있으면 그 사람.
+    //    (카드마다 쓰는 사람이 정해져 있어, 첫 구성원으로 뭉뚱그리면 틀린 사람에게 달린다)
+    let memberId = cardOwnerId;
+    if (!memberId) {
+      const { data: member } = await supabase
+        .from('members')
+        .select('id')
+        .eq('household_id', householdId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      memberId = member?.id ?? null;
     }
 
     // 7) 거래 생성
@@ -186,7 +193,7 @@ export async function POST(req: NextRequest) {
       .from('transactions')
       .insert({
         household_id: householdId,
-        member_id: member?.id ?? null,
+        member_id: memberId,
         date: parsed.date,
         type: parsed.approved ? 'variable_expense' : 'refund',
         amount: parsed.amount,
