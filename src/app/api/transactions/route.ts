@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { createNotionPage, type ItemForNotion } from '@/lib/notion';
+import { syncTransactionToNotion } from '@/lib/notion-sync';
 import type { CreateTransactionInput } from '@/types';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     // Notion 자동 동기화 (fire-and-forget — 실패해도 거래 저장은 성공)
     // NOTE: await 하지 않음으로써 응답 지연 최소화
-    syncToNotion(supabase, data).catch((e) =>
+    syncTransactionToNotion(supabase, data.id).catch((e) =>
       console.error('[Notion auto-sync]', e)
     );
 
@@ -176,34 +176,3 @@ async function updateAccountBalances(supabase: ReturnType<typeof createServerSup
 // ─────────────────────────────────────────
 // Notion 동기화 (fire-and-forget)
 // ─────────────────────────────────────────
-async function syncToNotion(supabase: ReturnType<typeof createServerSupabaseClient>, tx: any) {
-  try {
-    // 생성 직후엔 items가 아직 없을 가능성이 높지만 혹시 있으면 포함
-    const { data: items } = await supabase
-      .from('items')
-      .select('name, quantity, price, unit, category_main, category_sub')
-      .eq('transaction_id', tx.id);
-    const notionPageId = await createNotionPage(tx, (items ?? []) as ItemForNotion[]);
-
-    if (notionPageId) {
-      await supabase
-        .from('transactions')
-        .update({
-          notion_page_id: notionPageId,
-          sync_status: 'synced',
-          last_synced_at: new Date().toISOString(),
-        })
-        .eq('id', tx.id);
-    } else {
-      await supabase
-        .from('transactions')
-        .update({ sync_status: 'failed' })
-        .eq('id', tx.id);
-    }
-  } catch {
-    await supabase
-      .from('transactions')
-      .update({ sync_status: 'failed' })
-      .eq('id', tx.id);
-  }
-}
