@@ -25,6 +25,7 @@ export interface ParsedCardNotification {
   occurred_at: string | null; // 'YYYY-MM-DDTHH:mm' (시각을 안 주는 카드사는 null)
   merchant: string;
   note: string;            // 가맹점 대신 남길 부가 설명 (상품권 사용 등)
+  payer_masked: string;    // 알림에 적힌 마스킹된 결제자 이름 (예: '김*진')
 }
 
 // 개인 카톡 대화가 서버로 넘어오지 않도록 하는 1차 방어선.
@@ -94,6 +95,20 @@ function stripTrailingNoise(merchant: string): string {
     .trim();
 }
 
+// 알림에 적힌 결제자 이름(마스킹된 형태)을 뽑는다.
+//   삼성:   "삼성4530승인 김*진"
+//   토스:   "김*진님의 생활비카드 카드"
+//   온누리: "김*희님, 이마트24 보정현대점에서 ..."
+//
+// '*' 가 반드시 있어야 인정한다. 그래야 "1,700원이 취소되었습니다" 같은 문장에서
+// 엉뚱한 글자를 이름으로 착각하지 않는다.
+function extractMaskedPayer(text: string): string {
+  const m =
+    text.match(/([가-힣]\*[가-힣]{1,2})님[의,]/) ??
+    text.match(/(?:승인|취소)\s*([가-힣]\*[가-힣]{1,2})/);
+  return m?.[1] ?? '';
+}
+
 type RuleResult = Omit<ParsedCardNotification, 'matched' | 'rule' | 'issuer'>;
 
 interface Rule {
@@ -133,6 +148,7 @@ const RULES: Rule[] = [
         occurred_at: `${date}T${String(parseInt(hh, 10)).padStart(2, '0')}:${mi}`,
         merchant: stripTrailingNoise(merchantRaw),
         note: '',
+        payer_masked: extractMaskedPayer(text),
       };
     },
   },
@@ -176,6 +192,7 @@ const RULES: Rule[] = [
         occurred_at: null,
         merchant: stripTrailingNoise(body[3]),
         note: '',
+        payer_masked: extractMaskedPayer(text),
       };
     },
   },
@@ -212,6 +229,7 @@ const RULES: Rule[] = [
         occurred_at: null,
         merchant: stripTrailingNoise(m[1]),
         note: '온누리상품권 사용',
+        payer_masked: extractMaskedPayer(text),
       };
     },
   },
@@ -229,6 +247,7 @@ const EMPTY: ParsedCardNotification = {
   date: null,
   occurred_at: null,
   merchant: '',
+  payer_masked: '',
   note: '',
 };
 

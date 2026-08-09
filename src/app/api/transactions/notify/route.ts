@@ -192,22 +192,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5) 결제수단 — 카드 끝 4자리(삼성) 또는 카드 별칭(토스뱅크)이
-    //    결제수단 이름에 들어있으면 자동 연결
+    // 5) 알림에 적힌 이름으로 결제자 후보를 찾는다.
+    //    "김*진" → 성(김)을 뺀 보이는 글자 "진" 이 이름에 들어간 구성원.
+    //    딱 한 명일 때만 인정한다 (여러 명이 걸리면 확실하지 않으므로 포기).
+    const { data: members } = await supabase
+      .from('members')
+      .select('id, name')
+      .eq('household_id', householdId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+
+    const memberList = members ?? [];
+    let nameMemberId: string | null = null;
+    if (parsed.payer_masked) {
+      const visible = parsed.payer_masked.slice(1).replace(/\*/g, '');
+      if (visible) {
+        const hits = memberList.filter((m) => (m.name as string).includes(visible));
+        if (hits.length === 1) nameMemberId = hits[0].id as string;
+      }
+    }
+
+    // 6) 결제수단 — 카드 끝 4자리(삼성)나 별칭(토스뱅크·온누리)이 이름에 들어있는 것.
+    //    한 장만 걸리면 그대로 쓴다 (사용자가 지정해둔 설정을 존중).
+    //    여러 장이 걸리면(예: '주희 온누리' / '성진 온누리') 알림의 이름으로 가린다.
     const cardKey = parsed.card_last4 || parsed.card_alias;
     let paymentMethodId: string | null = null;
     let cardOwnerId: string | null = null;
     if (cardKey) {
-      const { data: pm } = await supabase
+      const { data: pms } = await supabase
         .from('payment_methods')
         .select('id, member_id')
         .eq('household_id', householdId)
         .eq('is_active', true)
-        .ilike('name', `%${cardKey}%`)
-        .limit(1)
-        .maybeSingle();
-      paymentMethodId = pm?.id ?? null;
-      cardOwnerId = pm?.member_id ?? null;
+        .ilike('name', `%${cardKey}%`);
+
+      const candidates = pms ?? [];
+      let picked = candidates.length === 1 ? candidates[0] : null;
+      if (!picked && candidates.length > 1 && nameMemberId) {
+        picked = candidates.find((c) => c.member_id === nameMemberId) ?? null;
+      }
+      paymentMethodId = picked?.id ?? null;
+      cardOwnerId = (picked?.member_id as string | null) ?? null;
     }
 
     // 6) 과거 학습 — 같은 가맹점을 전에 어떻게 정리했는지 본다.
@@ -242,19 +267,13 @@ export async function POST(req: NextRequest) {
       paymentMethodId = learned.payment_method_id;
     }
 
-    // 7) 결제자 — 카드 주인 > 과거 같은 가맹점의 결제자 > 첫 구성원
-    let memberId = cardOwnerId ?? learned?.member_id ?? null;
-    if (!memberId) {
-      const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('household_id', householdId)
-        .eq('is_active', true)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      memberId = member?.id ?? null;
-    }
+    // 7) 결제자 우선순위
+    //    ① 연결된 카드의 주인   — 사용자가 직접 지정한 설정이라 가장 확실
+    //    ② 알림에 적힌 이름     — 카드가 등록 안 돼 있어도 누가 썼는지 알 수 있음
+    //    ③ 과거 같은 가맹점     — 위 둘이 없을 때의 추정
+    //    ④ 첫 구성원           — 최후의 기본값
+    const memberId =
+      cardOwnerId ?? nameMemberId ?? learned?.member_id ?? memberList[0]?.id ?? null;
 
     // 8) 거래 생성
     // 카테고리: 과거에 사람이 정한 값 > 키워드 사전.
