@@ -248,6 +248,19 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
             if (s.payment_method_id) next.payment_method_id = s.payment_method_id;
             else if (s.account_from_id) next.account_from_id = s.account_from_id;
           }
+          // 결제자: 결제수단에 주인이 있으면 그 사람이 우선(카드는 쓰는 사람이 정해져 있음),
+          //        없으면 과거에 이 가맹점에서 가장 자주 결제한 사람.
+          if (!f.member_id) {
+            const pmOwner = paymentMethods.find(
+              (p) => p.id === (next.payment_method_id ?? f.payment_method_id),
+            )?.member_id;
+            if (pmOwner) next.member_id = pmOwner;
+            else if (s.member_id) next.member_id = s.member_id;
+          }
+          // 지출 대상: 과거에 가장 자주 쓰인 조합
+          if ((!f.target_member_ids || f.target_member_ids.length === 0) && s.target_member_ids?.length) {
+            next.target_member_ids = s.target_member_ids;
+          }
           return next;
         });
         setSuggestionApplied(`과거 ${s.frequency}회 기록에서 자동 입력`);
@@ -256,7 +269,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [form.name, form.merchant_name]);
+  }, [form.name, form.merchant_name, paymentMethods]);
 
   // ── 세부 품목 조작 ──
   const addLineItem = () =>
@@ -831,7 +844,15 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                       if (val.startsWith('account:')) {
                         setForm((f) => ({ ...f, payment_method_id: undefined, account_from_id: val.replace('account:', '') }));
                       } else {
-                        setForm((f) => ({ ...f, payment_method_id: val || undefined, account_from_id: undefined }));
+                        // 결제수단에 주인이 지정돼 있으면 결제자를 자동으로 맞춘다.
+                        // 카드마다 쓰는 사람이 정해져 있어 매번 고르는 게 번거롭다는 피드백 반영.
+                        const pm = paymentMethods.find((p) => p.id === val);
+                        setForm((f) => ({
+                          ...f,
+                          payment_method_id: val || undefined,
+                          account_from_id: undefined,
+                          member_id: pm?.member_id ?? f.member_id,
+                        }));
                       }
                     }}
                     className={`${INPUT_CLS} bg-white`}
@@ -929,30 +950,15 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                     />
                   </Row>
 
-                  {/* 결제자 + 지출 대상 */}
+                  {/* 지출 대상 (결제자는 결제수단 주인으로 자동 지정되므로 고르지 않는다) */}
                   {members.length > 1 && (
                     <div className="bg-gray-50 rounded-xl p-3 space-y-3">
-                      <div>
-                        <label className="text-xs font-medium mb-2 block text-gray-500">💳 결제자</label>
-                        <div className="flex gap-2 flex-wrap">
-                          {members.map((m) => (
-                            <button
-                              key={m.id}
-                              onClick={() => setField('member_id', form.member_id === m.id ? undefined : m.id)}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                                form.member_id === m.id ? 'text-white border-transparent' : 'bg-white border-gray-200 text-gray-500'
-                              }`}
-                              style={form.member_id === m.id ? { backgroundColor: m.color, borderColor: m.color } : {}}
-                            >
-                              <span
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: form.member_id === m.id ? 'rgba(255,255,255,0.7)' : m.color }}
-                              />
-                              {m.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      {form.member_id && (
+                        <p className="text-xs text-gray-400">
+                          💳 결제자 · {members.find((m) => m.id === form.member_id)?.name ?? ''}
+                          <span className="text-gray-300"> (결제수단 주인)</span>
+                        </p>
+                      )}
                       <div>
                         <label className="text-xs font-medium mb-2 block text-gray-500">
                           🎯 지출 대상 <span className="text-gray-300">(공용 또는 특정 인원)</span>

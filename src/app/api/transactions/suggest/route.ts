@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('transactions')
     .select(
-      'name, merchant_name, category_main, category_sub, payment_method_id, account_from_id, date',
+      'name, merchant_name, category_main, category_sub, payment_method_id, account_from_id, member_id, target_member_ids, date',
     )
     .eq('household_id', householdId)
     .gte('date', sinceDate)
@@ -69,6 +69,8 @@ export async function GET(req: NextRequest) {
     category_sub: string | null;
     payment_method_id: string | null;
     account_from_id: string | null;
+    member_id: string | null;
+    target_member_ids: string[] | null;
     date: string;
   };
   const rows = (data as Row[]).filter((r) => {
@@ -90,6 +92,19 @@ export async function GET(req: NextRequest) {
     return sorted[0]?.[0] ?? null;
   };
 
+  // 지출 대상은 배열이라 조합 전체를 하나의 값으로 보고 최빈값을 구한다.
+  // (예: [엄마,아빠] 로 같이 쓴 패턴이 [엄마] 와 섞이지 않도록)
+  const modeTargets = (vals: (string[] | null | undefined)[]): string[] => {
+    const counts: Record<string, number> = {};
+    for (const v of vals) {
+      if (!v || v.length === 0) continue;
+      const key = JSON.stringify([...v].sort());
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return top ? (JSON.parse(top[0]) as string[]) : [];
+  };
+
   const suggestion = {
     name: name ? null : mode(rows.map((r) => r.name)),
     merchant_name: merchant ? null : mode(rows.map((r) => r.merchant_name)),
@@ -97,6 +112,8 @@ export async function GET(req: NextRequest) {
     category_sub: mode(rows.map((r) => r.category_sub)),
     payment_method_id: mode(rows.map((r) => r.payment_method_id)),
     account_from_id: mode(rows.map((r) => r.account_from_id)),
+    member_id: mode(rows.map((r) => r.member_id)),
+    target_member_ids: modeTargets(rows.map((r) => r.target_member_ids)),
     frequency: rows.length,
     last_used: rows[0].date,
   };
