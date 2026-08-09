@@ -69,6 +69,24 @@ export default function TransactionInboxSheet({ onClose, onUpdated }: Props) {
     for (const tx of confirmed) await handleSync(tx);
   };
 
+  // 확인 필요한 건들을 한 번에 확정.
+  // 카드알림으로 들어온 건은 금액·가맹점·날짜가 이미 카드사 값이라
+  // 대부분 그대로 맞다. 하나씩 누르는 수고를 없앤다.
+  const [confirmingAll, setConfirmingAll] = useState(false);
+  const handleConfirmAll = async () => {
+    setConfirmingAll(true);
+    try {
+      const targets = items.filter((t) => t.status === 'reviewed');
+      for (const tx of targets) {
+        await fetch(`/api/transactions/${tx.id}/confirm`, { method: 'POST' });
+      }
+      await reload();
+      onUpdated();
+    } finally {
+      setConfirmingAll(false);
+    }
+  };
+
   const needsReviewCount = items.filter((t) => t.status === 'reviewed').length;
   const pendingCount = items.filter((t) => t.status === 'confirmed' && t.sync_status === 'pending').length;
 
@@ -92,7 +110,16 @@ export default function TransactionInboxSheet({ onClose, onUpdated }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {pendingCount > 1 && (
+            {needsReviewCount > 0 && (
+              <button
+                onClick={handleConfirmAll}
+                disabled={confirmingAll}
+                className="text-xs bg-amber-500 text-white px-3 py-1.5 rounded-xl font-medium disabled:opacity-50"
+              >
+                {confirmingAll ? '확인 중...' : `${needsReviewCount}건 모두 확인`}
+              </button>
+            )}
+            {needsReviewCount === 0 && pendingCount > 1 && (
               <button onClick={handleSyncAll} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-medium">
                 전체 동기화
               </button>

@@ -24,6 +24,7 @@ export interface ParsedCardNotification {
   date: string | null;     // 'YYYY-MM-DD'
   occurred_at: string | null; // 'YYYY-MM-DDTHH:mm' (시각을 안 주는 카드사는 null)
   merchant: string;
+  note: string;            // 가맹점 대신 남길 부가 설명 (상품권 사용 등)
 }
 
 // 개인 카톡 대화가 서버로 넘어오지 않도록 하는 1차 방어선.
@@ -35,9 +36,20 @@ export function looksLikeCardNotification(text: string): boolean {
   // 카드사 표준 문구 — 이건 단독으로 인정
   if (/(승인|취소)/.test(text)) return true;
 
-  // '결제/출금' 만 쓰는 곳(토스뱅크 등)은 '카드/뱅크/은행' 이 함께 있을 때만 인정.
+  // '결제/출금' 만 쓰는 곳(토스뱅크·온누리상품권 등)은
+  // '카드/뱅크/은행/상품권' 이 함께 있을 때만 인정.
   // ("그거 5천원 결제했어" 같은 개인 대화가 넘어오는 것을 막기 위함)
-  return /(결제|출금)/.test(text) && /(카드|뱅크|은행)/.test(text);
+  return /(결제|출금)/.test(text) && /(카드|뱅크|은행|상품권)/.test(text);
+}
+
+// 한 번의 결제가 두 곳에서 알림으로 오는 경우가 있다.
+// 온누리상품권으로 결제하면 '디지털온누리' 와 '삼성카드' 가 동시에 알림을 보낸다.
+//   - 온누리 쪽: "이마트24 보정현대점에서 1,700원이 결제되었습니다" → 가맹점 있음 ✅
+//   - 삼성카드 쪽: "1,700원 승인(온누리상품권 1,700원 사용) *결제대금에 미포함" → 가맹점 없음
+// 정보가 많은 온누리 쪽만 등록하고, 삼성카드 쪽은 저장 없이 버린다. (이중 등록 방지)
+export function isDuplicateSourceNotification(text: string): boolean {
+  if (/결제대금에\s*미포함/.test(text)) return true;
+  return /\[?삼성카드\]?[^\n]{0,40}상품권[^\n]{0,20}사용/.test(text);
 }
 
 // 제로폭/서식 문자 (U+200B~U+200F, U+FEFF). 소스에 보이지 않는 글자를 직접 넣지 않으려고 코드로 만든다.
@@ -120,6 +132,7 @@ const RULES: Rule[] = [
         date,
         occurred_at: `${date}T${String(parseInt(hh, 10)).padStart(2, '0')}:${mi}`,
         merchant: stripTrailingNoise(merchantRaw),
+        note: '',
       };
     },
   },
@@ -162,6 +175,41 @@ const RULES: Rule[] = [
         date: dayjs().format('YYYY-MM-DD'),
         occurred_at: null,
         merchant: stripTrailingNoise(body[3]),
+        note: '',
+      };
+    },
+  },
+  {
+    // 디지털온누리상품권 알림톡
+    //   상품권사용
+    //   1,700원
+    //   [디지털온누리상품권]
+    //   홍*동님, 이마트24 보정현대점에서 1,700원이 결제되었습니다.
+    //   결제 후 잔액 : 650원
+    //
+    // 같은 결제를 삼성카드도 알리지만 가맹점이 없어서, 이쪽만 등록한다.
+    name: 'onnuri-v1',
+    issuer: '온누리상품권',
+    parse: (text) => {
+      const m = text.match(
+        /온누리상품권\][\s\S]{0,40}?님,\s*(.+?)에서\s*([\d,]+)\s*원이\s*(결제|취소|환불)/,
+      );
+      if (!m) return null;
+
+      const amount = toInt(m[2]);
+      if (amount === null) return null;
+
+      return {
+        card_last4: '',
+        card_alias: '온누리상품권',
+        approved: m[3] === '결제',
+        amount,
+        installment: '',
+        // 알림에 결제 시각이 없다. 알림은 결제 직후 오므로 오늘 날짜로 둔다.
+        date: dayjs().format('YYYY-MM-DD'),
+        occurred_at: null,
+        merchant: stripTrailingNoise(m[1]),
+        note: '온누리상품권 사용',
       };
     },
   },
@@ -179,6 +227,7 @@ const EMPTY: ParsedCardNotification = {
   date: null,
   occurred_at: null,
   merchant: '',
+  note: '',
 };
 
 export function parseCardNotification(rawText: string): ParsedCardNotification {

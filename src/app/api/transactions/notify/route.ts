@@ -7,6 +7,7 @@ import {
   parseCardNotification,
   normalizeNotificationText,
   looksLikeCardNotification,
+  isDuplicateSourceNotification,
   buildDedupeKey,
 } from '@/lib/card-notification-parser';
 
@@ -88,6 +89,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 2-1) 같은 결제를 두 곳에서 알리는 경우 — 정보가 적은 쪽은 저장 없이 버린다.
+    //      (온누리상품권 결제 → 온누리 알림에 가맹점이 있고, 삼성카드 알림에는 없음)
+    if (isDuplicateSourceNotification(rawText)) {
+      return NextResponse.json(
+        { ok: true, status: 'ignored', reason: '상품권 결제는 상품권 앱 알림으로 등록됩니다' },
+        { status: 200 },
+      );
+    }
+
     const normalized = normalizeNotificationText(rawText);
     const parsed = parseCardNotification(normalized);
     const dedupeKey = buildDedupeKey(parsed, normalized);
@@ -162,9 +172,15 @@ export async function POST(req: NextRequest) {
       paymentMethodId = pm?.id ?? null;
     }
 
-    // 7) Inbox 거래 생성 (status='reviewed' + sync_status='pending' → Inbox 에 노출)
+    // 7) 거래 생성
     const category = inferCategory(parsed.merchant);
     const installmentNote = parsed.installment ? ` · ${parsed.installment}` : '';
+    const noteSuffix = parsed.note ? ` · ${parsed.note}` : '';
+
+    // 금액·가맹점·날짜는 카드사가 준 값이라 사람이 다시 볼 필요가 없다.
+    // 결제수단과 카테고리까지 자동으로 붙었다면 확인할 게 남지 않으므로 바로 확정한다.
+    // 하나라도 비면 Inbox 로 보내 사용자가 채우게 한다.
+    const autoConfirm = Boolean(paymentMethodId && category.main);
 
     const { data: tx, error: txError } = await supabase
       .from('transactions')
@@ -174,17 +190,17 @@ export async function POST(req: NextRequest) {
         date: parsed.date,
         type: parsed.approved ? 'variable_expense' : 'refund',
         amount: parsed.amount,
-        name: parsed.merchant || '카드결제',
+        name: parsed.merchant || parsed.note || '카드결제',
         merchant_name: parsed.merchant,
         payment_method_id: paymentMethodId,
         category_main: category.main,
         category_sub: category.sub,
-        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}`,
+        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}${noteSuffix}`,
         tags: [],
         essential: false,
         input_type: 'text',
         raw_input: normalized,
-        status: 'reviewed',
+        status: autoConfirm ? 'confirmed' : 'reviewed',
         sync_status: 'pending',
       })
       .select('id')
@@ -208,6 +224,7 @@ export async function POST(req: NextRequest) {
       {
         ok: true,
         status: 'created',
+        auto_confirmed: autoConfirm,   // true = 확인 없이 바로 가계부 반영
         transaction_id: tx.id,
         parsed: {
           issuer: parsed.issuer,
