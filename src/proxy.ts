@@ -17,6 +17,15 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // 홈 화면 위젯 — 웹 위젯 앱은 로그인을 할 수 없으므로 토큰으로만 열어준다.
+  // 읽기 전용 요약 화면 하나뿐이고, 토큰이 틀리면 아래 일반 검사로 내려간다.
+  if (pathname === '/widget/summary') {
+    const widgetToken = process.env.WIDGET_TOKEN;
+    if (widgetToken && searchParams.get('token') === widgetToken) {
+      return NextResponse.next();
+    }
+  }
+
   // 외부 cron / webhook 전용 경로 — 항상 인증 우회 통과
   // (외부 스케줄러가 호출하는 endpoint들. cron-job.org 같은 데서 secret 없이 호출 가능)
   const cronPaths = [
