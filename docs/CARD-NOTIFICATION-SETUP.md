@@ -15,7 +15,10 @@
 
 ### 1-1. DB 테이블 만들기
 
-Supabase → SQL Editor 에서 `src/db/migrations/054-card-notifications.sql` 내용을 실행합니다.
+Supabase → SQL Editor 에서 아래 순서로 실행합니다.
+
+1. `src/db/migrations/054-card-notifications.sql` — 테이블 생성
+2. `src/db/migrations/055-card-notifications-alias.sql` — 카드 별칭 컬럼 추가 (토스뱅크용)
 
 ### 1-2. 비밀키 등록
 
@@ -94,9 +97,13 @@ Supabase → SQL Editor 에서 `src/db/migrations/054-card-notifications.sql` �
 
 현재 규칙이 있는 카드사:
 
-| 카드사 | 규칙 이름 | 형식 |
-|---|---|---|
-| 삼성카드 | `samsung-v1` | `삼성1810승인 홍*동 / 12,000원 일시불 / 08/08 19:45 가맹점 / 누적...` |
+| 카드사 | 규칙 이름 | 형식 | 특이사항 |
+|---|---|---|---|
+| 삼성카드 | `samsung-v1` | `삼성1810승인 홍*동 / 12,000원 일시불 / 08/08 19:45 가맹점 / 누적...` | 카드 끝 4자리·결제시각 제공 |
+| 토스뱅크 | `tossbank-v1` | `[토스뱅크] 체크카드 국내 결제 / 홍*동님의 생활비카드 카드 / 12,000원 결제 \| 가맹점 / 잔액...` | **'승인' 대신 '결제'**, 끝자리 대신 **카드 별칭**, **결제시각 없음** |
+
+> 결제시각을 주지 않는 카드사(토스뱅크)는 같은 날 같은 곳에서 같은 금액을 두 번 결제해도
+> 별건으로 인식해야 하므로, 매번 달라지는 **잔액**을 포함한 원문으로 중복을 판별한다.
 
 **규칙이 없는 카드사도 원문은 저장됩니다.** (`status='unparsed'`)
 아래 쿼리로 실제 문구를 모은 뒤 `src/lib/card-notification-parser.ts` 의 `RULES` 에 추가하면 됩니다.

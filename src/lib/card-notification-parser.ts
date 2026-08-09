@@ -16,22 +16,28 @@ export interface ParsedCardNotification {
   matched: boolean;
   rule: string;            // 매칭된 규칙 이름 (디버깅용)
   issuer: string;          // '삼성카드'
-  card_last4: string;      // '1810'
+  card_last4: string;      // '1810' (끝 4자리를 주는 카드사)
+  card_alias: string;      // '생활비카드' (끝자리 대신 카드 별칭을 주는 곳 — 토스뱅크 등)
   approved: boolean;       // false = 취소/환불
   amount: number | null;
   installment: string;     // '일시불' | '3개월' 등
   date: string | null;     // 'YYYY-MM-DD'
-  occurred_at: string | null; // 'YYYY-MM-DDTHH:mm'
+  occurred_at: string | null; // 'YYYY-MM-DDTHH:mm' (시각을 안 주는 카드사는 null)
   merchant: string;
 }
 
 // 개인 카톡 대화가 서버로 넘어오지 않도록 하는 1차 방어선.
-// 폰 쪽에서 발신자 필터를 거는 것이 기본이고, 이건 그게 뚫렸을 때의 안전망.
-// "금액(원)" + "승인/취소" 두 가지가 동시에 있어야만 카드 알림으로 인정한다.
+// 폰 쪽에서 발신자/단어 필터를 거는 것이 기본이고, 이건 그게 뚫렸을 때의 안전망.
 export function looksLikeCardNotification(text: string): boolean {
-  const hasAmount = /\d[\d,]*\s*원/.test(text);
-  const hasApproval = /(승인|취소)/.test(text);
-  return hasAmount && hasApproval;
+  // 금액이 없으면 무조건 아님
+  if (!/\d[\d,]*\s*원/.test(text)) return false;
+
+  // 카드사 표준 문구 — 이건 단독으로 인정
+  if (/(승인|취소)/.test(text)) return true;
+
+  // '결제/출금' 만 쓰는 곳(토스뱅크 등)은 '카드/뱅크/은행' 이 함께 있을 때만 인정.
+  // ("그거 5천원 결제했어" 같은 개인 대화가 넘어오는 것을 막기 위함)
+  return /(결제|출금)/.test(text) && /(카드|뱅크|은행)/.test(text);
 }
 
 // 제로폭/서식 문자 (U+200B~U+200F, U+FEFF). 소스에 보이지 않는 글자를 직접 넣지 않으려고 코드로 만든다.
@@ -76,11 +82,13 @@ function stripTrailingNoise(merchant: string): string {
     .trim();
 }
 
+type RuleResult = Omit<ParsedCardNotification, 'matched' | 'rule' | 'issuer'>;
+
 interface Rule {
   name: string;
   issuer: string;
-  pattern: RegExp;
-  build: (m: RegExpMatchArray) => Omit<ParsedCardNotification, 'matched' | 'rule' | 'issuer'>;
+  // 매칭 실패 시 null. 카드사마다 문구 구조가 크게 달라 규칙별 함수로 둔다.
+  parse: (text: string) => RuleResult | null;
 }
 
 const RULES: Rule[] = [
@@ -92,9 +100,12 @@ const RULES: Rule[] = [
     //   누적2,432,060원
     name: 'samsung-v1',
     issuer: '삼성카드',
-    pattern:
-      /삼성\s*(\d{4})\s*(승인|취소)[\s\S]{0,40}?([\d,]+)\s*원\s*([^\n]*?)\s*(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})\s+([^\n]+)/,
-    build: (m) => {
+    parse: (text) => {
+      const m = text.match(
+        /삼성\s*(\d{4})\s*(승인|취소)[\s\S]{0,40}?([\d,]+)\s*원\s*([^\n]*?)\s*(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})\s+([^\n]+)/,
+      );
+      if (!m) return null;
+
       const [, last4, approvalWord, amountText, installment, mm, dd, hh, mi, merchantRaw] = m;
       const month = parseInt(mm, 10);
       const day = parseInt(dd, 10);
@@ -102,12 +113,55 @@ const RULES: Rule[] = [
       const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       return {
         card_last4: last4,
+        card_alias: '',
         approved: approvalWord === '승인',
         amount: toInt(amountText),
         installment: (installment ?? '').trim(),
         date,
         occurred_at: `${date}T${String(parseInt(hh, 10)).padStart(2, '0')}:${mi}`,
         merchant: stripTrailingNoise(merchantRaw),
+      };
+    },
+  },
+  {
+    // 토스뱅크 체크카드 알림톡
+    //   [토스뱅크] 체크카드 국내 결제
+    //   김*진님의 생활비카드 카드
+    //   53,200원 결제 | 쿠팡(쿠페이)
+    //   잔액 50,110원
+    //
+    // 삼성과 다른 점: '승인' 대신 '결제', 카드 끝자리 대신 별칭, 결제 시각 없음.
+    name: 'tossbank-v1',
+    issuer: '토스뱅크',
+    parse: (text) => {
+      const head = text.match(/\[토스뱅크\][^\n]*?(결제|승인|취소|출금)/);
+      if (!head) return null;
+
+      // "53,200원 결제 | 쿠팡(쿠페이)" — 뒤에 '|' 와 가맹점이 반드시 따라온다.
+      // 마지막 줄 "잔액 50,110원" 은 '|' 가 없어서 여기에 걸리지 않는다.
+      const body = text.match(/([\d,]+)\s*원\s*(결제|승인|취소|출금)?\s*\|\s*([^\n]+)/);
+      if (!body) return null;
+
+      const amount = toInt(body[1]);
+      if (amount === null) return null;
+
+      const action = body[2] || head[1];
+
+      // "김*진님의 생활비카드 카드" → 별칭은 '생활비카드'.
+      // 별칭 자체가 '카드' 로 끝나므로 최소 매칭을 쓰면 '생활비' 로 잘린다.
+      // 뒤에서부터 독립된 '카드' 를 찾도록 최대 매칭 + 숫자/파이프 제외로 범위를 묶는다.
+      const alias = text.match(/님의\s*([^\n|\d]+)\s*카드(?=\s|$)/)?.[1]?.trim() ?? '';
+
+      return {
+        card_last4: '',
+        card_alias: alias,
+        approved: !/취소/.test(action),
+        amount,
+        installment: '',
+        // 알림에 결제 시각이 없다. 알림은 결제 직후 오므로 오늘 날짜로 둔다.
+        date: dayjs().format('YYYY-MM-DD'),
+        occurred_at: null,
+        merchant: stripTrailingNoise(body[3]),
       };
     },
   },
@@ -118,6 +172,7 @@ const EMPTY: ParsedCardNotification = {
   rule: '',
   issuer: '',
   card_last4: '',
+  card_alias: '',
   approved: true,
   amount: null,
   installment: '',
@@ -130,10 +185,9 @@ export function parseCardNotification(rawText: string): ParsedCardNotification {
   const text = normalizeNotificationText(rawText);
 
   for (const rule of RULES) {
-    const m = text.match(rule.pattern);
-    if (!m) continue;
+    const built = rule.parse(text);
+    if (!built) continue;
 
-    const built = rule.build(m);
     // 금액을 못 뽑았으면 매칭 실패로 취급 (잘못된 거래가 등록되는 것보다 낫다)
     if (built.amount === null) continue;
 
@@ -149,9 +203,17 @@ export function buildDedupeKey(parsed: ParsedCardNotification, normalizedText: s
   if (!parsed.matched) {
     return `unparsed:${normalizedText.slice(0, 300)}`;
   }
+
+  // 결제 시각을 주지 않는 카드사(토스뱅크 등)는 금액·가맹점만으로는
+  // 같은 날 같은 곳에서 두 번 결제한 것을 중복으로 오인해 버린다.
+  // 원문에 매번 달라지는 잔액이 들어있으므로 원문을 키로 쓴다.
+  if (!parsed.occurred_at) {
+    return `${parsed.issuer}|${normalizedText.slice(0, 300)}`;
+  }
+
   return [
     parsed.issuer,
-    parsed.card_last4,
+    parsed.card_last4 || parsed.card_alias,
     parsed.approved ? 'A' : 'C',
     parsed.amount,
     parsed.occurred_at,

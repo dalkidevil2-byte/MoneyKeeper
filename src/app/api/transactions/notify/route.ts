@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
         rule: parsed.rule,
         issuer: parsed.issuer,
         card_last4: parsed.card_last4,
+        card_alias: parsed.card_alias,
         approved: parsed.matched ? parsed.approved : null,
         amount: parsed.amount,
         merchant: parsed.merchant,
@@ -145,15 +146,17 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    // 6) 결제수단 — 이름에 카드 끝 4자리가 들어있으면 자동 연결
+    // 6) 결제수단 — 카드 끝 4자리(삼성) 또는 카드 별칭(토스뱅크)이
+    //    결제수단 이름에 들어있으면 자동 연결
+    const cardKey = parsed.card_last4 || parsed.card_alias;
     let paymentMethodId: string | null = null;
-    if (parsed.card_last4) {
+    if (cardKey) {
       const { data: pm } = await supabase
         .from('payment_methods')
         .select('id')
         .eq('household_id', householdId)
         .eq('is_active', true)
-        .ilike('name', `%${parsed.card_last4}%`)
+        .ilike('name', `%${cardKey}%`)
         .limit(1)
         .maybeSingle();
       paymentMethodId = pm?.id ?? null;
@@ -176,7 +179,7 @@ export async function POST(req: NextRequest) {
         payment_method_id: paymentMethodId,
         category_main: category.main,
         category_sub: category.sub,
-        memo: `📲 카드알림 · ${parsed.issuer} ${parsed.card_last4}${installmentNote}`,
+        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}`,
         tags: [],
         essential: false,
         input_type: 'text',
