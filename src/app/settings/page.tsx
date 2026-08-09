@@ -533,8 +533,17 @@ export default function SettingsPage() {
               <input
                 type="text"
                 value={pmForm.name}
-                onChange={(e) => setPMForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="카드명 (예: 신한 생활비 체크카드)"
+                onChange={(e) => {
+                  const name = e.target.value;
+                  // 카드명에 구성원 이름이 들어있으면 소유자를 자동으로 골라준다.
+                  // (예: "주희 현대" → 주희). 직접 고른 뒤에는 덮어쓰지 않는다.
+                  setPMForm((f) => {
+                    if (f.member_id) return { ...f, name };
+                    const hits = members.filter((m) => name.includes(m.name));
+                    return { ...f, name, member_id: hits.length === 1 ? hits[0].id : '' };
+                  });
+                }}
+                placeholder="카드명 (예: 주희 신한 체크카드)"
                 className="w-full border border-indigo-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none"
               />
               <div className="grid grid-cols-2 gap-2">
