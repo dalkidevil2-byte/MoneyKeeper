@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
+import { syncTransactionToNotion } from '@/lib/notion-sync';
 import { inferCategory } from '@/lib/parser';
 import {
   parseCardNotification,
@@ -327,6 +328,13 @@ export async function POST(req: NextRequest) {
       .from('card_notifications')
       .update({ transaction_id: tx.id })
       .eq('id', logRow.id);
+
+    // 자동 확정된 건은 Notion 동기화까지 끝내야 Inbox 에서 완전히 사라진다.
+    // (Inbox 는 '동기화 안 된 거래' 를 보여주기 때문)
+    // Inbox 로 보낸 건은 사용자가 분류를 고칠 수 있으므로, 확인 시점에 동기화한다.
+    if (autoConfirm) {
+      await syncTransactionToNotion(supabase, tx.id);
+    }
 
     await logRequest({ result: autoConfirm ? 'created(자동확정)' : 'created(Inbox)', source, rawText: normalized, storeText: true });
 
