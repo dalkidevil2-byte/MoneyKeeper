@@ -9,9 +9,11 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 폰 카드알림 수신 — 폰은 로그인할 수 없으므로 통과시키고,
+  // 폰에서 오는 알림 수신 — 폰은 로그인할 수 없으므로 통과시키고,
   // route 내부에서 CARD_NOTIFY_SECRET 로 자체 검증한다.
-  if (pathname === '/api/transactions/notify') {
+  //   /api/transactions/notify — 카드 결제 알림 → 거래
+  //   /api/tasks/notify        — 예약 확정 알림 → 일정
+  if (pathname === '/api/transactions/notify' || pathname === '/api/tasks/notify') {
     return NextResponse.next();
   }
 
