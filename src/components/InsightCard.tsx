@@ -131,7 +131,7 @@ function InsightItem({ insight, onDismiss }: { insight: Insight; onDismiss: () =
   return null;
 }
 
-export default function InsightCard() {
+export default function InsightCard({ title = '소비 인사이트' }: { title?: string } = {}) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -150,7 +150,7 @@ export default function InsightCard() {
       <section>
         <div className="flex items-center gap-2 mb-2 px-1">
           <Sparkles size={15} className="text-indigo-500" />
-          <h2 className="font-semibold text-gray-800">소비 인사이트</h2>
+          <h2 className="font-semibold text-gray-800">{title}</h2>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 px-4 py-5 text-center">
           <p className="text-2xl mb-2">📊</p>
