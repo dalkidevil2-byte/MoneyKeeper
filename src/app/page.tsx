@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { Wallet, TrendingUp, ChevronRight, ListTodo, Archive, Sparkles } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
+import TodaySummary from '@/components/home/TodaySummary';
 import BudgetSummary from '@/components/home/BudgetSummary';
 import StockSummary from '@/components/home/StockSummary';
 import TodoSummary from '@/components/home/TodoSummary';
 import NotificationBell from '@/components/todo/NotificationBell';
-import ActivityChips from '@/components/todo/ActivityChips';
 import BriefingCard from '@/components/home/BriefingCard';
 import { STOCKS_DISABLED } from '@/lib/app-flags';
 
@@ -34,6 +34,11 @@ export default function HubPage() {
         <NotificationBell />
       </div>
 
+      {/* 오늘 요약 — 앱 열자마자 오늘 쓴 돈·일정이 보이도록 */}
+      <div className="px-5 mb-3">
+        <TodaySummary />
+      </div>
+
       {/* AI 브리핑 카드 */}
       <div className="px-5 mb-3">
         <BriefingCard />
@@ -57,9 +62,6 @@ export default function HubPage() {
             <ChevronRight size={20} className="text-gray-300" />
           </div>
         </Link>
-
-        {/* 활동 추적 — 빠른 시작/정지 */}
-        <ActivityChips />
 
         {/* 할일 카드 */}
         <Link
@@ -97,6 +99,23 @@ export default function HubPage() {
           <BudgetSummary />
         </Link>
 
+        {/* 아카이브 카드 */}
+        <Link
+          href="/archive"
+          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
+              <Archive size={28} className="text-slate-700" strokeWidth={2} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">아카이브</h2>
+              <p className="text-sm text-gray-500 mt-0.5">일기 · 레시피 · 독서 · 자유 컬렉션</p>
+            </div>
+            <ChevronRight size={20} className="text-gray-300" />
+          </div>
+        </Link>
+
         {/* 주식 카드 — 솔로/일반 사용자용 (NEXT_PUBLIC_DISABLE_STOCKS=true 면 숨김) */}
         {!STOCKS_DISABLED && (
           <Link
@@ -116,23 +135,6 @@ export default function HubPage() {
             <StockSummary />
           </Link>
         )}
-
-        {/* 아카이브 카드 */}
-        <Link
-          href="/archive"
-          className="block bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
-              <Archive size={28} className="text-slate-700" strokeWidth={2} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-bold text-gray-900">아카이브</h2>
-              <p className="text-sm text-gray-500 mt-0.5">일기 · 레시피 · 독서 · 자유 컬렉션</p>
-            </div>
-            <ChevronRight size={20} className="text-gray-300" />
-          </div>
-        </Link>
 
       </div>
     </div>
