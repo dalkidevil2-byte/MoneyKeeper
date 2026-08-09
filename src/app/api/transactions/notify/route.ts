@@ -40,6 +40,34 @@ function errorMessage(error: unknown): string {
   return '알 수 없는 오류';
 }
 
+// 들어온 요청을 결과와 함께 남긴다.
+// 이게 없으면 중복·무시된 요청은 흔적이 전혀 없어서
+// "폰이 안 보낸 것" 과 "보냈는데 서버가 버린 것" 을 구분할 수 없다.
+//
+// 개인정보: 카드 알림으로 인정된 요청만 본문을 저장하고,
+//          아닌 것은 길이만 남긴다 (개인 카톡이 잘못 넘어왔을 수 있으므로).
+async function logRequest(opts: {
+  result: string;
+  reason?: string;
+  source?: string;
+  rawText?: string;
+  storeText?: boolean;
+}) {
+  try {
+    const supabase = createServerSupabaseClient();
+    await supabase.from('notify_requests').insert({
+      result: opts.result,
+      reason: opts.reason ?? '',
+      source: opts.source ?? 'unknown',
+      raw_text: opts.storeText ? (opts.rawText ?? '').slice(0, 500) : '',
+      text_length: (opts.rawText ?? '').length,
+    });
+  } catch (e) {
+    // 기록 실패가 본 기능을 막아서는 안 된다.
+    console.warn('[notify log]', e);
+  }
+}
+
 async function readText(req: NextRequest): Promise<{ text: string; source: string }> {
   const contentType = req.headers.get('content-type') ?? '';
 
@@ -70,6 +98,7 @@ export async function POST(req: NextRequest) {
   const provided =
     req.headers.get('x-notify-secret') ?? req.nextUrl.searchParams.get('secret');
   if (provided !== expected) {
+    await logRequest({ result: 'unauthorized', reason: '시크릿 불일치' });
     return unauthorized('인증 실패', 401);
   }
 
@@ -77,12 +106,20 @@ export async function POST(req: NextRequest) {
     const { text: rawText, source } = await readText(req);
 
     if (!rawText.trim()) {
+      await logRequest({ result: 'empty', reason: '본문이 비어서 도착', source });
       return NextResponse.json({ ok: false, error: '내용이 비어 있습니다.' }, { status: 400 });
     }
 
     // 2) 카드 알림이 아닌 것은 저장조차 하지 않는다.
     //    폰 설정이 잘못돼 개인 카톡이 넘어와도 DB 에 남지 않도록 하는 안전장치.
     if (!looksLikeCardNotification(rawText)) {
+      await logRequest({
+        result: 'ignored',
+        reason: '카드 결제 알림 형식이 아님',
+        source,
+        rawText,
+        storeText: false, // 개인 대화일 수 있으므로 내용은 남기지 않는다
+      });
       return NextResponse.json(
         { ok: true, status: 'ignored', reason: '카드 결제 알림 형식이 아님' },
         { status: 200 },
@@ -92,6 +129,13 @@ export async function POST(req: NextRequest) {
     // 2-1) 같은 결제를 두 곳에서 알리는 경우 — 정보가 적은 쪽은 저장 없이 버린다.
     //      (온누리상품권 결제 → 온누리 알림에 가맹점이 있고, 삼성카드 알림에는 없음)
     if (isDuplicateSourceNotification(rawText)) {
+      await logRequest({
+        result: 'ignored',
+        reason: '상품권 결제 — 상품권 앱 알림으로 등록',
+        source,
+        rawText,
+        storeText: true,
+      });
       return NextResponse.json(
         { ok: true, status: 'ignored', reason: '상품권 결제는 상품권 앱 알림으로 등록됩니다' },
         { status: 200 },
@@ -128,6 +172,7 @@ export async function POST(req: NextRequest) {
 
     if (logError) {
       if (logError.code === PG_UNIQUE_VIOLATION) {
+        await logRequest({ result: 'duplicate', reason: '이미 등록된 결제', source, rawText: normalized, storeText: true });
         return NextResponse.json({ ok: true, status: 'duplicate' }, { status: 200 });
       }
       throw logError;
@@ -136,6 +181,7 @@ export async function POST(req: NextRequest) {
     // 4) 규칙이 없는 카드사 — 원문만 남기고 거래는 만들지 않는다.
     //    (틀린 거래가 가계부에 들어가는 것보다, 안 들어가는 편이 낫다)
     if (!parsed.matched) {
+      await logRequest({ result: 'unparsed', reason: '지원하지 않는 카드사 형식', source, rawText: normalized, storeText: true });
       return NextResponse.json(
         {
           ok: true,
@@ -227,6 +273,8 @@ export async function POST(req: NextRequest) {
       .update({ transaction_id: tx.id })
       .eq('id', logRow.id);
 
+    await logRequest({ result: autoConfirm ? 'created(자동확정)' : 'created(Inbox)', source, rawText: normalized, storeText: true });
+
     return NextResponse.json(
       {
         ok: true,
@@ -246,6 +294,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error('[transactions/notify]', error);
+    await logRequest({ result: 'error', reason: errorMessage(error) });
     return NextResponse.json({ ok: false, error: errorMessage(error) }, { status: 500 });
   }
 }
