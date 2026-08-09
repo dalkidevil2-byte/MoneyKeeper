@@ -97,6 +97,8 @@ export default function AppLauncher() {
 
   // 허브/로그인에서는 안 보임
   if (pathname === '/' || pathname === '/login') return null;
+  // 위젯 화면은 홈 화면에 얹히므로 앱 네비게이션을 숨긴다
+  if (pathname.startsWith("/widget")) return null;
 
   return (
     <>

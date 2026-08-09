@@ -81,6 +81,8 @@ export default function BottomNav() {
 
   // 허브, 아카이브, 어시스턴트는 바텀 네비 숨김 (하위 섹션 없음)
   if (pathname === '/') return null;
+  // 위젯 화면은 홈 화면에 얹히므로 앱 네비게이션을 숨긴다
+  if (pathname.startsWith("/widget")) return null;
   if (pathname.startsWith('/archive')) return null;
   if (pathname.startsWith('/assistant')) return null;
   // 주식 비활성 시: /stocks 경로 진입해도 가계부 네비 표시 (안 보이게 처리)
