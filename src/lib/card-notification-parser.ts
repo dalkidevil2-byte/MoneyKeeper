@@ -201,7 +201,9 @@ const RULES: Rule[] = [
 
       return {
         card_last4: '',
-        card_alias: '온누리상품권',
+        // 결제수단 이름이 '주희 온누리' 처럼 짧을 수 있어 '온누리' 로 맞춘다.
+        // (이 값으로 payment_methods.name 을 부분 검색해 자동 연결한다)
+        card_alias: '온누리',
         approved: m[3] === '결제',
         amount,
         installment: '',
