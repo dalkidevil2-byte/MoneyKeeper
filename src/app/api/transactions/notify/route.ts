@@ -210,9 +210,40 @@ export async function POST(req: NextRequest) {
       cardOwnerId = pm?.member_id ?? null;
     }
 
-    // 6) 결제자 — 카드에 주인이 지정돼 있으면 그 사람.
-    //    (카드마다 쓰는 사람이 정해져 있어, 첫 구성원으로 뭉뚱그리면 틀린 사람에게 달린다)
-    let memberId = cardOwnerId;
+    // 6) 과거 학습 — 같은 가맹점을 전에 어떻게 정리했는지 본다.
+    //    사용자가 Inbox 에서 카드·분류를 골라 '확정' 한 것만 신뢰한다.
+    //    (자동 추측이 아니라 사람이 내린 결정을 배우기 위함)
+    //    가장 최근 것 하나만 본다 — 분류를 바꾸면 그 즉시 새 값이 적용되도록.
+    let learned: {
+      category_main: string | null;
+      category_sub: string | null;
+      payment_method_id: string | null;
+      member_id: string | null;
+    } | null = null;
+
+    if (parsed.merchant) {
+      const { data } = await supabase
+        .from('transactions')
+        .select('category_main, category_sub, payment_method_id, member_id')
+        .eq('household_id', householdId)
+        .eq('merchant_name', parsed.merchant)
+        .eq('status', 'confirmed')
+        .neq('category_main', '')
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      learned = data ?? null;
+    }
+
+    // 결제수단: 카드 이름 매칭이 우선(카드가 곧 결제수단이므로),
+    //          실패하면 같은 가맹점에서 전에 쓰던 결제수단.
+    if (!paymentMethodId && learned?.payment_method_id) {
+      paymentMethodId = learned.payment_method_id;
+    }
+
+    // 7) 결제자 — 카드 주인 > 과거 같은 가맹점의 결제자 > 첫 구성원
+    let memberId = cardOwnerId ?? learned?.member_id ?? null;
     if (!memberId) {
       const { data: member } = await supabase
         .from('members')
@@ -225,14 +256,19 @@ export async function POST(req: NextRequest) {
       memberId = member?.id ?? null;
     }
 
-    // 7) 거래 생성
-    const category = inferCategory(parsed.merchant);
+    // 8) 거래 생성
+    // 카테고리: 과거에 사람이 정한 값 > 키워드 사전.
+    // '주식회사농가참신' 같은 법인명은 사전으로는 절대 못 잡으므로 학습이 유일한 방법이다.
+    const category = learned?.category_main
+      ? { main: learned.category_main, sub: learned.category_sub ?? '' }
+      : inferCategory(parsed.merchant);
+
     const installmentNote = parsed.installment ? ` · ${parsed.installment}` : '';
     const noteSuffix = parsed.note ? ` · ${parsed.note}` : '';
 
     // 금액·가맹점·날짜는 카드사가 준 값이라 사람이 다시 볼 필요가 없다.
-    // 결제수단과 카테고리까지 자동으로 붙었다면 확인할 게 남지 않으므로 바로 확정한다.
-    // 하나라도 비면 Inbox 로 보내 사용자가 채우게 한다.
+    // 결제수단과 카테고리까지 붙었다면 확인할 게 남지 않으므로 바로 확정한다.
+    // 하나라도 비면 Inbox 로 보내 사용자가 채우게 하고, 그 선택이 다음 번 학습이 된다.
     const autoConfirm = Boolean(paymentMethodId && category.main);
 
     const { data: tx, error: txError } = await supabase
@@ -248,7 +284,7 @@ export async function POST(req: NextRequest) {
         payment_method_id: paymentMethodId,
         category_main: category.main,
         category_sub: category.sub,
-        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}${noteSuffix}`,
+        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}${noteSuffix}${learned?.category_main ? ' · 이전 분류 적용' : ''}`,
         tags: [],
         essential: false,
         input_type: 'text',
