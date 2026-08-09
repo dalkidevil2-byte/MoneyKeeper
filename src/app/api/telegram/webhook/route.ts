@@ -742,7 +742,10 @@ async function handleReceiptPhoto(
     }
 
     // 3) draft 거래로 저장
+    // NOTE: input_type 은 스키마 CHECK 가 허용하는 값만 사용 가능
+    //       ('text' | 'voice' | 'receipt' | 'manual'). 영수증 OCR 이므로 'receipt'.
     let inserted = 0;
+    let firstError: string | null = null;
     for (const it of items) {
       const { error } = await supabase.from('transactions').insert({
         household_id: householdId,
@@ -755,24 +758,37 @@ async function handleReceiptPhoto(
         name: it.name ?? storeName,
         memo: `📲 텔레그램 (${it.name})`,
         date,
-        input_type: 'ocr',
+        input_type: 'receipt',
         raw_input: '',
         tags: [],
         essential: false,
         status: 'reviewed',
         sync_status: 'pending',
       });
-      if (error) console.warn('[receipt insert]', error);
-      else inserted++;
+      if (error) {
+        console.warn('[receipt insert]', error);
+        firstError ??= error.message;
+      } else inserted++;
     }
 
     // 4) 답변
+    // 한 건도 저장 못 했으면 성공으로 알리지 않는다.
+    // (예전에 저장 실패를 조용히 삼키고 "저장 완료" 라고 답해서 문제를 못 알아챘음)
+    if (inserted === 0) {
+      await sendTelegramMessage(
+        tg.bot_token,
+        chatId,
+        `⚠️ 영수증은 읽었지만 저장에 실패했어요.\n사유: ${firstError ?? '알 수 없음'}`,
+      );
+      return NextResponse.json({ ok: false, inserted: 0, error: firstError }, { status: 500 });
+    }
+
     const reply = `✅ 영수증 분석 완료
 🏪 ${storeName || '미확인'}
 📅 ${date}
 🧾 ${items.length}건 · 총 ${total.toLocaleString('ko-KR')}원
 
-📥 ${inserted}건 Inbox 에 저장
+📥 ${inserted}건 Inbox 에 저장${inserted < items.length ? ` (${items.length - inserted}건 실패)` : ''}
 앱 → 가계부 → 우상단 📥 Inbox 에서 확인 후 확정해주세요.`;
     await sendTelegramMessage(tg.bot_token, chatId, reply);
 
