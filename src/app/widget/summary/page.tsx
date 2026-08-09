@@ -1,10 +1,18 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import 'dayjs/locale/ko';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { shouldShowOnCalendar } from '@/lib/task-recurrence';
 import type { Task } from '@/types';
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
 dayjs.locale('ko');
+
+// 서버는 UTC 로 돈다. 한국 시간으로 계산하지 않으면
+// 밤 9시 이후에 '오늘' 이 전날로 잡혀 오늘 지출·일정이 틀리게 나온다.
+const KST = 'Asia/Seoul';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +50,7 @@ export default async function WidgetSummaryPage({
   }
 
   const supabase = createServerSupabaseClient();
-  const today = dayjs();
+  const today = dayjs().tz(KST);
   const todayStr = today.format('YYYY-MM-DD');
   const monthStart = today.startOf('month').format('YYYY-MM-DD');
   const monthEnd = today.endOf('month').format('YYYY-MM-DD');
