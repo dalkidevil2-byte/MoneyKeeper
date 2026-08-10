@@ -19,14 +19,15 @@ const FREQ_OPTIONS = [
 ] as const;
 
 /**
- * 첫 화면의 오늘 루틴.
+ * 첫 화면의 오늘 할 것 — 루틴 + 오늘까지 해야 하는 할일.
  *
  * 루틴이 안 쓰이던 이유는 '할일 화면까지 들어가야' 했기 때문이라,
  * 앱을 열면 바로 보이고 탭 한 번으로 체크되게 둔다.
  * 추가도 여기서 바로, 삭제도 여기서 바로 되게 한다.
  */
-export default function RoutineCard() {
+export default function TodayDoCard() {
   const [routines, setRoutines] = useState<Task[]>([]);
+  const [todos, setTodos] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -38,12 +39,17 @@ export default function RoutineCard() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(
-        `/api/tasks?household_id=${HOUSEHOLD_ID}&type=routine&include_completions=1`,
-      ).then((r) => r.json());
-      setRoutines((res.tasks ?? []) as Task[]);
+      const [routineRes, todoRes] = await Promise.all([
+        fetch(`/api/tasks?household_id=${HOUSEHOLD_ID}&type=routine&include_completions=1`).then((r) => r.json()),
+        // 습관 루틴도 kind=todo 라서, 반복이 아닌 '단발 할일' 만 따로 가져온다.
+        // (안 그러면 루틴이 아래 할일 목록에 한 번 더 나온다)
+        fetch(`/api/tasks?household_id=${HOUSEHOLD_ID}&kind=todo&type=one_time&status=pending`).then((r) => r.json()),
+      ]);
+      setRoutines((routineRes.tasks ?? []) as Task[]);
+      setTodos((todoRes.tasks ?? []) as Task[]);
     } catch {
       setRoutines([]);
+      setTodos([]);
     } finally {
       setLoaded(true);
     }
@@ -65,6 +71,13 @@ export default function RoutineCard() {
   // 오늘 해야 하는 것만. 생일 같은 연 1회 루틴은 해당 날짜에만 뜬다.
   const todays = routines.filter((t) => t.is_active && isTaskDueOn(t, today));
   const doneCount = todays.filter((t) => isTaskCompletedOn(t, today)).length;
+
+  // 오늘까지 해야 하는 할일 — 기한이 없거나 오늘이거나 이미 지난 것.
+  // 미래 기한(예: 11월)은 오늘 할 일이 아니므로 뺀다.
+  const todayTodos = todos.filter(
+    (t) => t.is_active && (!t.deadline_date || t.deadline_date <= today),
+  );
+  const totalCount = todays.length + todayTodos.length;
 
   const toggle = async (t: Task) => {
     if (busyId) return;
@@ -97,7 +110,9 @@ export default function RoutineCard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           household_id: HOUSEHOLD_ID,
-          kind: 'event',
+          // 습관 루틴은 '할일'이다. 일정(event)으로 만들면 캘린더에 매일 뜬다.
+          // 생일 같은 '반복 일정'과는 다른 것이므로 kind 를 나눠 쓴다.
+          kind: 'todo',
           type: 'routine',
           title,
           recurrence: opt.recurrence,
@@ -123,7 +138,7 @@ export default function RoutineCard() {
   };
 
   // 오늘 할 게 없고 추가 중도 아니면 카드를 아예 안 보여준다 (빈칸이 남지 않게)
-  if (loaded && todays.length === 0 && !adding) {
+  if (loaded && totalCount === 0 && !adding) {
     return (
       <button
         onClick={() => setAdding(true)}
@@ -138,10 +153,10 @@ export default function RoutineCard() {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5">
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-gray-400">
-          오늘 루틴
-          {todays.length > 0 && (
-            <span className={`ml-1 font-medium ${doneCount === todays.length ? 'text-emerald-500' : 'text-indigo-500'}`}>
-              {doneCount}/{todays.length}
+          오늘 할 것
+          {totalCount > 0 && (
+            <span className={`ml-1 font-medium ${doneCount === totalCount ? 'text-emerald-500' : 'text-indigo-500'}`}>
+              {doneCount}/{totalCount}
             </span>
           )}
         </p>
@@ -190,6 +205,23 @@ export default function RoutineCard() {
                 </button>
               )}
             </div>
+          );
+        })}
+
+        {/* 오늘까지 해야 하는 할일 — 루틴 아래에 이어서. 체크하면 목록에서 사라진다. */}
+        {todayTodos.map((t) => {
+          const overdue = Boolean(t.deadline_date && t.deadline_date < today);
+          return (
+            <button
+              key={t.id}
+              onClick={() => toggle(t)}
+              disabled={busyId === t.id}
+              className="flex items-center gap-2 w-full py-1 text-left disabled:opacity-50"
+            >
+              <span className="w-5 h-5 rounded-md border-2 border-gray-200 shrink-0" />
+              <span className="text-sm text-gray-700 truncate flex-1 min-w-0">{t.title}</span>
+              {overdue && <span className="text-[10px] text-rose-400 shrink-0">기한 지남</span>}
+            </button>
           );
         })}
       </div>
