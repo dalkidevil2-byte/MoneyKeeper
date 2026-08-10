@@ -5,7 +5,7 @@ import { Wallet, TrendingUp, ChevronRight, ListTodo, Archive, Sparkles } from 'l
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import TodaySummary from '@/components/home/TodaySummary';
-import RoutineCard from '@/components/home/RoutineCard';
+import TodayDoCard from '@/components/home/TodayDoCard';
 import BudgetSummary from '@/components/home/BudgetSummary';
 import StockSummary from '@/components/home/StockSummary';
 import TodoSummary from '@/components/home/TodoSummary';
@@ -42,7 +42,7 @@ export default function HubPage() {
 
       {/* 오늘 루틴 — 앱 열면 바로 체크할 수 있게 위쪽에 둔다 */}
       <div className="px-5 mb-3">
-        <RoutineCard />
+        <TodayDoCard />
       </div>
 
       {/* AI 브리핑 카드 */}
