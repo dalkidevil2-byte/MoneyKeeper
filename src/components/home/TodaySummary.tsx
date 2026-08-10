@@ -27,6 +27,21 @@ export default function TodaySummary() {
   const [tasks, setTasks] = useState<TodayTask[]>([]);
   const [taskCount, setTaskCount] = useState(0);
 
+  // 홈 화면에 앱을 띄워두면 화면이 메모리에 남아 숫자가 그대로 멈춘다.
+  // 카드를 쓰고 앱으로 돌아왔을 때 바로 반영되도록, 앱이 다시 보일 때마다 새로 불러온다.
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') setReloadKey((k) => k + 1);
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
   useEffect(() => {
     const today = dayjs();
     const todayStr = today.format('YYYY-MM-DD');
@@ -68,7 +83,7 @@ export default function TodaySummary() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   const loading = todaySpent === null;
 
