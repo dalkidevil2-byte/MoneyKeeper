@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
+import { TRACKING_HIDDEN } from '@/lib/app-flags';
 
 const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
@@ -51,7 +52,9 @@ export default function TodoSummary() {
           is_done_today?: boolean;
           is_active_today?: boolean;
         }>;
-        const activeTracks = trackList.filter((t) => t.is_active_today !== false);
+        const activeTracks = TRACKING_HIDDEN
+          ? []
+          : trackList.filter((t) => t.is_active_today !== false);
         setTrackTotal(activeTracks.length);
         setTrackDone(activeTracks.filter((t) => t.is_done_today).length);
 
