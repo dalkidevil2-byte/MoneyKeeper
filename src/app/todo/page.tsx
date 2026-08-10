@@ -18,6 +18,7 @@ import { useToday } from '@/hooks/useToday';
 import { useGCalAutoSync } from '@/hooks/useGCalAutoSync';
 import { useMembers } from '@/hooks/useAccounts';
 import type { Task, TodayTask, DailyTrack } from '@/types';
+import { TRACKING_HIDDEN } from '@/lib/app-flags';
 import { DAILY_TRACK_PERIOD_LABELS } from '@/types';
 
 dayjs.locale('ko');
@@ -287,7 +288,7 @@ export default function TodoHomePage() {
         )}
 
         {/* 활동 추적 — 진행중 활동이 있으면 가장 위 */}
-        <ActivityChips onChange={refetch} />
+        {!TRACKING_HIDDEN && <ActivityChips onChange={refetch} />}
 
         {/* 오늘 일정 (event) */}
         <section>
@@ -360,7 +361,7 @@ export default function TodoHomePage() {
         />
 
         {/* Daily Track Record — 오늘 활성화된 항목만 */}
-        {dailyTracks.filter((t) => t.is_active_today !== false).length > 0 && (
+        {!TRACKING_HIDDEN && dailyTracks.filter((t) => t.is_active_today !== false).length > 0 && (
           <section>
             <h2 className="text-sm font-bold text-gray-700 mb-2">
               📌 Daily Track (
@@ -660,7 +661,7 @@ function TodoGroup({
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {!done && (
+                {!TRACKING_HIDDEN && !done && (
                   <TaskTimer taskId={t.id} onChange={onTimerChange} size="sm" />
                 )}
                 {t.member && (

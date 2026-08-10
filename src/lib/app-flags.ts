@@ -18,3 +18,13 @@ export const STOCKS_DISABLED: boolean = truthy(process.env.NEXT_PUBLIC_DISABLE_S
  * (NEXT_PUBLIC_SOLO_MODE=true)
  */
 export const SOLO_MODE: boolean = truthy(process.env.NEXT_PUBLIC_SOLO_MODE);
+
+/**
+ * 시간 기록 계열 UI 숨김 — 활동 추적(▶ 시작/정지), 할일 타이머, Daily Track.
+ *
+ * 셋 다 '매번 시작/정지를 눌러야 하는' 기능이라 실제로 쓰이지 않았다
+ * (마지막 기록: 활동 5/25 · 타이머 5/9 · 트랙 5/1).
+ * 기능과 데이터는 그대로 두고 화면에서만 감춘다.
+ * 다시 쓰려면 NEXT_PUBLIC_SHOW_TRACKING=true 를 설정하면 된다.
+ */
+export const TRACKING_HIDDEN: boolean = !truthy(process.env.NEXT_PUBLIC_SHOW_TRACKING);
