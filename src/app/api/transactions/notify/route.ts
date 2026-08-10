@@ -179,6 +179,60 @@ export async function POST(req: NextRequest) {
       throw logError;
     }
 
+    // 3-1) 한 번의 결제가 서로 다른 곳에서 알림으로 오는 경우.
+    //
+    // 온누리상품권으로 결제하면 삼성카드가 알림을 두 개 보낸다.
+    //   ① "[삼성카드]28,000원 승인(온누리상품권 사용) *결제대금에 미포함"  ← 문구로 걸러짐
+    //   ② "삼성4530승인 ... 08/10 20:05 공간&아지트골프"               ← 평범해서 못 걸러짐
+    // ②가 온누리 알림과 함께 등록돼 가계부에 같은 결제가 두 번 들어갔다.
+    //
+    // 판별: 같은 금액이 '다른 카드사'에서 10분 안에 오면 같은 결제로 본다.
+    // 같은 카드사에서 같은 금액이 연달아 오는 것은 진짜 각각의 결제이므로 건드리지 않는다.
+    // (실제로 상품권 10,950원을 1분 간격으로 두 번 결제한 기록이 있다)
+    //
+    // 어느 쪽을 남기나: 상품권 알림을 우선한다. 돈이 실제로 빠져나간 곳이고
+    // 가맹점명도 더 정확하다('공간&아지트 골프존파크' vs '공간&아지트골프').
+    if (parsed.matched && parsed.amount) {
+      const windowMin = 10;
+      const since = new Date(Date.now() - windowMin * 60000).toISOString();
+      const { data: nearby } = await supabase
+        .from('card_notifications')
+        .select('id, issuer, transaction_id')
+        .eq('household_id', householdId)
+        .eq('amount', parsed.amount)
+        .neq('issuer', parsed.issuer)
+        .not('transaction_id', 'is', null)
+        .gte('created_at', since);
+
+      const conflict = (nearby ?? [])[0];
+      if (conflict) {
+        const incomingIsVoucher = parsed.issuer.includes('상품권');
+        const existingIsVoucher = String(conflict.issuer ?? '').includes('상품권');
+
+        if (incomingIsVoucher && !existingIsVoucher) {
+          // 상품권 쪽이 나중에 왔다 — 먼저 들어온 카드 거래를 취소하고 이쪽을 남긴다.
+          await supabase
+            .from('transactions')
+            .update({ status: 'cancelled' })
+            .eq('id', conflict.transaction_id as string);
+        } else {
+          // 이미 등록된 쪽을 남기고 이번 알림은 버린다.
+          await supabase.from('card_notifications').delete().eq('id', logRow.id);
+          await logRequest({
+            result: 'ignored',
+            reason: `같은 결제가 ${conflict.issuer} 알림으로 이미 등록됨`,
+            source,
+            rawText: normalized,
+            storeText: true,
+          });
+          return NextResponse.json(
+            { ok: true, status: 'ignored', reason: '같은 결제가 다른 알림으로 이미 등록되었습니다' },
+            { status: 200 },
+          );
+        }
+      }
+    }
+
     // 4) 규칙이 없는 카드사 — 원문만 남기고 거래는 만들지 않는다.
     //    (틀린 거래가 가계부에 들어가는 것보다, 안 들어가는 편이 낫다)
     if (!parsed.matched) {
