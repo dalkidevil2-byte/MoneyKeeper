@@ -1,0 +1,253 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Check, Plus, X, Settings2 } from 'lucide-react';
+import dayjs from 'dayjs';
+import { isTaskDueOn, isTaskCompletedOn } from '@/lib/task-recurrence';
+import type { Task } from '@/types';
+
+const HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID;
+
+/** 새 루틴을 만들 때 고르는 주기 — 흔한 것만 추려서 고민 없이 고르게 한다. */
+const FREQ_OPTIONS = [
+  { key: 'daily', label: '매일', recurrence: { freq: 'daily' } },
+  { key: 'weekday', label: '평일', recurrence: { freq: 'weekly', weekdays: [1, 2, 3, 4, 5] } },
+  { key: 'mwf', label: '월수금', recurrence: { freq: 'weekly', weekdays: [1, 3, 5] } },
+  { key: 'sat', label: '토요일', recurrence: { freq: 'weekly', weekdays: [6] } },
+  { key: 'sun', label: '일요일', recurrence: { freq: 'weekly', weekdays: [0] } },
+] as const;
+
+/**
+ * 첫 화면의 오늘 루틴.
+ *
+ * 루틴이 안 쓰이던 이유는 '할일 화면까지 들어가야' 했기 때문이라,
+ * 앱을 열면 바로 보이고 탭 한 번으로 체크되게 둔다.
+ * 추가도 여기서 바로, 삭제도 여기서 바로 되게 한다.
+ */
+export default function RoutineCard() {
+  const [routines, setRoutines] = useState<Task[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newFreq, setNewFreq] = useState<string>('daily');
+  const [manageMode, setManageMode] = useState(false);
+
+  const today = dayjs().format('YYYY-MM-DD');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/tasks?household_id=${HOUSEHOLD_ID}&type=routine&include_completions=1`,
+      ).then((r) => r.json());
+      setRoutines((res.tasks ?? []) as Task[]);
+    } catch {
+      setRoutines([]);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 앱으로 돌아올 때 갱신 (홈 화면에 띄워두면 화면이 멈춰 있어서)
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  }, [load]);
+
+  // 오늘 해야 하는 것만. 생일 같은 연 1회 루틴은 해당 날짜에만 뜬다.
+  const todays = routines.filter((t) => t.is_active && isTaskDueOn(t, today));
+  const doneCount = todays.filter((t) => isTaskCompletedOn(t, today)).length;
+
+  const toggle = async (t: Task) => {
+    if (busyId) return;
+    setBusyId(t.id);
+    const done = isTaskCompletedOn(t, today);
+    try {
+      if (done) {
+        await fetch(`/api/tasks/${t.id}/complete?date=${today}`, { method: 'DELETE' });
+      } else {
+        await fetch(`/api/tasks/${t.id}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ completed_on: today }),
+        });
+      }
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const addRoutine = async () => {
+    const title = newTitle.trim();
+    if (!title) return;
+    const opt = FREQ_OPTIONS.find((o) => o.key === newFreq) ?? FREQ_OPTIONS[0];
+    setBusyId('new');
+    try {
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          household_id: HOUSEHOLD_ID,
+          kind: 'event',
+          type: 'routine',
+          title,
+          recurrence: opt.recurrence,
+        }),
+      });
+      setNewTitle('');
+      setAdding(false);
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeRoutine = async (t: Task) => {
+    if (!confirm(`'${t.title}' 루틴을 삭제할까요?\n(지금까지 체크한 기록도 함께 사라집니다)`)) return;
+    setBusyId(t.id);
+    try {
+      await fetch(`/api/tasks/${t.id}`, { method: 'DELETE' });
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // 오늘 할 게 없고 추가 중도 아니면 카드를 아예 안 보여준다 (빈칸이 남지 않게)
+  if (loaded && todays.length === 0 && !adding) {
+    return (
+      <button
+        onClick={() => setAdding(true)}
+        className="w-full bg-white rounded-2xl border border-dashed border-gray-200 px-4 py-3 text-xs text-gray-400 active:bg-gray-50"
+      >
+        + 오늘의 루틴 추가
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs text-gray-400">
+          오늘 루틴
+          {todays.length > 0 && (
+            <span className={`ml-1 font-medium ${doneCount === todays.length ? 'text-emerald-500' : 'text-indigo-500'}`}>
+              {doneCount}/{todays.length}
+            </span>
+          )}
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setManageMode((v) => !v)}
+            className={`p-1 rounded-lg ${manageMode ? 'text-indigo-600 bg-indigo-50' : 'text-gray-300'}`}
+            title="루틴 편집"
+          >
+            <Settings2 size={14} />
+          </button>
+          <button onClick={() => setAdding((v) => !v)} className="p-1 rounded-lg text-gray-400" title="루틴 추가">
+            <Plus size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        {todays.map((t) => {
+          const done = isTaskCompletedOn(t, today);
+          return (
+            <div key={t.id} className="flex items-center gap-2">
+              <button
+                onClick={() => toggle(t)}
+                disabled={busyId === t.id}
+                className="flex items-center gap-2 flex-1 min-w-0 py-1 text-left disabled:opacity-50"
+              >
+                <span
+                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                    done ? 'bg-emerald-500 border-emerald-500' : 'border-gray-200'
+                  }`}
+                >
+                  {done && <Check size={13} className="text-white" strokeWidth={3} />}
+                </span>
+                <span className={`text-sm truncate ${done ? 'text-gray-300 line-through' : 'text-gray-700'}`}>
+                  {t.title}
+                </span>
+              </button>
+              {manageMode && (
+                <button
+                  onClick={() => removeRoutine(t)}
+                  className="p-1 text-gray-300 active:text-rose-500"
+                  title="삭제"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {adding && (
+        <div className="mt-2 pt-2 border-t border-gray-100 space-y-2">
+          <input
+            autoFocus
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addRoutine()}
+            placeholder="루틴 이름 (예: 영양제)"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+          />
+          <div className="flex gap-1.5 flex-wrap">
+            {FREQ_OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                onClick={() => setNewFreq(o.key)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                  newFreq === o.key
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-gray-500 border-gray-200'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setAdding(false);
+                setNewTitle('');
+              }}
+              className="flex-1 py-2 border border-gray-200 text-gray-500 rounded-xl text-sm"
+            >
+              취소
+            </button>
+            <button
+              onClick={addRoutine}
+              disabled={!newTitle.trim() || busyId === 'new'}
+              className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium disabled:opacity-40"
+            >
+              추가
+            </button>
+          </div>
+        </div>
+      )}
+
+      {manageMode && (
+        <Link
+          href="/todo/routines"
+          className="block mt-2 pt-2 border-t border-gray-100 text-xs text-gray-400 text-center"
+        >
+          주기·상세 설정은 루틴 관리에서 →
+        </Link>
+      )}
+    </div>
+  );
+}
