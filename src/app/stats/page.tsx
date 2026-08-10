@@ -292,7 +292,7 @@ export default function StatsPage() {
               : t.target_member_id
                 ? [t.target_member_id]
                 : [];
-          if (ids.length === 0) continue; // 공용은 별도 집계
+          if (ids.length === 0) continue; // 대상 미지정(우리가족)은 별도 집계
           if (ids.includes(m.id)) amount += t.amount / ids.length;
         }
       }
@@ -311,7 +311,7 @@ export default function StatsPage() {
           return ids.length === 0;
         })
         .reduce((s, t) => s + t.amount, 0);
-      if (sharedAmount > 0) rows.push({ id: '__shared__', name: '공용', color: '#64748b', amount: sharedAmount });
+      if (sharedAmount > 0) rows.push({ id: '__shared__', name: '우리가족', color: '#64748b', amount: sharedAmount });
     }
 
     return rows.filter((d) => d.amount > 0).sort((a, b) => b.amount - a.amount);
@@ -689,7 +689,7 @@ export default function StatsPage() {
                                     className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold"
                                     style={{ backgroundColor: m.color }}
                                   >
-                                    {m.name === '공용' ? '🏠' : m.name.slice(0, 1)}
+                                    {m.name === '우리가족' ? '🏠' : m.name.slice(0, 1)}
                                   </span>
                                   <span className="text-sm text-gray-700 font-medium">{m.name}</span>
                                   {isActive && <span className="text-xs text-indigo-500 font-medium">필터 적용 중</span>}

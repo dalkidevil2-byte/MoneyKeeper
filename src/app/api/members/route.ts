@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
     .select('*')
     .eq('household_id', householdId)
     .eq('is_active', true)
+    // 자주 쓰는 사람(우리가족)이 앞에 오도록 sort_order 우선.
+    // 값이 없거나 같으면 기존처럼 등록순.
+    .order('sort_order', { ascending: true })
     .order('created_at');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

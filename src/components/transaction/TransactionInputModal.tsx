@@ -961,7 +961,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                       )}
                       <div>
                         <label className="text-xs font-medium mb-2 block text-gray-500">
-                          🎯 지출 대상 <span className="text-gray-300">(공용 또는 특정 인원)</span>
+                          🎯 지출 대상 <span className="text-gray-300">(기본: 우리가족)</span>
                         </label>
                         <div className="flex gap-2 flex-wrap">
                           <button
@@ -976,7 +976,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                             }`}
                             title="가족 모두를 위한 지출 (식자재, 관리비 등)"
                           >
-                            🏠 공용
+                            🏠 우리가족
                           </button>
                           {members.map((m) => {
                             const selected = (form.target_member_ids ?? []).includes(m.id);
