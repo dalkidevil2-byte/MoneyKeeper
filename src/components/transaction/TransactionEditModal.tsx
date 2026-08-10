@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { X, Trash2, CheckCircle, AlertCircle, ChevronDown, Package } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { X, Trash2, CheckCircle, AlertCircle, ChevronDown, Package, Camera } from 'lucide-react';
 import type { Transaction } from '@/types';
 import {
   TRANSACTION_TYPE_LABELS,
@@ -11,6 +11,12 @@ import {
 import { useAccounts, usePaymentMethods, useMembers, useCustomCategories } from '@/hooks/useAccounts';
 import CategoryCombobox from '@/components/CategoryCombobox';
 import ReceiptAttachment from '@/components/ReceiptAttachment';
+import {
+  runReceiptOcr,
+  pickCategoryFromItems,
+  representativeName,
+  type ReceiptOcrResult,
+} from '@/lib/receipt-ocr-client';
 import { formatAmount } from '@/lib/parser';
 import dayjs from 'dayjs';
 
@@ -59,6 +65,80 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   const [itemError, setItemError] = useState<string | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [itemsSaving, setItemsSaving] = useState(false);
+
+  // ── 영수증으로 대체 ──
+  // 카드알림으로 자동 등록된 거래(가맹점·금액만 있음)에 영수증을 올려
+  // 품목까지 채운다. 새 거래를 만들지 않으므로 중복이 생기지 않는다.
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const receiptFileRef = useRef<HTMLInputElement>(null);
+
+  const handleReceiptReplace = async (file: File) => {
+    setOcrBusy(true);
+    setItemError(null);
+    try {
+      const r = await runReceiptOcr(file);
+      if ('error' in r) {
+        setItemError(r.error);
+        return;
+      }
+      const res: ReceiptOcrResult = r.result;
+      const ocrItems = res.items ?? [];
+      const receiptTotal = ocrItems.reduce((sum, i) => sum + Math.abs(i.amount), 0);
+
+      // 결제액은 카드사가 알려준 값이 정확하다(할인·포인트 반영).
+      // 영수증 합계와 다르면 어느 쪽을 쓸지 사용자가 정하게 한다.
+      let nextAmount = form.amount;
+      if (receiptTotal > 0 && Math.abs(receiptTotal - (form.amount ?? 0)) > 0) {
+        const useReceipt = confirm(
+          `결제액과 영수증 합계가 달라요.
+
+등록된 결제액: ${(form.amount ?? 0).toLocaleString('ko-KR')}원
+영수증 합계: ${receiptTotal.toLocaleString('ko-KR')}원
+
+영수증 합계로 바꿀까요?
+(취소하면 결제액을 그대로 둡니다)`,
+        );
+        if (useReceipt) nextAmount = receiptTotal;
+      }
+
+      // 품목 저장 (기존 품목은 지우고 영수증 기준으로 다시)
+      for (const it of items) {
+        await fetch(`/api/transactions/${tx.id}/items?item_id=${it.id}`, { method: 'DELETE' });
+      }
+      const saveRes = await fetch(`/api/transactions/${tx.id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: ocrItems.map((i) => ({
+            name: i.name,
+            price: Math.abs(i.amount),
+            quantity: i.quantity ?? 1,
+            unit: i.unit ?? '개',
+            category_main: i.category_main ?? '',
+            category_sub: i.category_sub ?? '',
+            track: false,
+          })),
+        }),
+      });
+      const saved = await saveRes.json();
+
+      // 거래 본문도 영수증 기준으로 보정 (가맹점·대표품목·분류)
+      const cat = pickCategoryFromItems(ocrItems);
+      setForm((f) => ({
+        ...f,
+        amount: nextAmount,
+        merchant_name: res.store_name || f.merchant_name,
+        name: representativeName(ocrItems) || f.name,
+        category_main: cat.main || f.category_main,
+        category_sub: cat.sub || f.category_sub,
+      }));
+      setItems(saved.items ?? []);
+      setItemError(null);
+    } finally {
+      setOcrBusy(false);
+      if (receiptFileRef.current) receiptFileRef.current.value = '';
+    }
+  };
 
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
@@ -592,13 +672,35 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                   {!itemsLoaded && <span className="text-gray-400 ml-1 text-xs font-normal">로딩…</span>}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={addNewItem}
-                className="px-2.5 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg active:bg-indigo-700"
-              >
-                + 품목 추가
-              </button>
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={receiptFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleReceiptReplace(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={ocrBusy}
+                  onClick={() => receiptFileRef.current?.click()}
+                  title="영수증 사진으로 품목을 채웁니다 (새 거래를 만들지 않습니다)"
+                  className="px-2.5 py-1 bg-white border border-indigo-200 text-indigo-600 text-xs font-semibold rounded-lg active:bg-indigo-50 disabled:opacity-50 flex items-center gap-1"
+                >
+                  <Camera size={12} />
+                  {ocrBusy ? '읽는 중…' : '영수증으로 채우기'}
+                </button>
+                <button
+                  type="button"
+                  onClick={addNewItem}
+                  className="px-2.5 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg active:bg-indigo-700"
+                >
+                  + 품목 추가
+                </button>
+              </div>
             </div>
               {items.length === 0 && (
                 <div className="bg-gray-50 rounded-2xl px-4 py-6 text-center text-xs text-gray-400 mb-2">
