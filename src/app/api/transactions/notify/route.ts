@@ -236,6 +236,32 @@ export async function POST(req: NextRequest) {
       cardOwnerId = (picked?.member_id as string | null) ?? null;
     }
 
+    // 6-1) 카드 매칭 학습 — 이름으로 못 찾았으면, 같은 카드로 온 지난 알림에서
+    //      사용자가 직접 골라 확정한 결제수단을 그대로 쓴다.
+    //      (KB국민카드처럼 같은 카드사 카드를 여러 장 쓰면 이름만으로는 못 가린다.
+    //       한 번 손으로 지정해주면 그다음부터 자동으로 붙는다)
+    if (!paymentMethodId && parsed.card_last4) {
+      const { data: past } = await supabase
+        .from('card_notifications')
+        .select('transaction:transactions(payment_method_id, member_id, status)')
+        .eq('household_id', householdId)
+        .eq('card_last4', parsed.card_last4)
+        .not('transaction_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      type PastRow = {
+        transaction: { payment_method_id: string | null; member_id: string | null; status: string } | null;
+      };
+      const hit = ((past ?? []) as unknown as PastRow[]).find(
+        (r) => r.transaction?.status === 'confirmed' && r.transaction?.payment_method_id,
+      );
+      if (hit?.transaction) {
+        paymentMethodId = hit.transaction.payment_method_id;
+        cardOwnerId = cardOwnerId ?? hit.transaction.member_id;
+      }
+    }
+
     // 6) 과거 학습 — 같은 가맹점을 전에 어떻게 정리했는지 본다.
     //    사용자가 Inbox 에서 카드·분류를 골라 '확정' 한 것만 신뢰한다.
     //    (자동 추측이 아니라 사람이 내린 결정을 배우기 위함)
