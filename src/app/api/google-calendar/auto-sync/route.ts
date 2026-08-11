@@ -33,6 +33,8 @@ export async function POST() {
   }
 
   let pushed = 0;
+  let candidates = 0;
+  const failures: string[] = [];
   try {
     const { data: needsPush } = await supabase
       .from('tasks')
@@ -44,6 +46,8 @@ export async function POST() {
       .is('google_event_id', null)
       .not('due_date', 'is', null);
 
+    candidates = (needsPush ?? []).length;
+
     for (const t of (needsPush ?? []) as Task[]) {
       try {
         const gid = await pushTaskToGoogle(HOUSEHOLD_ID, t);
@@ -53,20 +57,29 @@ export async function POST() {
             .update({ google_event_id: gid, google_synced_at: new Date().toISOString() })
             .eq('id', t.id);
           pushed++;
+        } else {
+          // 예외 없이 null 이 오는 경우 — 인증 실패나 변환 불가
+          failures.push(`${t.title}: 이벤트를 만들지 못함`);
         }
-      } catch {
-        /* skip */
+      } catch (e) {
+        failures.push(`${t.title}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-  } catch {
-    /* skip */
+  } catch (e) {
+    failures.push(`대상 조회 실패: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   const pullResult = await pullEventsToTasks(HOUSEHOLD_ID);
 
+  // 실패를 조용히 삼키면 몇 주씩 안 올라간 걸 모르게 된다. 응답과 로그에 남긴다.
+  if (failures.length) console.error('[gcal auto-sync] push 실패', failures);
+
   return NextResponse.json({
     status: 'ok',
+    candidates,
     pushed,
+    failed: failures.length,
+    errors: failures.slice(0, 5),
     pulled: pullResult,
   });
 }
