@@ -102,25 +102,24 @@ export default function TodaySummary() {
         href="/budget"
         className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
       >
-        <p className="text-xs text-gray-400">오늘 쓴 돈</p>
+        <p className="text-xs text-gray-400">오늘 쓴 돈 <span className="text-gray-300">(변동)</span></p>
         {loading ? (
           <div className="h-6 w-20 bg-gray-100 rounded mt-1.5 animate-pulse" />
         ) : (
           <>
+            {/* 오늘 것도 변동/고정을 항상 나눠서 보여준다.
+                합쳐 놓으면 고정비용 때문에 많이 쓴 것처럼 보인다. */}
             <p className="text-xl font-bold text-gray-900 mt-0.5 tabular-nums">
               {todaySpent.toLocaleString('ko-KR')}
               <span className="text-sm font-semibold text-gray-400 ml-0.5">원</span>
             </p>
-            {todayFixed > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">
-                고정 {todayFixed.toLocaleString('ko-KR')}원 별도
-              </p>
-            )}
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              고정 {todayFixed.toLocaleString('ko-KR')}원
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1.5 pt-1.5 border-t border-gray-50">
               이번 달 {monthSpent.toLocaleString('ko-KR')}원
-              {monthFixed > 0 && (
-                <span className="text-gray-300"> · 고정 {monthFixed.toLocaleString('ko-KR')}원</span>
-              )}
+              <br />
+              <span className="text-gray-300">고정 {monthFixed.toLocaleString('ko-KR')}원</span>
             </p>
           </>
         )}
