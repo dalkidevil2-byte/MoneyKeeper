@@ -349,7 +349,9 @@ async function createEvent(
   if (!res.ok) {
     const t = await res.text();
     console.warn('[gcal] create fail', res.status, t);
-    return null;
+    // 조용히 null 을 돌려주면 '왜 안 올라가는지' 를 알 수 없다.
+    // 호출부가 모두 try/catch 로 감싸고 있으므로 사유를 담아 던진다.
+    throw new Error();
   }
   const j = await res.json();
   return j.id ?? null;
