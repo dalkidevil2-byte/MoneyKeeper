@@ -129,6 +129,30 @@ export async function POST(req: NextRequest) {
 
     // 2-1) 같은 결제를 두 곳에서 알리는 경우 — 정보가 적은 쪽은 저장 없이 버린다.
     //      (온누리상품권 결제 → 온누리 알림에 가맹점이 있고, 삼성카드 알림에는 없음)
+    // 2-0) 우리 가계부에 넣지 않을 카드 (예: 어머님이 쓰시는 가족 카드)
+    //      같은 폰으로 알림이 와도 등록하지 않는다. 저장도 하지 않는다.
+    {
+      const supabaseForIgnore = createServerSupabaseClient();
+      const { data: ignores } = await supabaseForIgnore
+        .from('card_notification_ignores')
+        .select('match_text, note')
+        .eq('household_id', DEFAULT_HOUSEHOLD_ID)
+        .eq('is_active', true);
+
+      const hit = (ignores ?? []).find((r) => rawText.includes(r.match_text as string));
+      if (hit) {
+        await logRequest({
+          result: 'ignored',
+          reason: `제외 대상 카드 (${hit.note || hit.match_text})`,
+          source,
+        });
+        return NextResponse.json(
+          { ok: true, status: 'ignored', reason: '등록하지 않기로 한 카드입니다' },
+          { status: 200 },
+        );
+      }
+    }
+
     if (isDuplicateSourceNotification(rawText)) {
       await logRequest({
         result: 'ignored',
