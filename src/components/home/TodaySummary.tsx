@@ -23,7 +23,9 @@ type TodayTask = { title: string; due_time?: string | null; done: boolean };
  */
 export default function TodaySummary() {
   const [todaySpent, setTodaySpent] = useState<number | null>(null);
+  const [todayFixed, setTodayFixed] = useState(0);
   const [monthSpent, setMonthSpent] = useState(0);
+  const [monthFixed, setMonthFixed] = useState(0);
   const [tasks, setTasks] = useState<TodayTask[]>([]);
   const [taskCount, setTaskCount] = useState(0);
 
@@ -57,11 +59,17 @@ export default function TodaySummary() {
         ]);
         if (cancelled) return;
 
-        const txs: Tx[] = (txRes.transactions ?? []).filter((t: Tx) =>
-          ['variable_expense', 'fixed_expense'].includes(t.type),
-        );
-        setMonthSpent(txs.reduce((s, t) => s + t.amount, 0));
-        setTodaySpent(txs.filter((t) => t.date === todayStr).reduce((s, t) => s + t.amount, 0));
+        // 고정비용(관리비·구독·상조 등)을 변동 지출과 섞으면
+        // '오늘 많이 썼다' 처럼 보여서 실제 씀씀이를 판단할 수 없다. 나눠서 보여준다.
+        const all: Tx[] = txRes.transactions ?? [];
+        const sum = (list: Tx[]) => list.reduce((s, t) => s + t.amount, 0);
+        const variable = all.filter((t) => t.type === 'variable_expense');
+        const fixed = all.filter((t) => t.type === 'fixed_expense');
+
+        setMonthSpent(sum(variable));
+        setMonthFixed(sum(fixed));
+        setTodayFixed(sum(fixed.filter((t) => t.date === todayStr)));
+        setTodaySpent(sum(variable.filter((t) => t.date === todayStr)));
 
         const items = (taskRes?.today ?? []) as TodayItem[];
         // 아직 안 한 일정을 먼저 보여준다 (완료된 건 뒤로)
@@ -103,8 +111,16 @@ export default function TodaySummary() {
               {todaySpent.toLocaleString('ko-KR')}
               <span className="text-sm font-semibold text-gray-400 ml-0.5">원</span>
             </p>
+            {todayFixed > 0 && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                고정 {todayFixed.toLocaleString('ko-KR')}원 별도
+              </p>
+            )}
             <p className="text-xs text-gray-400 mt-1">
               이번 달 {monthSpent.toLocaleString('ko-KR')}원
+              {monthFixed > 0 && (
+                <span className="text-gray-300"> · 고정 {monthFixed.toLocaleString('ko-KR')}원</span>
+              )}
             </p>
           </>
         )}
