@@ -349,12 +349,13 @@ export async function POST(req: NextRequest) {
       category_sub: string | null;
       payment_method_id: string | null;
       member_id: string | null;
+      type: string | null;
     } | null = null;
 
     if (parsed.merchant) {
       const { data } = await supabase
         .from('transactions')
-        .select('category_main, category_sub, payment_method_id, member_id')
+        .select('category_main, category_sub, payment_method_id, member_id, type')
         .eq('household_id', householdId)
         .eq('merchant_name', parsed.merchant)
         .eq('status', 'confirmed')
@@ -395,20 +396,41 @@ export async function POST(req: NextRequest) {
     // 하나라도 비면 Inbox 로 보내 사용자가 채우게 하고, 그 선택이 다음 번 학습이 된다.
     const autoConfirm = Boolean(paymentMethodId && category.main);
 
+    // 고정비용 판별 — 매달 같은 곳에 나가는 돈은 변동 지출과 섞이면 안 된다.
+    //   ① 고정지출 템플릿에 등록된 이름이면 (사용자가 직접 등록해둔 것이라 가장 확실)
+    //   ② 같은 가맹점을 전에 고정비용으로 확정했으면
+    // 둘 다 아니면 평소대로 변동 지출.
+    let expenseType: 'variable_expense' | 'fixed_expense' = 'variable_expense';
+    if (parsed.merchant) {
+      const { data: templates } = await supabase
+        .from('fixed_expense_templates')
+        .select('name')
+        .eq('household_id', householdId)
+        .eq('is_active', true);
+
+      const norm = (v: string) => v.replace(/[\s()（）㈜(주)]/g, '');
+      const merchantNorm = norm(parsed.merchant);
+      const matched = (templates ?? []).some((t) => {
+        const n = norm(String(t.name ?? ''));
+        return n.length >= 2 && (merchantNorm.includes(n) || n.includes(merchantNorm));
+      });
+      if (matched || learned?.type === 'fixed_expense') expenseType = 'fixed_expense';
+    }
+
     const { data: tx, error: txError } = await supabase
       .from('transactions')
       .insert({
         household_id: householdId,
         member_id: memberId,
         date: parsed.date,
-        type: parsed.approved ? 'variable_expense' : 'refund',
+        type: parsed.approved ? expenseType : 'refund',
         amount: parsed.amount,
         name: parsed.merchant || parsed.note || '카드결제',
         merchant_name: parsed.merchant,
         payment_method_id: paymentMethodId,
         category_main: category.main,
         category_sub: category.sub,
-        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}${noteSuffix}${learned?.category_main ? ' · 이전 분류 적용' : ''}`,
+        memo: `📲 카드알림 · ${parsed.issuer}${cardKey ? ` ${cardKey}` : ''}${installmentNote}${noteSuffix}${learned?.category_main ? ' · 이전 분류 적용' : ''}${expenseType === 'fixed_expense' ? ' · 고정비용' : ''}`,
         tags: [],
         essential: false,
         input_type: 'text',
