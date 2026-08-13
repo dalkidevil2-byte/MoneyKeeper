@@ -455,6 +455,33 @@ export async function POST(req: NextRequest) {
       .update({ transaction_id: tx.id })
       .eq('id', logRow.id);
 
+    // 3-1 의 재확인 — 상품권 결제는 두 알림이 같은 초에 도착하는 일이 잦다.
+    // 그때는 앞선 검사에서 서로의 거래가 아직 없어 못 보고 둘 다 등록된다.
+    // (실제로 19,600원 결제가 삼성·온누리 양쪽으로 등록됨)
+    //
+    // 거래를 만든 뒤 한 번 더 본다. 양쪽이 동시에 이 코드를 돌려도
+    // '상품권 쪽을 남긴다' 는 기준이 같아서 결과가 어긋나지 않는다.
+    if (parsed.matched && parsed.amount) {
+      const since = new Date(Date.now() - 10 * 60000).toISOString();
+      const { data: twins } = await supabase
+        .from('card_notifications')
+        .select('id, issuer, transaction_id')
+        .eq('household_id', householdId)
+        .eq('amount', parsed.amount)
+        .neq('issuer', parsed.issuer)
+        .not('transaction_id', 'is', null)
+        .gte('created_at', since);
+
+      const incomingIsVoucher = parsed.issuer.includes('상품권');
+      for (const tw of twins ?? []) {
+        const twinIsVoucher = String(tw.issuer ?? '').includes('상품권');
+        if (incomingIsVoucher === twinIsVoucher) continue; // 판단 기준 없음 — 건드리지 않는다
+        // 상품권이 아닌 쪽을 취소한다 (돈이 실제로 나간 곳은 상품권)
+        const loserTxId = incomingIsVoucher ? (tw.transaction_id as string) : tx.id;
+        await supabase.from('transactions').update({ status: 'cancelled' }).eq('id', loserTxId);
+      }
+    }
+
     // 자동 확정된 건은 Notion 동기화까지 끝내야 Inbox 에서 완전히 사라진다.
     // (Inbox 는 '동기화 안 된 거래' 를 보여주기 때문)
     // Inbox 로 보낸 건은 사용자가 분류를 고칠 수 있으므로, 확인 시점에 동기화한다.
