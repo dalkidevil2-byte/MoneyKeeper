@@ -68,12 +68,12 @@ export default function TransactionCard({ transaction: tx, showDate = true }: Pr
             </span>
           )}
 
-          {/* 결제수단 */}
-          {tx.payment_method && !isTransfer && (
+          {/* 결제수단 — 카드 이름에 이미 지출자 이름이 들어 있으면 생략(같은 이름 두 번 노출 방지) */}
+          {tx.payment_method && !isTransfer && !cardNameHasMemberName(tx.payment_method.name, tx.member?.name) && (
             <span className="text-xs text-gray-400">{tx.payment_method.name}</span>
           )}
 
-          {/* 작성자 */}
+          {/* 지출자(결제자) */}
           {tx.member && (
             <>
               <span className="text-gray-300 text-xs">·</span>
@@ -105,6 +105,21 @@ export default function TransactionCard({ transaction: tx, showDate = true }: Pr
       </div>
     </div>
   );
+}
+
+/**
+ * 카드 이름이 사실상 지출자 이름을 담고 있는지 판단한다.
+ * 예: 카드 '성진 온누리' + 지출자 '김성진' → true (성을 뺀 '성진' 이 카드 이름에 들어 있음)
+ *     카드 '우리 체크카드' + 지출자 '김성진' → false (다른 정보이므로 카드 이름을 남긴다)
+ * 지출자와 카드 주인이 다를 때는 카드 이름이 유용한 정보라 그대로 보여준다.
+ */
+function cardNameHasMemberName(cardName?: string, memberName?: string): boolean {
+  if (!cardName || !memberName) return false;
+  const compact = cardName.replace(/\s/g, '');
+  // 이름 전체(김성진)와 성을 뺀 이름(성진) 두 가지로 확인
+  return [memberName, memberName.slice(1)]
+    .filter((v) => v.length >= 2)
+    .some((v) => compact.includes(v));
 }
 
 function getCategoryEmoji(category: string, type: string): string {
