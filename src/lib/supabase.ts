@@ -7,7 +7,9 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // 클라이언트 (브라우저) 용 — anon key.
 // RLS Enable + 정책 없음 상태에서 anon 으로는 모든 SELECT/INSERT 거부됨.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 지금 이 클라이언트를 쓰는 코드는 없다. anon key 가 없는 환경(로컬 .env.local)에서
+// 이 파일을 import 하는 것만으로 앱 전체가 죽지 않도록 키가 있을 때만 만든다.
+export const supabase = supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 /**
  * 서버사이드 전용 (API Routes 에서만 호출).

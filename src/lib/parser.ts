@@ -204,8 +204,11 @@ export function parseTransactionText(text: string): ParsedTransaction {
 }
 
 // 금액 포맷 유틸
+// 분석 화면은 거래 한 건을 품목 비율·지출 대상 인원수로 쪼개 나누므로 소수가 생긴다.
+// 기본값(소수 3자리)은 '12,345.678원'처럼 읽기 힘들어 1자리까지만 보여준다.
+// 정수 금액은 그대로 '12,345원' (불필요한 .0 이 붙지 않음).
 export function formatAmount(amount: number): string {
-  return amount.toLocaleString('ko-KR') + '원';
+  return amount.toLocaleString('ko-KR', { maximumFractionDigits: 1 }) + '원';
 }
 
 // 날짜 포맷 유틸
