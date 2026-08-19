@@ -441,7 +441,7 @@ export default function HomePage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900">이번 달 소비 분석</p>
-            <p className="text-xs text-gray-400 mt-0.5">어디에 썼는지 · 눈에 띄는 변화 · 예산 속도</p>
+            <p className="text-xs text-gray-400 mt-0.5">카테고리별 · 카드별 · 지출자별 · 기간별</p>
           </div>
           <ChevronRight size={18} className="text-gray-300 shrink-0" />
         </Link>
