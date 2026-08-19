@@ -333,19 +333,40 @@ export async function pushTaskToGoogle(
   }
 
   // 신규 생성 — google_event_id 없는 신규 task 만
-  return await createEvent(calId, headers, ev);
+  return await createEvent(calId, headers, ev, googleIdForTask(task.id));
+}
+
+/**
+ * 우리 task 하나당 구글 이벤트 ID 를 하나로 고정한다.
+ *
+ * 동기화가 동시에 여러 번 돌면(앱 진입·포커스마다 호출) 각 요청이
+ * '아직 구글에 없네' 하고 저마다 새 이벤트를 만들어 같은 일정이 여러 개 생겼다.
+ * (실제로 골프 일정 하나가 구글에 8개까지 생김)
+ * ID 를 task id 에서 만들어 넘기면 두 번째부터는 구글이 409 로 막아준다.
+ *
+ * 구글 이벤트 ID 규칙: 소문자 a~v 와 0~9, 5~1024자.
+ * UUID 는 16진수라 그대로 쓸 수 있다. 앞에 접두사를 붙여 우리 앱 생성분임을 표시.
+ */
+function googleIdForTask(taskId: string): string {
+  return 'mk' + taskId.replace(/-/g, '').toLowerCase();
 }
 
 async function createEvent(
   calId: string,
   headers: Record<string, string>,
   ev: Record<string, unknown>,
+  eventId?: string,
 ): Promise<string | null> {
+  const body = eventId ? { ...ev, id: eventId } : ev;
   const res = await fetch(`${CAL_API_BASE}/calendars/${calId}/events`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(ev),
+    body: JSON.stringify(body),
   });
+
+  // 409 = 같은 ID 가 이미 있다 → 다른 요청이 먼저 만든 것이므로 그걸 그대로 쓴다.
+  if (res.status === 409 && eventId) return eventId;
+
   if (!res.ok) {
     const t = await res.text();
     console.warn('[gcal] create fail', res.status, t);
