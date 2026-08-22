@@ -48,7 +48,7 @@ interface Props {
 
 export default function OcrReviewSheet({ result, paymentMethods, accounts = [], members, onConfirm, onClose }: Props) {
   // 사용자 정의 카테고리 머지
-  const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
+  const { categories: customCategories } = useCustomCategories();
 
   const allMainCategories = useMemo(() => {
     const customs = customCategories
@@ -67,25 +67,6 @@ export default function OcrReviewSheet({ result, paymentMethods, accounts = [], 
       .map((c) => c.category_sub)
       .filter((s, i, arr) => arr.indexOf(s) === i && !defaults.includes(s));
     return [...defaults, ...customs];
-  };
-
-  const handleAddMain = async (name: string) => {
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: name, category_sub: '' }),
-    });
-    refetchCategories();
-  };
-
-  const handleAddSubFor = async (main: string, sub: string) => {
-    if (!main) return;
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: main, category_sub: sub }),
-    });
-    refetchCategories();
   };
 
   const [items, setItems] = useState<OcrItem[]>(
@@ -355,7 +336,6 @@ export default function OcrReviewSheet({ result, paymentMethods, accounts = [], 
                           value={item.category_main}
                           onChange={(v) => updateItem(item.id, { category_main: v, category_sub: '' })}
                           options={allMainCategories}
-                          onAddOption={handleAddMain}
                         />
                       </div>
                       <div>
@@ -365,11 +345,6 @@ export default function OcrReviewSheet({ result, paymentMethods, accounts = [], 
                           onChange={(v) => updateItem(item.id, { category_sub: v })}
                           options={getSubOptions(item.category_main)}
                           disabled={!item.category_main}
-                          onAddOption={
-                            item.category_main
-                              ? (sub) => handleAddSubFor(item.category_main, sub)
-                              : undefined
-                          }
                         />
                       </div>
                     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 
 interface Props {
   value: string;
@@ -9,13 +9,15 @@ interface Props {
   options: string[];
   placeholder?: string;
   disabled?: boolean;
-  onAddOption?: (value: string) => Promise<void>;
 }
 
-export default function CategoryCombobox({ value, onChange, options, placeholder = '선택', disabled, onAddOption }: Props) {
+// 분류를 여기서 바로 추가하는 기능은 뺐다.
+// 입력하다가 즉석에서 만들 수 있게 해뒀더니 대분류 24개·조합 84개까지 늘어나
+// 정작 고르기가 일이 됐다. 새 분류는 설정 > 카테고리 관리에서만 만든다.
+
+export default function CategoryCombobox({ value, onChange, options, placeholder = '선택', disabled }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [adding, setAdding] = useState(false);
   const [dropUp, setDropUp] = useState(false);
   const [maxHeight, setMaxHeight] = useState(288);
   // dropdown 절대 위치 (parent overflow 탈출)
@@ -25,7 +27,6 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const filtered = options.filter((o) => o.toLowerCase().includes(query.toLowerCase()));
-  const canAdd = onAddOption && query.trim() && !options.some((o) => o === query.trim());
 
   useEffect(() => {
     if (open) {
@@ -69,15 +70,6 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleAdd = async () => {
-    if (!onAddOption || !query.trim()) return;
-    setAdding(true);
-    await onAddOption(query.trim());
-    onChange(query.trim());
-    setOpen(false);
-    setAdding(false);
-  };
-
   const handleSelect = (opt: string) => {
     onChange(opt);
     setOpen(false);
@@ -115,10 +107,9 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && canAdd) handleAdd();
                 if (e.key === 'Escape') setOpen(false);
               }}
-              placeholder="검색 또는 추가..."
+              placeholder="검색..."
               className="w-full text-sm px-2 py-1.5 rounded-lg bg-gray-50 focus:outline-none focus:bg-indigo-50 placeholder-gray-400"
             />
           </div>
@@ -159,22 +150,12 @@ export default function CategoryCombobox({ value, onChange, options, placeholder
             ))}
 
             {/* 검색 결과 없음 */}
-            {query && filtered.length === 0 && !canAdd && (
-              <p className="px-3 py-2 text-xs text-gray-400">일치하는 항목 없음</p>
+            {query && filtered.length === 0 && (
+              <p className="px-3 py-2 text-xs text-gray-400">
+                일치하는 항목 없음 · 새 분류는 설정에서 추가
+              </p>
             )}
 
-            {/* 새 항목 추가 */}
-            {canAdd && (
-              <button
-                type="button"
-                onClick={handleAdd}
-                disabled={adding}
-                className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 border-t border-gray-100"
-              >
-                <Plus size={13} />
-                {adding ? '추가 중...' : <><span className="font-medium">"{query.trim()}"</span> 추가</>}
-              </button>
-            )}
           </div>
         </div>
       )}

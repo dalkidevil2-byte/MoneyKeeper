@@ -248,32 +248,6 @@ export default function TaskFormSheet({
     ])
   );
 
-  const handleAddMain = async (val: string) => {
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        household_id: HOUSEHOLD_ID,
-        category_main: val,
-        category_sub: '',
-      }),
-    });
-    await refetchCats();
-  };
-  const handleAddSub = async (val: string) => {
-    if (!categoryMain) return;
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        household_id: HOUSEHOLD_ID,
-        category_main: categoryMain,
-        category_sub: val,
-      }),
-    });
-    await refetchCats();
-  };
-
   // 빠른 종료시간 chip — 시작 시간에 N분 더해서 종료 시간 설정
   const setEndByDuration = (minutes: number) => {
     if (!dueTime) return;
@@ -884,7 +858,6 @@ export default function TaskFormSheet({
                 }}
                 options={allMains}
                 placeholder="선택"
-                onAddOption={handleAddMain}
               />
             </div>
             <div>
@@ -895,7 +868,6 @@ export default function TaskFormSheet({
                 options={subOptions}
                 placeholder={categoryMain ? '선택' : '대분류 먼저'}
                 disabled={!categoryMain}
-                onAddOption={handleAddSub}
               />
             </div>
           </div>

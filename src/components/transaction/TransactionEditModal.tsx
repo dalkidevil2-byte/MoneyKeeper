@@ -143,7 +143,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
   const { accounts } = useAccounts();
   const { paymentMethods } = usePaymentMethods();
   const { members } = useMembers();
-  const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
+  const { categories: customCategories } = useCustomCategories();
 
   const allMainCategories = useMemo(() => {
     const customs = customCategories
@@ -161,36 +161,7 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
     return [...defaults, ...customs];
   };
 
-  const handleAddMainCategory = async (name: string) => {
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: name, category_sub: '' }),
-    });
-    refetchCategories();
-  };
-
-  const handleAddSubCategory = async (sub: string) => {
-    if (!form.category_main) return;
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: form.category_main, category_sub: sub }),
-    });
-    refetchCategories();
-  };
-
   // 품목별 소분류 추가 (main을 명시적으로 받음)
-  const handleAddSubCategoryFor = async (main: string, sub: string) => {
-    if (!main) return;
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: main, category_sub: sub }),
-    });
-    refetchCategories();
-  };
-
   const numOnly = (v: string) => v.replace(/[^0-9]/g, '');
 
   const handleSave = async () => {
@@ -481,7 +452,6 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                 onChange={(v) => setForm((f) => ({ ...f, category_main: v, category_sub: '' }))}
                 options={allMainCategories as unknown as string[]}
                 placeholder="선택"
-                onAddOption={handleAddMainCategory}
               />
             </div>
             <div>
@@ -492,7 +462,6 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                 options={getSubOptions(form.category_main)}
                 placeholder="선택"
                 disabled={!form.category_main}
-                onAddOption={form.category_main ? handleAddSubCategory : undefined}
               />
             </div>
           </div>
@@ -837,7 +806,6 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                                 updateItem(item.id, { category_main: v, category_sub: '' })
                               }
                               options={allMainCategories as unknown as string[]}
-                              onAddOption={handleAddMainCategory}
                             />
                           </div>
                           <div>
@@ -847,11 +815,6 @@ export default function TransactionEditModal({ transaction: tx, onClose, onSaved
                               onChange={(v) => updateItem(item.id, { category_sub: v })}
                               options={getSubOptions(item.category_main)}
                               disabled={!item.category_main}
-                              onAddOption={
-                                item.category_main
-                                  ? (sub) => handleAddSubCategoryFor(item.category_main, sub)
-                                  : undefined
-                              }
                             />
                           </div>
                         </div>

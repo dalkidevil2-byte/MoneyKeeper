@@ -44,7 +44,7 @@ export default function WishlistPage() {
   const [purchasing, setPurchasing] = useState<string | null>(null); // item id being purchased
   const { paymentMethods } = usePaymentMethods();
   const { members } = useMembers();
-  const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
+  const { categories: customCategories } = useCustomCategories();
 
   const allMainCategories = useMemo(() => {
     const customs = customCategories
@@ -131,25 +131,6 @@ export default function WishlistPage() {
     fetchItems();
   };
 
-  const handleAddMainCategory = async (name: string) => {
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: name, category_sub: '' }),
-    });
-    refetchCategories();
-  };
-
-  const handleAddSubCategory = async (sub: string) => {
-    if (!form.category_main) return;
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: form.category_main, category_sub: sub }),
-    });
-    refetchCategories();
-  };
-
   const pending   = items.filter((i) => i.status === 'pending');
   const purchased = items.filter((i) => i.status === 'purchased');
   const totalPrice = pending.reduce((s, i) => s + i.price, 0);
@@ -228,7 +209,6 @@ export default function WishlistPage() {
                   onChange={(v) => setForm((f) => ({ ...f, category_main: v, category_sub: '' }))}
                   options={allMainCategories as unknown as string[]}
                   placeholder="선택"
-                  onAddOption={handleAddMainCategory}
                 />
               </div>
               <div>
@@ -239,7 +219,6 @@ export default function WishlistPage() {
                   options={getSubOptions(form.category_main)}
                   placeholder="선택"
                   disabled={!form.category_main}
-                  onAddOption={form.category_main ? handleAddSubCategory : undefined}
                 />
               </div>
             </div>
