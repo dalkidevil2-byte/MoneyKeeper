@@ -7,6 +7,7 @@ import {
   createNotionPage,
   type ItemForNotion,
 } from '@/lib/notion';
+import { syncCeremonyArchive } from '@/lib/ceremony-archive';
 
 // PATCH /api/transactions/[id] - 거래 수정
 export async function PATCH(
@@ -59,6 +60,10 @@ export async function PATCH(
   syncNotion(supabase, data).catch((e) =>
     console.error('[Notion PATCH sync]', e)
   );
+
+  // 축의·조의로 바꿨으면 아카이브에 남기고, 다른 분류로 바꿨으면 자동 기록을 치운다.
+  // 카드 알림으로 들어온 거래는 Inbox 에서 여기로 분류가 정해지므로 이 경로가 핵심이다.
+  await syncCeremonyArchive(supabase, data);
 
   return NextResponse.json({ transaction: data });
 }

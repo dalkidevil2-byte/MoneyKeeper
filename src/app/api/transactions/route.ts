@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { syncTransactionToNotion } from '@/lib/notion-sync';
+import { syncCeremonyArchive } from '@/lib/ceremony-archive';
 import type { CreateTransactionInput } from '@/types';
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
@@ -135,6 +136,9 @@ export async function POST(req: NextRequest) {
     syncTransactionToNotion(supabase, data.id).catch((e) =>
       console.error('[Notion auto-sync]', e)
     );
+
+    // 축의·조의면 아카이브 '경조사' 에도 남긴다
+    await syncCeremonyArchive(supabase, data);
 
     return NextResponse.json({ transaction: data }, { status: 201 });
   } catch (error) {

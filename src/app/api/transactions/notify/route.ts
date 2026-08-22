@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { syncTransactionToNotion } from '@/lib/notion-sync';
+import { syncCeremonyArchive } from '@/lib/ceremony-archive';
 import { inferCategory } from '@/lib/parser';
 import {
   parseCardNotification,
@@ -487,6 +488,18 @@ export async function POST(req: NextRequest) {
     // Inbox 로 보낸 건은 사용자가 분류를 고칠 수 있으므로, 확인 시점에 동기화한다.
     if (autoConfirm) {
       await syncTransactionToNotion(supabase, tx.id);
+    }
+
+    // 과거 학습으로 축의·조의까지 자동 분류된 경우 아카이브 '경조사' 에도 남긴다.
+    // 바로 위 상품권 중복 처리가 거래를 취소했을 수 있어 최종 상태를 다시 읽는다.
+    // (분류가 경조사가 아니면 조회 자체를 하지 않는다 — 알림 대부분은 해당 없음)
+    if (category.main === '경조사·모임') {
+      const { data: finalTx } = await supabase
+        .from('transactions')
+        .select('id, household_id, date, type, amount, name, merchant_name, memo, member_id, category_main, category_sub, status')
+        .eq('id', tx.id)
+        .maybeSingle();
+      if (finalTx) await syncCeremonyArchive(supabase, finalTx);
     }
 
     await logRequest({ result: autoConfirm ? 'created(자동확정)' : 'created(Inbox)', source, rawText: normalized, storeText: true });
