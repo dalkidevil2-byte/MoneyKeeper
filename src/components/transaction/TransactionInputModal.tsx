@@ -100,7 +100,7 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
   const { paymentMethods } = usePaymentMethods();
   const { members } = useMembers();
   const { budgets } = useBudgets();
-  const { categories: customCategories, refetch: refetchCategories } = useCustomCategories();
+  const { categories: customCategories } = useCustomCategories();
 
   const today = dayjs();
   const { transactions: monthTxs } = useTransactions({
@@ -123,25 +123,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
       .map((c) => c.category_sub)
       .filter((s, i, arr) => arr.indexOf(s) === i && !defaults.includes(s));
     return [...defaults, ...customs];
-  };
-
-  const handleAddMainCategory = async (name: string) => {
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: name, category_sub: '' }),
-    });
-    refetchCategories();
-  };
-
-  const handleAddSubCategory = async (sub: string) => {
-    if (!form.category_main) return;
-    await fetch('/api/custom-categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_main: form.category_main, category_sub: sub }),
-    });
-    refetchCategories();
   };
 
   // ── 열릴 때 기본값 ──
@@ -773,7 +754,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                     }}
                     options={allMainCategories as unknown as string[]}
                     placeholder="대분류"
-                    onAddOption={handleAddMainCategory}
                   />
                   <CategoryCombobox
                     value={form.category_sub ?? ''}
@@ -781,7 +761,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                     options={getSubOptions(form.category_main ?? '')}
                     placeholder="소분류"
                     disabled={!form.category_main}
-                    onAddOption={form.category_main ? handleAddSubCategory : undefined}
                   />
                 </div>
               </Row>
@@ -1123,7 +1102,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                                       }}
                                       options={allMainCategories as unknown as string[]}
                                       placeholder="분류 (선택)"
-                                      onAddOption={handleAddMainCategory}
                                     />
                                     <CategoryCombobox
                                       value={item.category_sub ?? ''}
@@ -1131,7 +1109,6 @@ export default function TransactionInputModal({ open, onClose, onSaved, onSavedW
                                       options={getSubOptions(item.category_main ?? '')}
                                       placeholder="소분류"
                                       disabled={!item.category_main}
-                                      onAddOption={item.category_main ? handleAddSubCategory : undefined}
                                     />
                                   </div>
                                 </div>
