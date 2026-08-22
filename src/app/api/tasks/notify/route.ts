@@ -21,6 +21,30 @@ import {
 
 const DEFAULT_HOUSEHOLD_ID = process.env.NEXT_PUBLIC_DEFAULT_HOUSEHOLD_ID!;
 
+// 들어온 요청을 카드 알림과 같은 표에 남긴다.
+// 이게 없으면 "예약이 일정에 안 들어왔다" 고 할 때
+// 폰이 안 보낸 건지, 서버가 형식을 못 읽고 버린 건지 구분할 방법이 없다.
+async function logRequest(opts: {
+  result: string;
+  reason?: string;
+  rawText?: string;
+  storeText?: boolean;
+}) {
+  try {
+    const supabase = createServerSupabaseClient();
+    await supabase.from('notify_requests').insert({
+      result: opts.result,
+      reason: opts.reason ?? '',
+      source: 'booking',
+      raw_text: opts.storeText ? (opts.rawText ?? '').slice(0, 500) : '',
+      text_length: (opts.rawText ?? '').length,
+    });
+  } catch (e) {
+    // 기록 실패가 본 기능을 막아서는 안 된다.
+    console.warn('[tasks/notify log]', e);
+  }
+}
+
 async function readText(req: NextRequest): Promise<string> {
   const contentType = req.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
@@ -44,17 +68,24 @@ export async function POST(req: NextRequest) {
   const provided =
     req.headers.get('x-notify-secret') ?? req.nextUrl.searchParams.get('secret');
   if (provided !== expected) {
+    await logRequest({ result: 'unauthorized', reason: '시크릿 불일치' });
     return NextResponse.json({ ok: false, error: '인증 실패' }, { status: 401 });
   }
+
+  // 새 알림 형식을 시험할 때 쓴다 — 읽기만 하고 일정은 만들지 않는다.
+  //   POST /api/tasks/notify?secret=...&dryrun=1
+  const dryRun = req.nextUrl.searchParams.get('dryrun') === '1';
 
   try {
     const rawText = await readText(req);
     if (!rawText.trim()) {
+      await logRequest({ result: 'empty', reason: '본문이 비어서 도착' });
       return NextResponse.json({ ok: false, error: '내용이 비어 있습니다.' }, { status: 400 });
     }
 
     // 예약 알림이 아닌 것은 저장하지 않는다 (개인 대화 보호)
     if (!looksLikeBookingNotification(rawText)) {
+      await logRequest({ result: 'ignored', reason: '예약 알림 형식이 아님', rawText });
       return NextResponse.json(
         { ok: true, status: 'ignored', reason: '예약 알림 형식이 아님' },
         { status: 200 },
@@ -63,6 +94,7 @@ export async function POST(req: NextRequest) {
 
     // "지금 예약하세요" 같은 광고는 일정으로 만들지 않는다
     if (isAdvertisement(rawText)) {
+      await logRequest({ result: 'ignored', reason: '광고성 문구로 판단', rawText, storeText: true });
       return NextResponse.json(
         { ok: true, status: 'ignored', reason: '광고성 문구로 판단' },
         { status: 200 },
@@ -71,8 +103,27 @@ export async function POST(req: NextRequest) {
 
     const parsed = parseBookingNotification(rawText);
     if (!parsed.matched || !parsed.date || !parsed.startTime) {
+      await logRequest({ result: 'unparsed', reason: '지원하지 않는 예약 알림 형식', rawText, storeText: true });
       return NextResponse.json(
         { ok: true, status: 'unparsed', message: '아직 지원하지 않는 예약 알림 형식입니다.' },
+        { status: 200 },
+      );
+    }
+
+    if (dryRun) {
+      return NextResponse.json(
+        {
+          ok: true,
+          status: 'dryrun',
+          parsed: {
+            rule: parsed.rule,
+            title: parsed.title,
+            date: parsed.date,
+            start: parsed.startTime,
+            end: parsed.endTime,
+            memo: parsed.memo,
+          },
+        },
         { status: 200 },
       );
     }
@@ -109,6 +160,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (dup) {
+      await logRequest({ result: 'duplicate', reason: parsed.rule, rawText, storeText: true });
       return NextResponse.json(
         { ok: true, status: 'duplicate', task_id: dup.id },
         { status: 200 },
@@ -138,6 +190,8 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
+    await logRequest({ result: 'created', reason: parsed.rule, rawText, storeText: true });
+
     return NextResponse.json(
       {
         ok: true,
@@ -161,6 +215,7 @@ export async function POST(req: NextRequest) {
         : error && typeof error === 'object' && 'message' in error
           ? String((error as { message: unknown }).message)
           : '알 수 없는 오류';
+    await logRequest({ result: 'error', reason: message });
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
